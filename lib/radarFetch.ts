@@ -609,7 +609,7 @@ export function buildCanonicalTiboHistoryFilter(
   includeFormalReplyProofs = false,
 ) {
   const formalReplyClause = includeFormalReplyProofs
-    ? ",and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v1)"
+    ? ",and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v2)"
     : "";
   if (!cursor) return `is_reply.is.null,is_reply.eq.false${formalReplyClause}`;
 
@@ -624,8 +624,8 @@ export function buildCanonicalTiboHistoryFilter(
   ];
   if (includeFormalReplyProofs) {
     filters.push(
-      "and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v1," + olderThan + ")",
-      "and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v1," + sameTimestampBefore + ")",
+      "and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v2," + olderThan + ")",
+      "and(is_reply.eq.true,formal_reply_admission_proof->>version.eq.tibo-formal-reply-admission-v2," + sameTimestampBefore + ")",
     );
   }
   return filters.join(",");

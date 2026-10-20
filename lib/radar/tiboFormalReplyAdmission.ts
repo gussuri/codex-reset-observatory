@@ -14,11 +14,18 @@ export type TiboFormalReplyAdmissionPathNode = Pick<
   TiboEvidenceNode,
   "tweetId" | "tweetUrl" | "authorHandle" | "createdAt"
 > & {
+  sourceTextHash: string;
   sourceContextRevisionHashes: string[];
 };
 
+export type TiboFormalReplyAdmissionMeaningEvidence = {
+  tweetId: string;
+  quote: string;
+  sourceTextHash: string;
+};
+
 export type TiboFormalReplyAdmissionProof = {
-  version: "tibo-formal-reply-admission-v1";
+  version: "tibo-formal-reply-admission-v2";
   admissionMethod: "validated_same_global_reset_reply";
   targetTweetId: string;
   targetTweetUrl: string;
@@ -29,6 +36,10 @@ export type TiboFormalReplyAdmissionProof = {
   contextualResetAssessment: "same_global_reset";
   temporalDirection: "completed_now";
   evidenceQuote: string;
+  resetMethod: "forced";
+  resetMethodEvidence: TiboFormalReplyAdmissionMeaningEvidence;
+  resetScope: "all_paid_users" | "all_users";
+  resetScopeEvidence: TiboFormalReplyAdmissionMeaningEvidence;
   path: TiboFormalReplyAdmissionPathNode[];
   pathTweetIds: string[];
   pathRelations: Array<"reply">;
@@ -168,7 +179,7 @@ function tweetIdentity(tweetUrl: string) {
 }
 
 function parseProof(value: unknown): TiboFormalReplyAdmissionProof | null {
-  if (!isObject(value) || value.version !== "tibo-formal-reply-admission-v1"
+  if (!isObject(value) || value.version !== "tibo-formal-reply-admission-v2"
     || value.admissionMethod !== "validated_same_global_reset_reply"
     || value.contextualResetAssessment !== "same_global_reset"
     || value.temporalDirection !== "completed_now"
@@ -182,6 +193,10 @@ function parseProof(value: unknown): TiboFormalReplyAdmissionProof | null {
     || typeof value.evidenceQuote !== "string"
     || value.evidenceQuote.length === 0
     || value.evidenceQuote.length > 300
+    || value.resetMethod !== "forced"
+    || (value.resetScope !== "all_paid_users" && value.resetScope !== "all_users")
+    || !isObject(value.resetMethodEvidence)
+    || !isObject(value.resetScopeEvidence)
     || !validHashes(value.sourceContextRevisionHashes)
     || !Array.isArray(value.path)
     || value.path.length < 2
@@ -200,6 +215,8 @@ function parseProof(value: unknown): TiboFormalReplyAdmissionProof | null {
       || typeof rawNode.tweetUrl !== "string"
       || typeof rawNode.authorHandle !== "string"
       || typeof rawNode.createdAt !== "string"
+      || typeof rawNode.sourceTextHash !== "string"
+      || !HASH_PATTERN.test(rawNode.sourceTextHash)
       || !Array.isArray(rawNode.sourceContextRevisionHashes)
       || rawNode.sourceContextRevisionHashes.length > 3
       || rawNode.sourceContextRevisionHashes.some((hash) => typeof hash !== "string" || !HASH_PATTERN.test(hash))) {
@@ -210,9 +227,28 @@ function parseProof(value: unknown): TiboFormalReplyAdmissionProof | null {
       tweetUrl: rawNode.tweetUrl,
       authorHandle: rawNode.authorHandle,
       createdAt: rawNode.createdAt,
+      sourceTextHash: rawNode.sourceTextHash,
       sourceContextRevisionHashes: [...rawNode.sourceContextRevisionHashes] as string[],
     });
   }
+
+  const parseMeaningEvidence = (rawEvidence: Record<string, unknown>) => {
+    if (typeof rawEvidence.tweetId !== "string" || typeof rawEvidence.quote !== "string"
+      || !rawEvidence.quote.trim() || rawEvidence.quote.length > 300
+      || typeof rawEvidence.sourceTextHash !== "string" || !HASH_PATTERN.test(rawEvidence.sourceTextHash)) {
+      return null;
+    }
+    const node = path.find((candidate) => candidate.tweetId === rawEvidence.tweetId);
+    if (!node || node.sourceTextHash !== rawEvidence.sourceTextHash) return null;
+    return {
+      tweetId: rawEvidence.tweetId,
+      quote: rawEvidence.quote,
+      sourceTextHash: rawEvidence.sourceTextHash,
+    };
+  };
+  const resetMethodEvidence = parseMeaningEvidence(value.resetMethodEvidence);
+  const resetScopeEvidence = parseMeaningEvidence(value.resetScopeEvidence);
+  if (!resetMethodEvidence || !resetScopeEvidence) return null;
 
   const targetIdentity = tweetIdentity(value.targetTweetUrl);
   if (!targetIdentity || targetIdentity.tweetId !== value.targetTweetId) return null;
@@ -222,7 +258,7 @@ function parseProof(value: unknown): TiboFormalReplyAdmissionProof | null {
     || value.pathTweetIds.some((tweetId, index) => tweetId !== pathTweetIds[index])) return null;
 
   return {
-    version: "tibo-formal-reply-admission-v1",
+    version: "tibo-formal-reply-admission-v2",
     admissionMethod: "validated_same_global_reset_reply",
     targetTweetId: value.targetTweetId,
     targetTweetUrl: targetIdentity.canonicalUrl,
@@ -233,6 +269,10 @@ function parseProof(value: unknown): TiboFormalReplyAdmissionProof | null {
     contextualResetAssessment: "same_global_reset",
     temporalDirection: "completed_now",
     evidenceQuote: value.evidenceQuote,
+    resetMethod: "forced",
+    resetMethodEvidence,
+    resetScope: value.resetScope,
+    resetScopeEvidence,
     path,
     pathTweetIds,
     pathRelations: value.pathRelations as Array<"reply">,
@@ -263,8 +303,28 @@ export function createTiboFormalReplyAdmissionProof(
   const evidenceQuote = input.evidenceQuote?.trim();
   if (!evidenceQuote || evidenceQuote.length > 300 || !input.authorText.includes(evidenceQuote)) return null;
 
+  const meaning = input.resetMeaning;
+  if (!meaning || meaning.method !== "forced" ||
+    (meaning.scope !== "all_paid_users" && meaning.scope !== "all_users") ||
+    !meaning.methodEvidence || !meaning.scopeEvidence) return null;
+  const resolveMeaningEvidence = (
+    evidence: NonNullable<typeof meaning.methodEvidence>,
+  ): TiboFormalReplyAdmissionMeaningEvidence | null => {
+    const quote = evidence.quote.trim();
+    const node = path.find((candidate) => candidate.tweetId === evidence.tweetId);
+    if (!node || !quote || quote.length > 300 || !node.text.includes(quote)) return null;
+    return {
+      tweetId: node.tweetId,
+      quote,
+      sourceTextHash: sha256Hex(node.text),
+    };
+  };
+  const resetMethodEvidence = resolveMeaningEvidence(meaning.methodEvidence);
+  const resetScopeEvidence = resolveMeaningEvidence(meaning.scopeEvidence);
+  if (!resetMethodEvidence || !resetScopeEvidence) return null;
+
   const proof = {
-    version: "tibo-formal-reply-admission-v1" as const,
+    version: "tibo-formal-reply-admission-v2" as const,
     admissionMethod: "validated_same_global_reset_reply" as const,
     targetTweetId: target.tweetId,
     targetTweetUrl: target.tweetUrl,
@@ -275,11 +335,16 @@ export function createTiboFormalReplyAdmissionProof(
     contextualResetAssessment: "same_global_reset" as const,
     temporalDirection: "completed_now" as const,
     evidenceQuote,
+    resetMethod: "forced" as const,
+    resetMethodEvidence,
+    resetScope: meaning.scope,
+    resetScopeEvidence,
     path: path.map((node) => ({
       tweetId: node.tweetId,
       tweetUrl: node.tweetUrl,
       authorHandle: node.authorHandle,
       createdAt: node.createdAt,
+      sourceTextHash: sha256Hex(node.text),
       sourceContextRevisionHashes: node.sourceContextRevisionHashes ?? [],
     })),
     pathTweetIds: path.map((node) => node.tweetId),
@@ -361,6 +426,7 @@ export function isTiboFormalReplyAdmissionProofCurrent(
     || first.authorHandle !== "@thsottiaux"
     || !firstIdentity || firstIdentity.tweetId !== first.tweetId || firstIdentity.authorHandle !== first.authorHandle
     || Date.parse(first.createdAt) !== Date.parse(signal.tweet_created_at)
+    || first.sourceTextHash !== proof.targetTextHash
     || first.sourceContextRevisionHashes.length !== proof.sourceContextRevisionHashes.length
     || first.sourceContextRevisionHashes.some((hash, index) => hash !== proof.sourceContextRevisionHashes[index])) {
     return false;

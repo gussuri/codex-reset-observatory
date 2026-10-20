@@ -27,6 +27,9 @@ const PARENT_AT = "2026-10-20T07:55:00.000Z";
 const ROOT_AT = "2026-10-20T07:30:00.000Z";
 const REVISION = "a".repeat(64);
 const COMPLETION_TEXT = "Done and dusted.";
+const FULL_SCOPE_RESET_TEXT = "I pressed the forced reset button for all paid users.";
+const METHOD_EVIDENCE = "I pressed the forced reset button";
+const SCOPE_EVIDENCE = "for all paid users";
 
 function context(depth: 1 | 2, targetTweetId = TARGET_ID, targetCreatedAt = TARGET_AT): TiboEvidenceContext {
   const target = {
@@ -41,14 +44,14 @@ function context(depth: 1 | 2, targetTweetId = TARGET_ID, targetCreatedAt = TARG
     tweetId: PARENT_ID,
     tweetUrl: PARENT_URL,
     authorHandle: "@thsottiaux",
-    text: depth === 1 ? "Day 13/ Le limit reset" : "Landing within the next 2 hours.",
+    text: depth === 1 ? FULL_SCOPE_RESET_TEXT : "Landing within the next 2 hours.",
     createdAt: PARENT_AT,
   };
   const root = {
     tweetId: ROOT_ID,
     tweetUrl: ROOT_URL,
     authorHandle: "@thsottiaux",
-    text: "Day 10/ Reset",
+    text: FULL_SCOPE_RESET_TEXT,
     createdAt: ROOT_AT,
   };
   return {
@@ -72,7 +75,7 @@ function input(depth: 1 | 2, targetTweetId = TARGET_ID, targetCreatedAt = TARGET
     authorText: COMPLETION_TEXT,
     isReply: true,
     isQuote: false,
-    replyContextText: depth === 1 ? "Day 13/ Le limit reset" : "Landing within the next 2 hours.",
+    replyContextText: depth === 1 ? FULL_SCOPE_RESET_TEXT : "Landing within the next 2 hours.",
     replyParentTweetId: PARENT_ID,
     replyParentTweetUrl: PARENT_URL,
     selectedSignalType: "reset_executed",
@@ -80,6 +83,18 @@ function input(depth: 1 | 2, targetTweetId = TARGET_ID, targetCreatedAt = TARGET
     evidenceQuote: COMPLETION_TEXT,
     contextualResetAssessment: "same_global_reset",
     contextualResetTweetId: depth === 1 ? PARENT_ID : ROOT_ID,
+    resetMeaning: {
+      method: "forced",
+      methodEvidence: {
+        tweetId: depth === 1 ? PARENT_ID : ROOT_ID,
+        quote: METHOD_EVIDENCE,
+      },
+      scope: "all_paid_users",
+      scopeEvidence: {
+        tweetId: depth === 1 ? PARENT_ID : ROOT_ID,
+        quote: SCOPE_EVIDENCE,
+      },
+    },
     targetTweetId,
     targetTweetUrl: `https://x.com/thsottiaux/status/${targetTweetId}`,
     targetTweetCreatedAt: targetCreatedAt,
@@ -121,8 +136,10 @@ test("same-global reset completion replies receive versioned proof over exact on
     const admissionProof = proof(depth);
     const signal = attachTiboFormalReplyAdmissionProof(formalSignal(), admissionProof);
 
-    assert.equal(admissionProof.version, "tibo-formal-reply-admission-v1");
+    assert.equal(admissionProof.version, "tibo-formal-reply-admission-v2");
     assert.equal(admissionProof.admissionMethod, "validated_same_global_reset_reply");
+    assert.equal(admissionProof.resetMethod, "forced");
+    assert.equal(admissionProof.resetScope, "all_paid_users");
     assert.equal(admissionProof.targetTextHash, createHash("sha256").update(COMPLETION_TEXT, "utf8").digest("hex"));
     assert.equal(admissionProof.targetTweetId, TARGET_ID);
     assert.equal(admissionProof.contextualResetTweetId, depth === 1 ? PARENT_ID : ROOT_ID);
@@ -225,6 +242,44 @@ test("reply proof generation rejects partial, foreign-author, quote, and non-com
   assert.equal(createTiboFormalReplyAdmissionProof(valid, ["not-a-revision"]), null);
 });
 
+test("same-global event identity alone does not prove forced method or all-paid scope", () => {
+  const valid = input(2);
+  const rootText = "The reset is being done for affected users.";
+  const withRootText = (resetMeaning: TiboContextSafetyInput["resetMeaning"]) => ({
+    ...valid,
+    resetMeaning,
+    validatedSourceContext: {
+      ...valid.validatedSourceContext!,
+      relatedPosts: valid.validatedSourceContext!.relatedPosts.map((node) =>
+        node.tweetId === ROOT_ID ? { ...node, text: rootText } : node,
+      ),
+    },
+  });
+
+  assert.equal(createTiboFormalReplyAdmissionProof({
+    ...valid,
+    resetMeaning: undefined,
+  }, [REVISION]), null, "a same_global_reset label alone cannot establish method or scope");
+  assert.equal(createTiboFormalReplyAdmissionProof(withRootText({
+    method: "forced",
+    methodEvidence: { tweetId: ROOT_ID, quote: "The reset is being done" },
+    scope: "affected_users",
+    scopeEvidence: { tweetId: ROOT_ID, quote: "for affected users" },
+  }), [REVISION]), null, "affected-user distribution is not broad all-paid scope");
+  assert.equal(createTiboFormalReplyAdmissionProof(withRootText({
+    method: "personal",
+    methodEvidence: { tweetId: ROOT_ID, quote: "The reset is being done" },
+    scope: "single_account",
+    scopeEvidence: { tweetId: ROOT_ID, quote: "for affected users" },
+  }), [REVISION]), null, "personal operations cannot become global forced resets");
+  assert.equal(createTiboFormalReplyAdmissionProof(withRootText({
+    method: "forced",
+    methodEvidence: { tweetId: ROOT_ID, quote: "The reset is being done" },
+    scope: "unknown",
+    scopeEvidence: null,
+  }), [REVISION]), null, "unknown target scope must remain unknown");
+});
+
 test("reply proof generation rejects a BANKED event anywhere in the cited context path", () => {
   const valid = input(2);
   const sourceContext = valid.validatedSourceContext!;
@@ -236,6 +291,12 @@ test("reply proof generation rejects a BANKED event anywhere in the cited contex
       relatedPosts: sourceContext.relatedPosts.map((node) =>
         node.tweetId === ROOT_ID ? { ...node, text: bankedRootText } : node,
       ),
+    },
+    resetMeaning: {
+      method: "banked_distribution",
+      methodEvidence: { tweetId: ROOT_ID, quote: "Banked resets" },
+      scope: "affected_users",
+      scopeEvidence: { tweetId: ROOT_ID, quote: "all accounts" },
     },
   }, [REVISION]), null);
 });

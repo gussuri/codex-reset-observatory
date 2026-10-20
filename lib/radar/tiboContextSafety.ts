@@ -17,6 +17,16 @@ export type TiboContextualResetAssessment =
   | "not_applicable"
   | "unknown";
 
+export type TiboNoticeTimingStatus = "known" | "unknown";
+export type TiboResetMethodAssessment = "forced" | "regular_scheduled" | "banked_distribution" | "personal" | "unknown";
+export type TiboResetScopeAssessment = "all_paid_users" | "all_users" | "affected_users" | "single_account" | "unknown";
+export type TiboResetMeaningEvidence = {
+  method: TiboResetMethodAssessment;
+  methodEvidence: { tweetId: string; quote: string } | null;
+  scope: TiboResetScopeAssessment;
+  scopeEvidence: { tweetId: string; quote: string } | null;
+};
+
 export type TiboContextSafetyInput = {
   authorText: string;
   isReply?: boolean;
@@ -31,8 +41,10 @@ export type TiboContextSafetyInput = {
   aiTeaserStrength?: TeaserStrength | null;
   evidenceQuote?: string | null;
   temporalDirection?: "future" | "completed_now" | "historical" | "unclear" | null;
+  noticeTimingStatus?: TiboNoticeTimingStatus | null;
   contextualResetAssessment?: TiboContextualResetAssessment | null;
   contextualResetTweetId?: string | null;
+  resetMeaning?: TiboResetMeaningEvidence | null;
   targetTweetId?: string | null;
   targetTweetUrl?: string | null;
   targetTweetCreatedAt?: string | null;
@@ -258,7 +270,10 @@ function hasExternalSourceContext(input: TiboContextSafetyInput) {
 function hasExactTargetSpeechEvidence(input: TiboContextSafetyInput) {
   const evidenceQuote = input.evidenceQuote?.trim();
   if (!evidenceQuote || !input.authorText.includes(evidenceQuote)) return false;
-  if (input.selectedSignalType === "official_notice") return input.temporalDirection === "future";
+  if (input.selectedSignalType === "official_notice") {
+    return input.temporalDirection === "future" ||
+      (input.temporalDirection === "unclear" && input.noticeTimingStatus === "unknown");
+  }
   if (input.selectedSignalType === "reset_executed") return input.temporalDirection === "completed_now";
   return false;
 }

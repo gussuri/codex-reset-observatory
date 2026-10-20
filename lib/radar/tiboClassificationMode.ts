@@ -105,6 +105,17 @@ export function selectTiboClassification(
 
   if (mode === "primary" || mode === "hybrid") {
     if (isValidGeminiClassification(aiResult)) {
+      if (aiResult.signalType === "official_notice" &&
+        aiResult.temporalDirection === "unclear" &&
+        aiResult.noticeTimingStatus !== "unknown") {
+        return {
+          signalType: ruleResult.signalType,
+          confidence: ruleResult.confidence,
+          reason: ruleResult.reason,
+          classificationSource: "rule_fallback",
+        };
+      }
+
       if (hasContradictoryCompletedReset(ruleResult, aiResult)) {
         return {
           signalType: ruleResult.signalType,

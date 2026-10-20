@@ -6,6 +6,8 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 
 import { buildGeminiPrompt, TIBO_GEMINI_SYSTEM_PROMPT } from "../lib/radar/geminiClassification";
+import { attachTiboFormalReplyAdmissionProof } from "../lib/radar/tiboFormalReplyAdmission";
+import { isFormalTiboResetSignal, type FormalTiboResetSignal } from "../lib/radar/tiboHistory";
 import { POST } from "../app/api/webhook/tibo/route";
 
 const ENV_KEYS = [
@@ -343,6 +345,114 @@ test("Gemini prompt includes bounded source evidence only when supplied", () => 
   assert.match(prompt, /A graph edge alone does not establish same event, scope, or mechanism/i);
   assert.ok(prompt.includes(evidence));
   assert.doesNotMatch(buildGeminiPrompt({ text: "Maybe" }), /VALIDATED CONNECTED SOURCE CONTEXT/);
+});
+
+test("an unscheduled reset headline survives parsing, selection, and persistence as a notice", async () => {
+  const previous = saveEnvironment();
+  const tweetId = "2111492673890824348";
+  const tweetUrl = `https://x.com/thsottiaux/status/${tweetId}`;
+  const text = "Day 13/ Le limit reset";
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+  const database = installSourceContextDatabase();
+  const gemini = installGeminiPromptCapture({
+    signalType: "official_notice",
+    confidence: 0.95,
+    temporalDirection: "unclear",
+    noticeTimingStatus: "unknown",
+    evidenceQuote: text,
+    noticeToExecution: "Day 13",
+    temporalExpression: "Day 13",
+    temporalKind: "relative_day",
+    temporalPrecision: "day",
+    temporalConfidence: 0.9,
+    relativeDayOffset: 13,
+    reasonJa: "利用上限リセットの告知ですが、実施時刻は示されていません。",
+    resetTypeJa: null,
+    teaserStrength: "none",
+    contextualResetAssessment: "not_applicable",
+    contextualResetTweetId: null,
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId,
+      text,
+      tweetUrl,
+      tweetCreatedAt: "2026-10-17T16:20:57.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const row = database.rows.get(tweetId)!;
+    assert.equal(row.ai_classification_status, "success");
+    assert.equal(row.ai_temporal_direction, "unclear");
+    assert.equal(row.ai_notice_to_execution, null);
+    assert.equal(row.ai_temporal_expression, null);
+    assert.equal(row.signal_type, "official_notice");
+    assert.equal(row.classification_source, "gemini");
+    assert.equal(row.temporal_expression, null);
+    assert.equal(row.expected_start_at, null);
+    assert.equal(row.expected_end_at, null);
+    assert.equal(row.temporal_resolution_status, "unresolved");
+  } finally {
+    gemini.restore();
+    database.restore();
+    restoreEnvironment(previous);
+  }
+});
+
+test("an unclear official notice without an explicit timing status fails closed", async () => {
+  const previous = saveEnvironment();
+  const tweetId = "2111492673890824349";
+  const tweetUrl = `https://x.com/thsottiaux/status/${tweetId}`;
+  const text = "Day 13/ Le limit reset";
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+  const database = installSourceContextDatabase();
+  const gemini = installGeminiPromptCapture({
+    signalType: "official_notice",
+    confidence: 0.95,
+    temporalDirection: "unclear",
+    evidenceQuote: text,
+    reasonJa: "利用上限リセットの告知です。",
+    resetTypeJa: null,
+    noticeToExecution: null,
+    teaserStrength: "none",
+    contextualResetAssessment: "not_applicable",
+    contextualResetTweetId: null,
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId,
+      text,
+      tweetUrl,
+      tweetCreatedAt: "2026-10-17T16:20:57.000Z",
+    }));
+
+    assert.equal(response.status, 200);
+    const row = database.rows.get(tweetId)!;
+    assert.equal(row.ai_classification_status, "invalid_schema");
+    assert.equal(row.classification_source, "rule_fallback");
+    assert.equal(row.signal_type, row.rule_signal_type);
+    assert.notEqual(row.signal_type, "official_notice");
+  } finally {
+    gemini.restore();
+    database.restore();
+    restoreEnvironment(previous);
+  }
 });
 
 test("late context is reclassified once and a response-loss replay sees the durable marker", async () => {
@@ -862,7 +972,7 @@ test("AI same-event judgments classify the real reset-button root and elliptical
   process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
 
   const rootId = "2115000000000000131";
-  const rootText = "The reports of my reset button being lost are greatly exaggerated\n\nDay 10/ Reset";
+  const rootText = "I pressed the forced reset button for all paid users.\n\nDay 10/ Reset";
   const rootUrl = `https://x.com/thsottiaux/status/${rootId}`;
   const scenarios = [
     {
@@ -880,6 +990,7 @@ test("AI same-event judgments classify the real reset-button root and elliptical
       signalType: "reset_executed",
       temporalDirection: "completed_now",
       pathLength: 1,
+      formalAdmission: true,
     },
     {
       name: "two-hop All taken care of completion",
@@ -888,6 +999,7 @@ test("AI same-event judgments classify the real reset-button root and elliptical
       signalType: "reset_executed",
       temporalDirection: "completed_now",
       pathLength: 2,
+      formalAdmission: true,
     },
     {
       name: "Day 13 direct notice followed by Done completion",
@@ -897,6 +1009,7 @@ test("AI same-event judgments classify the real reset-button root and elliptical
       temporalDirection: "completed_now",
       pathLength: 1,
       rootText: "Day 13/ Le limit reset",
+      unknownResetMeaning: true,
     },
   ] as const;
 
@@ -973,13 +1086,26 @@ test("AI same-event judgments classify the real reset-button root and elliptical
         teaserStrengthReasonJa: null,
         contextualResetAssessment: "same_global_reset",
         contextualResetTweetId: rootId,
+        resetMeaning: "unknownResetMeaning" in scenario
+          ? {
+              method: "unknown",
+              methodEvidence: null,
+              scope: "unknown",
+              scopeEvidence: null,
+            }
+          : {
+              method: "forced",
+              methodEvidence: { tweetId: rootId, quote: "I pressed the forced reset button" },
+              scope: "all_paid_users",
+              scopeEvidence: { tweetId: rootId, quote: "for all paid users" },
+            },
       };
       const database = installSourceContextDatabase([
         targetRow,
         parentRowForScenario,
         ...(scenario.pathLength === 2 ? [rootRow] : []),
       ]);
-      const gemini = installGeminiPromptCapture([scenarioResult, scenarioResult]);
+      const gemini = installGeminiPromptCapture([scenarioResult, scenarioResult, scenarioResult]);
 
       try {
         const initialResponse = await POST(buildRequest({
@@ -988,11 +1114,11 @@ test("AI same-event judgments classify the real reset-button root and elliptical
           tweetUrl: targetUrl,
           tweetCreatedAt: createdAt,
           formal_reply_admission_proof: {
-            version: "tibo-formal-reply-admission-v1",
+            version: "tibo-formal-reply-admission-v2",
             contextualResetTweetId: rootId,
           },
           formalReplyAdmissionProof: {
-            version: "tibo-formal-reply-admission-v1",
+            version: "tibo-formal-reply-admission-v2",
             contextualResetTweetId: rootId,
           },
           ...sourceMetadata,
@@ -1020,10 +1146,12 @@ test("AI same-event judgments classify the real reset-button root and elliptical
           `${scenario.name} records the classified revision`,
         );
         assert.match(gemini.prompts[1]!, new RegExp(rootId));
-        if (scenario.signalType === "reset_executed") {
+        if ("formalAdmission" in scenario && scenario.formalAdmission) {
           const admissionProof = finalRow.formal_reply_admission_proof;
-          assert.equal(admissionProof?.version, "tibo-formal-reply-admission-v1", scenario.name);
+          assert.equal(admissionProof?.version, "tibo-formal-reply-admission-v2", scenario.name);
           assert.equal(admissionProof?.admissionMethod, "validated_same_global_reset_reply", scenario.name);
+          assert.equal(admissionProof?.resetMethod, "forced", scenario.name);
+          assert.equal(admissionProof?.resetScope, "all_paid_users", scenario.name);
           assert.equal(admissionProof?.contextualResetTweetId, rootId, scenario.name);
           assert.equal(admissionProof?.path.length, scenario.pathLength + 1, scenario.name);
           assert.deepEqual(admissionProof?.sourceContextRevisionHashes, finalRow.source_context_revision_hashes);
@@ -1036,6 +1164,33 @@ test("AI same-event judgments classify the real reset-button root and elliptical
         } else {
           assert.equal(finalRow.formal_reply_admission_proof, null, scenario.name);
           assert.equal(database.formalAdoptionClaims.length, 0, scenario.name);
+        }
+
+        const persistedProof = structuredClone(finalRow.formal_reply_admission_proof);
+        const retryResponse = await POST(buildRequest({
+          tweetId: scenario.targetId,
+          text: scenario.targetText,
+          tweetUrl: targetUrl,
+          tweetCreatedAt: createdAt,
+          ...sourceMetadata,
+        }));
+        assert.equal(retryResponse.status, 200, `${scenario.name} normal webhook replay`);
+        assert.deepEqual(
+          database.rows.get(scenario.targetId)?.formal_reply_admission_proof,
+          persistedProof,
+          `${scenario.name} normal replay keeps a still-current proof`,
+        );
+        assert.equal(gemini.prompts.length, 3, `${scenario.name} re-evaluates the current saved context`);
+        if ("formalAdmission" in scenario && scenario.formalAdmission) {
+          const reloaded = attachTiboFormalReplyAdmissionProof(
+            { ...database.rows.get(scenario.targetId)! },
+            database.rows.get(scenario.targetId)?.formal_reply_admission_proof,
+          );
+          assert.equal(
+            isFormalTiboResetSignal(reloaded as FormalTiboResetSignal),
+            true,
+            `${scenario.name} proof remains valid after database-shaped reload`,
+          );
         }
       } finally {
         gemini.restore();

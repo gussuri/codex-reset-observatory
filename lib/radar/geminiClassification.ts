@@ -18,7 +18,11 @@ import {
   type TiboTemporalSemantics,
 } from "./tiboTemporal";
 import { isTiboHandle } from "./tiboHandle";
-import type { TiboContextualResetAssessment } from "./tiboContextSafety";
+import type {
+  TiboContextualResetAssessment,
+  TiboNoticeTimingStatus,
+  TiboResetMeaningEvidence,
+} from "./tiboContextSafety";
 
 export type GeminiClassificationInput = {
   text: string;
@@ -75,6 +79,36 @@ export function normalizeGeminiResetType(value: unknown): GeminiResetType | null
   return value === "ご祝儀リセット" || value === "詫びリセット" ? value : null;
 }
 
+function parseResetMeaning(value: unknown): TiboResetMeaningEvidence | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const parsed = value as Record<string, unknown>;
+  const method = parsed.method === "forced" || parsed.method === "regular_scheduled" ||
+      parsed.method === "banked_distribution" || parsed.method === "personal" || parsed.method === "unknown"
+    ? parsed.method
+    : null;
+  const scope = parsed.scope === "all_paid_users" || parsed.scope === "all_users" ||
+      parsed.scope === "affected_users" || parsed.scope === "single_account" || parsed.scope === "unknown"
+    ? parsed.scope
+    : null;
+  const parseEvidence = (input: unknown) => {
+    if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+    const evidence = input as Record<string, unknown>;
+    if (typeof evidence.tweetId !== "string" || !/^\d{1,30}$/.test(evidence.tweetId) ||
+      typeof evidence.quote !== "string" || !evidence.quote.trim() || evidence.quote.length > 300) {
+      return null;
+    }
+    return { tweetId: evidence.tweetId, quote: evidence.quote.trim() };
+  };
+
+  if (!method || !scope) return null;
+  return {
+    method,
+    methodEvidence: parseEvidence(parsed.methodEvidence),
+    scope,
+    scopeEvidence: parseEvidence(parsed.scopeEvidence),
+  };
+}
+
 export type GeminiFutureSignalOutput = {
   signalType: TiboSecondarySignalType | null;
   teaserStrength?: TeaserStrength | null;
@@ -107,6 +141,10 @@ export type GeminiClassificationOutput = {
   /** Internal semantic link from the target post to a validated source-context node. */
   contextualResetAssessment?: TiboContextualResetAssessment;
   contextualResetTweetId?: string | null;
+  /** Whether an official notice has a usable schedule, independent of its signal category. */
+  noticeTimingStatus?: TiboNoticeTimingStatus | null;
+  /** Single-call semantic evidence for the cited reset event's method and audience. */
+  resetMeaning?: TiboResetMeaningEvidence | null;
   noticeToExecution: string | null;
   teaserStrength?: TeaserStrength | null;
   teaserStrengthConfidence?: number | null;
@@ -152,8 +190,15 @@ Classify each tweet into EXACTLY ONE of the following 4 categories:
    (including the common typo "reseting") describes current execution, not a future official notice;
    the Usage Monitor may confirm that execution after the post is received.
 
-2. "official_notice": An explicit announcement of an upcoming reset scheduled in the near future.
+2. "official_notice": An explicit announcement of an upcoming Codex usage-limit reset. The announcement
+   may lack a usable schedule; whether the reset is announced and whether its timing is known are separate.
    Examples: "We will reset limits tonight", "We'll reset usage limits for all paid users", "Reset scheduled in two hours", "Full reset coming tomorrow".
+   A short headline that names a Codex/ChatGPT Work usage-limit reset as the announced event can also be
+   an official notice without a future verb. This is an announcement, not proof that the reset has completed.
+   Set noticeTimingStatus="known" only when the author's text gives a reliable usable time or date; otherwise
+   set it to "unknown". When both tense and timing are unresolved, use temporalDirection="unclear" and leave
+   temporalExpression, date parts, time parts, and noticeToExecution unset. Do not invent a future start, a
+   completion, or a schedule from a headline label.
    Contracted future forms such as "I'll reset" and "we'll reset" are future notices, not completed resets.
    A separate statement that service is "back in action" or recovered describes operational status only;
    it does not change a future reset commitment into a completed reset.
@@ -236,15 +281,11 @@ historical-only only when no later passage reasonably reactivates that same Code
 mechanism. If a later passage is unrelated to reset or usage limits, keep the post irrelevant.
 
 Handle short, headline-style reset posts semantically rather than treating their brevity as
-historical evidence. A day-count heading such as "Day 10/ Reset" or "Day 13/ Le limit reset" can
-be the whole reset-related announcement; "Day N" may be a series label, not a date or elapsed-time
-claim. Such day-count headings are not historical by default. Decide whether the author's own text
-announces a future reset, confirms a current/completed reset, or leaves the speech act unresolved.
-Do not turn the day number into a clock time, schedule, or event timestamp. If there is no reliable
-time or tense cue, use temporalDirection="unclear" and leave temporal expressions, dates, and times
-unset. Do not let a headline become a false positive when the surrounding text is retrospective,
-cancels or conditions the reset, names an unrelated product/technical reset, discusses product
-features, or uses generic "day"/"cooking" language without a usage-reset meaning.
+historical evidence. Day-count headings are not historical by default. "Day N" may be a series
+label, not a date or elapsed-time claim. When there is no reliable time or tense cue, use
+temporalDirection="unclear" and noticeTimingStatus="unknown". When the headline itself presents a
+Codex usage-limit reset as the announced event, classify it as official_notice even if its exact
+tense or schedule is not recoverable. The heading does not prove execution. Do not turn the day number into a clock time, schedule, or event timestamp. Do not apply this headline reading to retrospective posts, posts where the announcement cancels or conditions the event, an unrelated product/technical reset, ordinary features, or generic "day"/"cooking" text that does not announce a usage-limit reset.
 
 When one post mentions multiple reset events, select the primary event by time meaning:
 - An explicit current/completed event ("now", "done", "landed", "enjoy", "just reset", "already reset")
@@ -276,6 +317,16 @@ assessment is "same_global_reset", contextualResetTweetId must be the exact twee
 that supports that interpretation. Otherwise return contextualResetTweetId=null. This internal assessment is
 only a semantic interpretation aid; it is not canonical event identity and does not prove that a reset executed
 or that its mechanism was forced. Missing or uncertain context must remain uncertain rather than being guessed.
+
+For a reply completion that could enter formal global-reset history, separately assess the cited event's
+resetMeaning in this same response. "forced" requires semantic evidence that the event is an exceptional/manual
+forced reset rather than the routine schedule. "regular_scheduled", "banked_distribution", "personal", or
+"unknown" must be used when that is the supported meaning. Scope is "all_paid_users" or "all_users" only when
+the text supports the complete audience; use "affected_users", "single_account", or "unknown" for limited or
+unclear audiences. A same_global_reset assessment, a reply edge, "everyone" within an affected group, or a
+generic reset headline does not prove forced method or full audience scope. For method and scope, return a
+separate exact quote and the tweetId of the target or connected source node containing it. Use null evidence
+when the assessment is unknown. Do not infer meaning from a keyword or from a node's presence in the graph.
 
 Also classify the independent UI-only "teaserStrength" signal. This must not change signalType.
 teaserStrength MUST be judged independently from signalType. An "irrelevant" signalType does NOT imply teaserStrength="none".
@@ -411,6 +462,13 @@ Respond ONLY with a JSON object strictly matching this schema:
   "evidenceQuote": string | null (Exact substring from the tweet text acting as primary evidence, or null),
   "contextualResetAssessment": "same_global_reset" | "same_banked_distribution" | "same_personal_reset" | "different_event" | "negated" | "uncertain" | "not_applicable" | "unknown",
   "contextualResetTweetId": string | null (Exact numeric tweetId from connected source context only when assessment is "same_global_reset"),
+  "noticeTimingStatus": "known" | "unknown" | null (For official_notice, whether a reliable usable schedule is stated; use "unknown" when no schedule can be resolved),
+  "resetMeaning": {
+    "method": "forced" | "regular_scheduled" | "banked_distribution" | "personal" | "unknown",
+    "methodEvidence": {"tweetId": string, "quote": string} | null,
+    "scope": "all_paid_users" | "all_users" | "affected_users" | "single_account" | "unknown",
+    "scopeEvidence": {"tweetId": string, "quote": string} | null
+  } | null,
   "reasonJa": string (Japanese explanation, max 300 characters),
   "resetTypeJa": "ご祝儀リセット" | "詫びリセット" | null,
   "noticeToExecution": string | null (Extracted timeframe expression, or null),
@@ -1052,6 +1110,10 @@ export async function classifyWithGemini(
     ) {
       return fallback("invalid_schema");
     }
+    if (parsed.signalType === "official_notice" && parsed.temporalDirection === "unclear"
+      && parsed.noticeTimingStatus !== "unknown") {
+      return fallback("invalid_schema");
+    }
 
     // 7. Evidence Quote Validation (Must be actual substring of original tweet text if not null)
     let validQuote: string | null = null;
@@ -1066,6 +1128,9 @@ export async function classifyWithGemini(
         return fallback("invalid_evidence");
       }
       validQuote = parsed.evidenceQuote.trim();
+    }
+    if (parsed.signalType === "official_notice" && parsed.temporalDirection === "unclear" && !validQuote) {
+      return fallback("invalid_evidence");
     }
 
     const contextualResetAssessments: TiboContextualResetAssessment[] = [
@@ -1086,6 +1151,13 @@ export async function classifyWithGemini(
       /^\d{1,30}$/.test(parsed.contextualResetTweetId)
       ? parsed.contextualResetTweetId
       : null;
+    const noticeTimingStatus: TiboNoticeTimingStatus | null = parsed.noticeTimingStatus === "known" ||
+        parsed.noticeTimingStatus === "unknown"
+      ? parsed.noticeTimingStatus
+      : null;
+    const resetMeaning = parseResetMeaning(parsed.resetMeaning);
+    const unresolvedOfficialNoticeTiming = parsed.signalType === "official_notice" &&
+      parsed.temporalDirection === "unclear" && noticeTimingStatus === "unknown";
 
     // Sanitize reason text length
     const reasonJa = typeof parsed.reasonJa === "string" ? parsed.reasonJa.slice(0, 500) : null;
@@ -1095,7 +1167,9 @@ export async function classifyWithGemini(
     // Keep Gemini's validated fields as raw audit values. Effective temporal
     // semantics are resolved separately by the webhook route so deterministic
     // fallback data never gets written into ai_* columns.
-    const rawTemporalSemantics = parseGeminiTemporalSemantics(parsed, input.text);
+    const rawTemporalSemantics = unresolvedOfficialNoticeTiming
+      ? null
+      : parseGeminiTemporalSemantics(parsed, input.text);
     const futureSignal = parseFutureSignalAssessment(
       parsed.futureSignal,
       input.text,
@@ -1111,7 +1185,11 @@ export async function classifyWithGemini(
       resetTypeJa,
       contextualResetAssessment,
       contextualResetTweetId,
-      noticeToExecution: typeof parsed.noticeToExecution === "string" ? parsed.noticeToExecution.slice(0, 100) : null,
+      noticeTimingStatus,
+      resetMeaning,
+      noticeToExecution: !unresolvedOfficialNoticeTiming && typeof parsed.noticeToExecution === "string"
+        ? parsed.noticeToExecution.slice(0, 100)
+        : null,
       ...teaserStrengthAssessment,
       futureSignal,
       temporalExpression: rawTemporalSemantics?.temporalExpression ?? null,

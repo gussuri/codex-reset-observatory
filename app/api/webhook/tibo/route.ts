@@ -847,8 +847,10 @@ async function handleTiboWebhookPost(
       aiTeaserStrength: aiResult?.teaserStrength,
       evidenceQuote: aiResult?.evidenceQuote,
       temporalDirection: aiResult?.temporalDirection,
+      noticeTimingStatus: aiResult?.noticeTimingStatus,
       contextualResetAssessment: aiResult?.contextualResetAssessment,
       contextualResetTweetId: aiResult?.contextualResetTweetId,
+      resetMeaning: aiResult?.resetMeaning,
       targetTweetId: tweetId,
       targetTweetUrl: tweetUrl,
       targetTweetCreatedAt: createdDate.toISOString(),
@@ -1126,8 +1128,27 @@ async function handleTiboWebhookPost(
     const existingTranslationJa = normalizeStoredTranslation(existingSignal?.translated_text_ja, text, "ja");
     const existingTranslationZh = normalizeStoredTranslation(existingSignal?.translated_text_zh, text, "zh");
 
+    const formalReplySourceContextRevisionHashes = internalOptions.sourceContextRevisionHashes ??
+      (normalSourceContextRevisionSnapshot?.status === "row"
+        ? normalSourceContextRevisionSnapshot.revisionHashes
+        : null);
+    const formalReplySourceContextIsCurrentAndClassified = Boolean(
+      formalReplySourceContextRevisionHashes?.length &&
+      tiboEvidenceContext?.status === "complete" &&
+      tiboEvidenceContext.omissions.length === 0 &&
+      (internalOptions.sourceContextRevisionHashes || (
+        Array.isArray(existingSignal?.source_context_revision_hashes) &&
+        existingSignal.source_context_revision_hashes.length === formalReplySourceContextRevisionHashes.length &&
+        existingSignal.source_context_revision_hashes.every((hash, index) =>
+          hash === formalReplySourceContextRevisionHashes[index],
+        ) &&
+        formalReplySourceContextRevisionHashes.every((hash) =>
+          existingSignal?.source_context_classified_revision_hashes?.includes(hash),
+        )
+      ))
+    );
     const canCreateFormalReplyProof = Boolean(
-      internalOptions.sourceContextRevisionHashes &&
+      formalReplySourceContextIsCurrentAndClassified &&
       !editIdentityFlowBlocked &&
       existingSignal?.classification_source !== "manual" &&
       existingSignal?.verification_status !== "confirmed" &&
@@ -1158,11 +1179,12 @@ async function handleTiboWebhookPost(
           temporalDirection: aiResult.temporalDirection,
           contextualResetAssessment: aiResult.contextualResetAssessment,
           contextualResetTweetId: aiResult.contextualResetTweetId,
+          resetMeaning: aiResult.resetMeaning,
           targetTweetId: tweetId,
           targetTweetUrl: tweetUrl,
           targetTweetCreatedAt: createdDate.toISOString(),
           validatedSourceContext: tiboEvidenceContext,
-        }, internalOptions.sourceContextRevisionHashes ?? [])
+        }, formalReplySourceContextRevisionHashes ?? [])
       : null;
 
     const locallyClassifiedContextRevisions = formalReplyAdmissionProof

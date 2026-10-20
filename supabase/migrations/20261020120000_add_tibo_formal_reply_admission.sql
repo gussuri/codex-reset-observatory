@@ -19,10 +19,33 @@ begin
         or (
           jsonb_typeof(formal_reply_admission_proof) = 'object'
           and octet_length(formal_reply_admission_proof::text) <= 16384
-          and formal_reply_admission_proof ->> 'version' = 'tibo-formal-reply-admission-v1'
+          and formal_reply_admission_proof ->> 'version' = 'tibo-formal-reply-admission-v2'
           and formal_reply_admission_proof ->> 'admissionMethod' = 'validated_same_global_reset_reply'
           and formal_reply_admission_proof ->> 'contextualResetAssessment' = 'same_global_reset'
           and formal_reply_admission_proof ->> 'temporalDirection' = 'completed_now'
+          and coalesce(formal_reply_admission_proof ->> 'resetMethod' = 'forced', false)
+          and coalesce(
+            formal_reply_admission_proof ->> 'resetScope' in ('all_paid_users', 'all_users'),
+            false
+          )
+          and coalesce(jsonb_typeof(formal_reply_admission_proof -> 'resetMethodEvidence') = 'object', false)
+          and coalesce(jsonb_typeof(formal_reply_admission_proof -> 'resetScopeEvidence') = 'object', false)
+          and coalesce(
+            length(formal_reply_admission_proof -> 'resetMethodEvidence' ->> 'quote') between 1 and 300,
+            false
+          )
+          and coalesce(
+            length(formal_reply_admission_proof -> 'resetScopeEvidence' ->> 'quote') between 1 and 300,
+            false
+          )
+          and coalesce(
+            (formal_reply_admission_proof -> 'resetMethodEvidence' ->> 'sourceTextHash') ~ '^[a-f0-9]{64}$',
+            false
+          )
+          and coalesce(
+            (formal_reply_admission_proof -> 'resetScopeEvidence' ->> 'sourceTextHash') ~ '^[a-f0-9]{64}$',
+            false
+          )
           and coalesce(
             (formal_reply_admission_proof ->> 'targetTextHash') ~ '^[a-f0-9]{64}$',
             false
