@@ -1128,6 +1128,17 @@ export async function classifyWithGemini(
   try {
     const rawResponseBody = await new Promise<string>((resolve, reject) => {
       const u = new URL(endpoint);
+      let settled = false;
+      const settleResolve = (body: string) => {
+        if (settled) return;
+        settled = true;
+        resolve(body);
+      };
+      const settleReject = (failure: GeminiRequestFailure) => {
+        if (settled) return;
+        settled = true;
+        reject(failure);
+      };
       const req = https.request(
         u,
         {
@@ -1140,29 +1151,47 @@ export async function classifyWithGemini(
         },
         (res) => {
           let body = "";
+          let responseEnded = false;
+          const failResponse = () => {
+            if (settled) return;
+            body = "";
+            settleReject(new GeminiRequestFailure("transport"));
+          };
+
           res.on("data", (chunk) => {
             // Provider error bodies are not needed to classify a failure.
-            if (res.statusCode === 200) body += chunk;
+            if (!settled && res.statusCode === 200) body += chunk;
+          });
+          res.on("aborted", failResponse);
+          // Keep an error listener for the response lifetime. A timeout can
+          // destroy the request while the response stream reports its own
+          // error, and every later stream error must remain handled.
+          res.on("error", failResponse);
+          res.on("close", () => {
+            if (!responseEnded) failResponse();
           });
           res.on("end", () => {
+            responseEnded = true;
+            if (settled) return;
             if (res.statusCode === 200) {
-              resolve(body);
+              settleResolve(body);
             } else {
               const httpStatus = boundedGeminiHttpStatus(res.statusCode);
-              reject(new GeminiRequestFailure(getGeminiHttpFailureCategory(httpStatus), httpStatus));
+              settleReject(new GeminiRequestFailure(getGeminiHttpFailureCategory(httpStatus), httpStatus));
             }
           });
         }
       );
 
       req.on("timeout", () => {
-        reject(new GeminiRequestFailure("timeout"));
+        if (settled) return;
+        settleReject(new GeminiRequestFailure("timeout"));
         req.destroy();
       });
 
       // Do not read, log, or retain the exception message: request errors can
       // contain provider URLs, headers, credentials, or request content.
-      req.on("error", () => reject(new GeminiRequestFailure("transport")));
+      req.on("error", () => settleReject(new GeminiRequestFailure("transport")));
       req.write(payload);
       req.end();
     });

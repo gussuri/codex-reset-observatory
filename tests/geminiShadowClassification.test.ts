@@ -325,13 +325,16 @@ type MockGeminiResponse = {
   body?: string;
   requestError?: string;
   timeout?: boolean;
+  timeoutAfterResponse?: boolean;
+  responseFailure?: "aborted" | "error" | "close";
 };
 
 function installGeminiHttpMock(responses: MockGeminiResponse[]) {
   const originalHttpsRequest = https.request;
   let calls = 0;
+  let responseErrorEscaped = false;
   https.request = ((...args: any[]) => {
-    const callback = args[2] as (response: EventEmitter & { statusCode?: number }) => void;
+    const callback = args[2] as (response: EventEmitter & { statusCode?: number; complete?: boolean }) => void;
     const request = new EventEmitter() as EventEmitter & {
       write: (body: string) => boolean;
       end: () => void;
@@ -350,11 +353,47 @@ function installGeminiHttpMock(responses: MockGeminiResponse[]) {
         queueMicrotask(() => request.emit("error", new Error(fixture.requestError)));
         return;
       }
-      const response = new EventEmitter() as EventEmitter & { statusCode?: number };
+      const response = new EventEmitter() as EventEmitter & { statusCode?: number; complete?: boolean };
       response.statusCode = fixture?.statusCode ?? 200;
       callback(response);
       queueMicrotask(() => {
         if (fixture?.body) response.emit("data", fixture.body);
+        const emitResponseError = () => {
+          try {
+            response.emit("error", new Error("Authorization=DO_NOT_STORE"));
+          } catch {
+            responseErrorEscaped = true;
+          }
+        };
+
+        if (fixture?.timeoutAfterResponse) {
+          request.emit("timeout");
+          emitResponseError();
+          response.complete = false;
+          response.emit("close");
+          response.emit("end");
+          return;
+        }
+
+        if (fixture?.responseFailure === "aborted") {
+          response.emit("aborted");
+          emitResponseError();
+          response.complete = false;
+          response.emit("close");
+          response.emit("end");
+          return;
+        }
+        if (fixture?.responseFailure === "error") {
+          emitResponseError();
+          response.emit("end");
+          return;
+        }
+        if (fixture?.responseFailure === "close") {
+          response.complete = false;
+          response.emit("close");
+          response.emit("end");
+          return;
+        }
         response.emit("end");
       });
     };
@@ -364,6 +403,7 @@ function installGeminiHttpMock(responses: MockGeminiResponse[]) {
   return {
     restore: () => { https.request = originalHttpsRequest; },
     getCalls: () => calls,
+    didResponseErrorEscape: () => responseErrorEscaped,
   };
 }
 
@@ -428,6 +468,66 @@ test("Gemini timeout and transport exceptions expose fixed safe diagnostics", as
     } finally {
       mock.restore();
     }
+  }
+});
+
+test("Gemini response stream interruptions become fixed safe transport failures", async () => {
+  for (const responseFailure of ["aborted", "error", "close"] as const) {
+    const mock = installGeminiHttpMock([{
+      body: "{\"candidates\":DO_NOT_STORE",
+      responseFailure,
+    }]);
+    try {
+      const result = await classifyWithGemini(
+        { text: "Ordinary post." },
+        { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+      );
+      assert.equal(result.status, "api_error");
+      assert.deepEqual(result.failureDiagnostics, [{ category: "transport", httpStatus: null }]);
+      assert.equal(JSON.stringify(result).includes("DO_NOT_STORE"), false);
+      assert.equal(mock.didResponseErrorEscape(), false);
+    } finally {
+      mock.restore();
+    }
+  }
+});
+
+test("Gemini timeout wins once when the response stream errors during request destruction", async () => {
+  const mock = installGeminiHttpMock([{
+    body: "{\"candidates\":",
+    timeoutAfterResponse: true,
+  }]);
+  try {
+    const result = await classifyWithGemini(
+      { text: "Ordinary post." },
+      { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+    );
+    assert.equal(result.status, "timeout");
+    assert.deepEqual(result.failureDiagnostics, [{ category: "timeout", httpStatus: null }]);
+    assert.equal(mock.getCalls(), 1);
+    assert.equal(mock.didResponseErrorEscape(), false);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("Gemini response stream transport failures use the existing single retry", async () => {
+  const mock = installGeminiHttpMock([
+    { body: "{\"candidates\":", responseFailure: "aborted" },
+    { body: geminiEnvelope(validGeminiResponse) },
+  ]);
+  try {
+    const result = await classifyTiboWithSingleTransientRetry(() => classifyWithGemini(
+      { text: "Ordinary post." },
+      { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+    ));
+    assert.equal(mock.getCalls(), 2);
+    assert.equal(result.status, "success");
+    assert.deepEqual(result.failureDiagnostics, [{ category: "transport", httpStatus: null }]);
+    assert.equal(JSON.stringify(result).includes("DO_NOT_STORE"), false);
+    assert.equal(mock.didResponseErrorEscape(), false);
+  } finally {
+    mock.restore();
   }
 });
 
