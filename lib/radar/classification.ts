@@ -68,7 +68,7 @@ const CANCELLED_FUTURE_RESET_PATTERN =
 const NEGATED_FUTURE_RESET_PATTERN =
   /\b(?:no|not|never)\s+(?:[^.!?]{0,40}\b)?(?:reset|celebration)\b[^.!?]{0,80}\b(?:tomorrow|tonight|later|soon|next\s+(?:day|week|month|year))\b/i;
 const EXPLICIT_RESET_NEGATION_PATTERN =
-  /\b(?:no\s+reset|(?:will|would|going\s+to|can|could|should|do|does|did|am|is|are)\s+not\s+(?:going\s+to\s+|planning\s+to\s+)?(?:reset|restart|reboot)|(?:will|would|going\s+to)\s+not\s+(?:happen|occur)|not\s+(?:reset|happen|occur)\b)/i;
+  /\b(?:no\s+reset|(?:(?:will|would|going\s+to|can|could|should|do|does|did|am|is|are)\s+not|don't|doesn't|didn't)\s+(?:(?:going\s+to|plan(?:ned|ning)?\s+to)\s+)?(?:reset|restart|reboot)|(?:will|would|going\s+to)\s+not\s+(?:happen|occur)|not\s+(?:reset|happen|occur)\b)/i;
 const RECENT_RESET_BUTTON_ACQUISITION_PATTERN =
   /\b(?:i|we)\s+(?:(?:was|were)\s+)?(?:just\s+)?(?:gifted|given|got|received|acquired)\b[^.!?]{0,100}\b(?:new\s+)?reset\s+button\b/i;
 const RECENT_RESET_BUTTON_CUE_PATTERN = /\b(?:just|today|recently|new)\b/i;
@@ -76,7 +76,7 @@ const HISTORICAL_RESET_BUTTON_ACQUISITION_PATTERN =
   /\b(?:years?|months?|long)\s+ago\b|\blast\s+(?:year|month)\b/i;
 
 const FIRST_PERSON_USAGE_RESET_COMPLETION_PATTERN =
-  /\b(?:i|we)(?:\s+have|'ve)\s+(?:now\s+)?reset\s+(?:(?:the|our|all)\s+)?usage(?:\s+(?:limits?|allowances?))?(?=\s*(?:for|across|to|on|of|[.!?,;:]|$))/i;
+  /\b(?:i|we)(?:\s+have|'ve)\s+(?:now\s+)?reset\s+(?:(?:all\s+(?:paid\s+)?users?['’]?s?|everyone['’]s)\s+)?(?:(?:the|our|all)\s+)?usage(?:\s+(?:limits?|allowances?))?(?=\s*(?:for|across|to|on|of|[.!?,;:]|$))/i;
 
 const CURRENT_EXECUTION_PATTERNS = [
   /\b(?:one\s+|a\s+)?reset\s+now\b/i,
@@ -96,9 +96,13 @@ const CURRENT_EXECUTION_PATTERNS = [
 // is being carried out now. Keep the domain narrow so technical resets such as
 // "resetting the server" do not enter the usage-reset taxonomy.
 const CURRENT_USAGE_RESET_ANNOUNCEMENT_PATTERN =
-  /\b(?:i(?:\s+am|'m)|we(?:\s+are|'re))\s+reset(?:t)?ing\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b/i;
-const EXPLICIT_FUTURE_USAGE_RESET_PATTERN =
-  /(?:\b(?:will|shall|going\s+to|plan(?:ned)?\s+to|planning\s+to)\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b|\b(?:i|we)'ll\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b|\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b[^.!?]{0,120}\b(?:tonight|tomorrow|later|soon|next\s+(?:day|week|month|year)|in\s+(?:an?|one|two|\d+)\s+(?:hour|hours|day|days))\b)/i;
+  /\b(?:i(?:\s+am|'m)|we(?:\s+are|'re))\s+reset(?:t)?ing\s+(?:(?:the|our|all)\s+)?(?:(?:all\s+(?:paid\s+)?users?['’]?s?|everyone['’]s)\s+)?(?:usage(?:\s+(?:limits?|allowances?))?|rate\s+limits?|quotas?|allowances?)\b/i;
+const ALL_USER_RESET_SCOPE_PATTERN = String.raw`(?:all\s+(?:paid\s+)?users?['’]?s?|everyone['’]s)`;
+const USAGE_LIMIT_RESET_TARGET_PATTERN = String.raw`(?:(?:${ALL_USER_RESET_SCOPE_PATTERN}\s+)?(?:usage\s+(?:limits?|allowances?)|rate\s+limits?|quotas?|allowances?)|${ALL_USER_RESET_SCOPE_PATTERN}\s+limits?|for\s+all\s+users)`;
+const EXPLICIT_FUTURE_USAGE_RESET_PATTERN = new RegExp(
+  String.raw`(?:\b(?:will|shall|going\s+to|plan(?:ned|ning)?\s+to|intend(?:ed|ing)?\s+to|scheduled\s+to)\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?${USAGE_LIMIT_RESET_TARGET_PATTERN}\b|\b(?:i|we)'ll\b[^.!?]{0,120}\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?${USAGE_LIMIT_RESET_TARGET_PATTERN}\b|\b(?:reset|resetting)\s+(?:(?:the|our|all)\s+)?${USAGE_LIMIT_RESET_TARGET_PATTERN}\b[^.!?]{0,120}\b(?:tonight|tomorrow|later|soon|next\s+(?:day|week|month|year)|in\s+(?:an?|one|two|\d+)\s+(?:hour|hours|day|days))\b|\b${USAGE_LIMIT_RESET_TARGET_PATTERN}\b[^.!?]{0,100}\b(?:will|shall|going\s+to|plan(?:ned|ning)?\s+to|intend(?:ed|ing)?\s+to|scheduled\s+to|expected\s+to|set\s+to)\s+(?:be\s+)?(?:reset|refreshed|topped\s+up|restored|replenished)\b)`,
+  "i",
+);
 const EXPLICIT_EOD_DEADLINE_PATTERN = /\bby\s+(?:eod|end\s+of\s+(?:the\s+)?day)\b/i;
 
 function normalizedClassificationText(text: string) {
@@ -474,11 +478,11 @@ export function classifyTiboTweet(
   }
 
   // 2. 即時実施・完了報告 (reset_executed)
-  // An explicit future usage-limit announcement must win over the legacy
-  // broad "reset usage limits" completion phrase below.
+  // An explicit future usage-limit announcement wins over broad execution
+  // wording, unless the same post also supplies current completion evidence.
   if (
     EXPLICIT_FUTURE_USAGE_RESET_PATTERN.test(normalizedClassificationText(text)) &&
-    !isCurrentUsageResetAnnouncement(text)
+    !hasCurrentResetExecution(text)
   ) {
     return applyRuleSafetyDecision(text, {
       signalType: "official_notice",
@@ -524,7 +528,6 @@ export function classifyTiboTweet(
     "reset everyone's limits",
     "rate limits are reset",
     "fresh limits for everyone",
-    "reset all paid users",
     "reset for all users",
   ];
 

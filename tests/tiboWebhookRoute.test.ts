@@ -1223,6 +1223,84 @@ test("generic account-wide completion cannot create a formal reset from a Gemini
   }
 });
 
+test("future all-paid-user reset notices persist without formal adoption when Gemini is off or fails", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  const tweetText = "We plan to reset all paid users' usage limits at 10:00 UTC on Thursday, October 22.";
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const baseFetch = globalThis.fetch;
+  const fetchUrls: string[] = [];
+  globalThis.fetch = async (input, init) => {
+    fetchUrls.push(input instanceof Request ? input.url : String(input));
+    return baseFetch(input, init);
+  };
+  let restoreGemini: (() => void) | null = null;
+
+  try {
+    process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+    process.env.GEMINI_API_KEY = "test-gemini-key";
+    process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+    restoreGemini = installGeminiHttpErrorMock(503);
+
+    const failedResponse = await POST(buildRequest({
+      tweetId: "2100000000000000010",
+      text: tweetText,
+      tweetUrl: "https://x.com/thsottiaux/status/2100000000000000010",
+      tweetCreatedAt: "2026-10-21T00:00:00.000Z",
+    }));
+
+    assert.equal(failedResponse.status, 200);
+    const failedPayload = requestBodies.find((body) =>
+      typeof body === "object" && body !== null &&
+      (body as Record<string, unknown>).tweet_id === "2100000000000000010",
+    ) as Record<string, unknown> | undefined;
+    assert.ok(failedPayload);
+    assert.equal(failedPayload.signal_type, "official_notice");
+    assert.equal(failedPayload.rule_signal_type, "official_notice");
+    assert.equal(failedPayload.ai_classification_status, "api_error");
+    assert.equal(failedPayload.classification_source, "rule_fallback");
+    assert.equal(fetchUrls.some((url) => url.includes("/rpc/claim_tibo_formal_adoption")), false);
+    const failedBody = await failedResponse.json();
+    assert.equal(failedBody.signalType, "official_notice");
+    assert.equal(failedBody.formalAdoption?.newlyAdopted, false);
+
+    restoreGemini();
+    restoreGemini = null;
+    process.env.GEMINI_CLASSIFICATION_MODE = "off";
+    const offResponse = await POST(buildRequest({
+      tweetId: "2100000000000000011",
+      text: tweetText,
+      tweetUrl: "https://x.com/thsottiaux/status/2100000000000000011",
+      tweetCreatedAt: "2026-10-21T00:00:00.000Z",
+    }));
+
+    assert.equal(offResponse.status, 200);
+    const offPayload = requestBodies.find((body) =>
+      typeof body === "object" && body !== null &&
+      (body as Record<string, unknown>).tweet_id === "2100000000000000011",
+    ) as Record<string, unknown> | undefined;
+    assert.ok(offPayload);
+    assert.equal(offPayload.signal_type, "official_notice");
+    assert.equal(offPayload.classification_source, "rule");
+    assert.equal(fetchUrls.some((url) => url.includes("/rpc/claim_tibo_formal_adoption")), false);
+    const offBody = await offResponse.json();
+    assert.equal(offBody.signalType, "official_notice");
+    assert.equal(offBody.formalAdoption?.newlyAdopted, false);
+  } finally {
+    restoreGemini?.();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
 test("BANKED delivery completion cannot create a second forced-reset history row", async () => {
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
