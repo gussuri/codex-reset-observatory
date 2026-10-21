@@ -13,6 +13,7 @@ on:
       - 'tests/integration/tiboHeartbeatCas.integration.test.ts'
       - 'tests/integration/tiboFormalReplyAdmission.integration.test.ts'
       - 'tests/integration/tiboFormalReplyAdmission.cleanup.sql'
+      - 'tests/integration/tiboFailureDiagnostics.integration.test.ts'
       - 'tests/resetPostAssociation.test.ts'
       - 'tests/codexUsageBankedGrant.test.ts'
       - '.github/workflows/verify-supabase-migrations.yml'
@@ -29,6 +30,7 @@ on:
       - 'tests/integration/tiboHeartbeatCas.integration.test.ts'
       - 'tests/integration/tiboFormalReplyAdmission.integration.test.ts'
       - 'tests/integration/tiboFormalReplyAdmission.cleanup.sql'
+      - 'tests/integration/tiboFailureDiagnostics.integration.test.ts'
       - '.github/workflows/verify-supabase-migrations.yml'
   workflow_dispatch:
 
@@ -125,6 +127,11 @@ jobs:
         env:
           SUPABASE_LOCAL_INTEGRATION: '1'
         run: corepack pnpm exec tsx --test tests/integration/tiboHeartbeatCas.integration.test.ts
+
+      - name: Tibo Gemini failure diagnostics database integration tests
+        env:
+          SUPABASE_LOCAL_INTEGRATION: '1'
+        run: corepack pnpm exec tsx --test tests/integration/tiboFailureDiagnostics.integration.test.ts
 
       - name: Full test suite
         if: github.event_name != 'pull_request'

@@ -30,6 +30,7 @@ const KNOWN_OPTIONAL_TIBO_COLUMNS = [
   "edit_version",
   "edit_metadata_source",
   "formal_reply_admission_proof",
+  "ai_failure_diagnostics",
   "codex_operational_status",
   "codex_operational_confidence",
   "codex_operational_evidence_quote",

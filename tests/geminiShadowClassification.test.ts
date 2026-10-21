@@ -1,4 +1,6 @@
 import test from "node:test";
+import { EventEmitter } from "node:events";
+import https from "node:https";
 import assert from "node:assert";
 import {
   applyTiboClassificationSafetyGuard,
@@ -6,6 +8,7 @@ import {
   classifyWithGemini,
   GeminiClassificationOutput,
   normalizeGeminiResetType,
+  sanitizeGeminiFailureDiagnostics,
   TIBO_GEMINI_SYSTEM_PROMPT,
 } from "../lib/radar/geminiClassification";
 import { classifyTiboTweet } from "../lib/radar/classification";
@@ -315,6 +318,246 @@ test("transient Gemini retry is bounded and non-transient validation failures ar
   });
   assert.equal(validationAttempts, 1);
   assert.equal(validationFailure.status, "invalid_schema");
+});
+
+type MockGeminiResponse = {
+  statusCode?: number;
+  body?: string;
+  requestError?: string;
+  timeout?: boolean;
+};
+
+function installGeminiHttpMock(responses: MockGeminiResponse[]) {
+  const originalHttpsRequest = https.request;
+  let calls = 0;
+  https.request = ((...args: any[]) => {
+    const callback = args[2] as (response: EventEmitter & { statusCode?: number }) => void;
+    const request = new EventEmitter() as EventEmitter & {
+      write: (body: string) => boolean;
+      end: () => void;
+      destroy: () => void;
+    };
+    request.write = () => true;
+    request.destroy = () => undefined;
+    request.end = () => {
+      const fixture = responses[Math.min(calls, responses.length - 1)];
+      calls += 1;
+      if (fixture?.timeout) {
+        queueMicrotask(() => request.emit("timeout"));
+        return;
+      }
+      if (fixture?.requestError !== undefined) {
+        queueMicrotask(() => request.emit("error", new Error(fixture.requestError)));
+        return;
+      }
+      const response = new EventEmitter() as EventEmitter & { statusCode?: number };
+      response.statusCode = fixture?.statusCode ?? 200;
+      callback(response);
+      queueMicrotask(() => {
+        if (fixture?.body) response.emit("data", fixture.body);
+        response.emit("end");
+      });
+    };
+    return request;
+  }) as typeof https.request;
+
+  return {
+    restore: () => { https.request = originalHttpsRequest; },
+    getCalls: () => calls,
+  };
+}
+
+function geminiEnvelope(value: unknown) {
+  return JSON.stringify({
+    candidates: [{ content: { parts: [{ text: JSON.stringify(value) }] } }],
+  });
+}
+
+const validGeminiResponse = {
+  signalType: "irrelevant",
+  confidence: 0.9,
+  temporalDirection: "historical",
+  evidenceQuote: null,
+  reasonJa: "通常の投稿です。",
+};
+
+test("Gemini failures retain only bounded categories and HTTP status", async () => {
+  const cases = [
+    { statusCode: 401, status: "api_error", category: "auth" },
+    { statusCode: 403, status: "api_error", category: "auth" },
+    { statusCode: 429, status: "rate_limited", category: "rate_limit" },
+    { statusCode: 503, status: "api_error", category: "provider_server" },
+    { statusCode: 400, status: "api_error", category: "provider_rejected" },
+  ] as const;
+
+  for (const item of cases) {
+    const hostileBody = "API_KEY=DO_NOT_STORE Authorization: Bearer DO_NOT_STORE";
+    const mock = installGeminiHttpMock([{ statusCode: item.statusCode, body: hostileBody }]);
+    try {
+      const result = await classifyWithGemini(
+        { text: "Ordinary post." },
+        { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+      );
+      assert.equal(result.status, item.status);
+      assert.deepEqual(result.failureDiagnostics, [{ category: item.category, httpStatus: item.statusCode }]);
+      assert.equal(JSON.stringify(result).includes("DO_NOT_STORE"), false);
+    } finally {
+      mock.restore();
+    }
+  }
+});
+
+test("Gemini timeout and transport exceptions expose fixed safe diagnostics", async () => {
+  for (const fixture of [
+    { response: { timeout: true }, status: "timeout", category: "timeout" },
+    {
+      response: { requestError: "API_KEY=DO_NOT_STORE Authorization: Bearer DO_NOT_STORE" },
+      status: "api_error",
+      category: "transport",
+    },
+  ] as const) {
+    const mock = installGeminiHttpMock([fixture.response]);
+    try {
+      const result = await classifyWithGemini(
+        { text: "Ordinary post." },
+        { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+      );
+      assert.equal(result.status, fixture.status);
+      assert.deepEqual(result.failureDiagnostics, [{ category: fixture.category, httpStatus: null }]);
+      assert.equal(JSON.stringify(result).includes("DO_NOT_STORE"), false);
+    } finally {
+      mock.restore();
+    }
+  }
+});
+
+test("Gemini parse, schema, and evidence failures have fixed internal categories", async () => {
+  const cases = [
+    { body: "not-json", status: "invalid_json", category: "response_parse" },
+    {
+      body: geminiEnvelope({ ...validGeminiResponse, signalType: "invalid" }),
+      status: "invalid_schema",
+      category: "response_schema",
+    },
+    {
+      body: geminiEnvelope({
+        ...validGeminiResponse,
+        signalType: "teaser",
+        temporalDirection: "future",
+        evidenceQuote: "SECRET PROMPT AND TWEET TEXT",
+      }),
+      status: "invalid_evidence",
+      category: "evidence_validation",
+    },
+  ] as const;
+
+  for (const item of cases) {
+    const mock = installGeminiHttpMock([{ body: item.body }]);
+    try {
+      const result = await classifyWithGemini(
+        { text: "Ordinary post." },
+        { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+      );
+      assert.equal(result.status, item.status);
+      assert.deepEqual(result.failureDiagnostics, [{ category: item.category, httpStatus: null }]);
+      assert.equal(JSON.stringify(result).includes("SECRET PROMPT"), false);
+    } finally {
+      mock.restore();
+    }
+  }
+});
+
+test("transient retry keeps at most its two safe diagnostics and a later success clears them", async () => {
+  const failedThenSuccess = installGeminiHttpMock([
+    { statusCode: 503, body: "Authorization: Bearer DO_NOT_STORE" },
+    { body: geminiEnvelope(validGeminiResponse) },
+  ]);
+  try {
+    const result = await classifyTiboWithSingleTransientRetry(() => classifyWithGemini(
+      { text: "Ordinary post." },
+      { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+    ));
+    assert.equal(failedThenSuccess.getCalls(), 2);
+    assert.equal(result.status, "success");
+    assert.deepEqual(result.failureDiagnostics, [{ category: "provider_server", httpStatus: 503 }]);
+    assert.equal(JSON.stringify(result).includes("DO_NOT_STORE"), false);
+  } finally {
+    failedThenSuccess.restore();
+  }
+
+  const failedTwice = installGeminiHttpMock([
+    { statusCode: 503 },
+    { statusCode: 429 },
+  ]);
+  try {
+    const result = await classifyTiboWithSingleTransientRetry(() => classifyWithGemini(
+      { text: "Ordinary post." },
+      { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+    ));
+    assert.equal(failedTwice.getCalls(), 2);
+    assert.equal(result.status, "rate_limited");
+    assert.deepEqual(result.failureDiagnostics, [
+      { category: "provider_server", httpStatus: 503 },
+      { category: "rate_limit", httpStatus: 429 },
+    ]);
+    assert.ok((result.failureDiagnostics?.length ?? 0) <= 2);
+  } finally {
+    failedTwice.restore();
+  }
+
+  const success = installGeminiHttpMock([{ body: geminiEnvelope(validGeminiResponse) }]);
+  try {
+    const result = await classifyWithGemini(
+      { text: "Ordinary post." },
+      { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+    );
+    assert.equal(result.status, "success");
+    assert.equal(result.failureDiagnostics, undefined);
+  } finally {
+    success.restore();
+  }
+});
+
+test("classification response keeps failure diagnostics out of public response fields", () => {
+  const ruleResult = classifyTiboTweet("Ordinary post.", "https://x.com/thsottiaux/status/123456");
+  const response = buildTiboClassificationResponse("primary", ruleResult, {
+    signalType: null,
+    confidence: null,
+    temporalDirection: null,
+    evidenceQuote: null,
+    reasonJa: null,
+    resetTypeJa: null,
+    noticeToExecution: null,
+    model: "test-model",
+    status: "api_error",
+    classifiedAt: new Date().toISOString(),
+    failureDiagnostics: [{ category: "auth", httpStatus: 403 }],
+  });
+
+  assert.deepEqual(Object.keys(response).sort(), [
+    "aiSignalType",
+    "aiStatus",
+    "classificationSource",
+    "confidence",
+    "ruleSignalType",
+    "signalType",
+    "teaserStrength",
+  ].sort());
+  assert.doesNotMatch(JSON.stringify(response), /failureDiagnostics|auth|403/);
+});
+
+test("diagnostic sanitizer allowlists categories, bounds HTTP status, and caps the array", () => {
+  assert.deepEqual(sanitizeGeminiFailureDiagnostics([
+    { category: "API_KEY=DO_NOT_STORE", httpStatus: 9999 },
+    { category: "timeout", httpStatus: 408 },
+    { category: "transport", httpStatus: null },
+  ]), [
+    { category: "unknown", httpStatus: null },
+    { category: "timeout", httpStatus: 408 },
+  ]);
+  assert.equal(JSON.stringify(sanitizeGeminiFailureDiagnostics([
+    { category: "API_KEY=DO_NOT_STORE", httpStatus: 9999 },
+  ])).includes("DO_NOT_STORE"), false);
 });
 
 test("5. A successful Gemini result with an invalid structured payload falls back to rules", () => {
