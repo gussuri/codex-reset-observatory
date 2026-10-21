@@ -68,6 +68,8 @@ export type GeminiFailureDiagnostic = {
   httpStatus: number | null;
 };
 
+const GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS = 12_000;
+
 const GEMINI_FAILURE_CATEGORIES = new Set<GeminiFailureCategory>([
   "auth",
   "rate_limit",
@@ -1053,7 +1055,7 @@ export async function classifyWithGemini(
   const mode = (options.mode || process.env.GEMINI_CLASSIFICATION_MODE || "off").toLowerCase();
   const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
   const model = options.model || process.env.GEMINI_MODEL;
-  const timeoutMs = options.timeoutMs || 7000; // 7 seconds timeout
+  const timeoutMs = options.timeoutMs ?? GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS;
 
   // Default fallback output
   const fallback = (
@@ -1129,14 +1131,22 @@ export async function classifyWithGemini(
     const rawResponseBody = await new Promise<string>((resolve, reject) => {
       const u = new URL(endpoint);
       let settled = false;
+      let absoluteTimeout: ReturnType<typeof setTimeout> | undefined;
+      const clearAbsoluteTimeout = () => {
+        if (absoluteTimeout === undefined) return;
+        clearTimeout(absoluteTimeout);
+        absoluteTimeout = undefined;
+      };
       const settleResolve = (body: string) => {
         if (settled) return;
         settled = true;
+        clearAbsoluteTimeout();
         resolve(body);
       };
       const settleReject = (failure: GeminiRequestFailure) => {
         if (settled) return;
         settled = true;
+        clearAbsoluteTimeout();
         reject(failure);
       };
       const req = https.request(
@@ -1192,8 +1202,21 @@ export async function classifyWithGemini(
       // Do not read, log, or retain the exception message: request errors can
       // contain provider URLs, headers, credentials, or request content.
       req.on("error", () => settleReject(new GeminiRequestFailure("transport")));
-      req.write(payload);
-      req.end();
+      // Node's request timeout only watches a connected socket for inactivity.
+      // This deadline also covers DNS/connect and remains active while the
+      // response body is being read, so the complete attempt is wall-clock bounded.
+      absoluteTimeout = setTimeout(() => {
+        if (settled) return;
+        settleReject(new GeminiRequestFailure("timeout"));
+        req.destroy();
+      }, timeoutMs);
+      try {
+        req.write(payload);
+        req.end();
+      } catch {
+        settleReject(new GeminiRequestFailure("transport"));
+        req.destroy();
+      }
     });
 
     // 5. Parse JSON
