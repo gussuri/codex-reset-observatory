@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
 import { classifyTiboTweet, isCurrentUsageResetAnnouncement } from "@/lib/radar/classification";
-import { classifyWithGemini } from "@/lib/radar/geminiClassification";
+import {
+  classifyWithGemini,
+  sanitizeGeminiFailureDiagnostics,
+} from "@/lib/radar/geminiClassification";
 import {
   buildTiboClassificationResponse,
   classifyTiboWithSingleTransientRetry,
@@ -835,8 +838,42 @@ async function handleTiboWebhookPost(
       }
     }
 
+    const persistSourceContextFailureDiagnostic = async () => {
+      const revisions = internalOptions.sourceContextRevisionHashes;
+      const generation = internalOptions.sourceContextGeneration;
+      if (!revisions || !Number.isSafeInteger(generation)) return;
+
+      try {
+        const result = await getSupabaseServiceClient()
+          .from("tibo_signals")
+          .update({
+            ai_failure_diagnostics: sanitizeGeminiFailureDiagnostics(aiResult?.failureDiagnostics),
+          })
+          .eq("tweet_id", tweetId)
+          .eq("source_context_revision_hashes", `{${revisions.join(",")}}`)
+          .eq("source_context_generation", generation)
+          .select("tweet_id");
+        if (result.error) {
+          console.warn("[Webhook Warning] Tibo source context diagnostic save failed", {
+            reason: "conditional_save_failed",
+          });
+          return;
+        }
+        if (!Array.isArray(result.data) || result.data.length !== 1) {
+          console.warn("[Webhook Warning] Tibo source context changed before diagnostic save", {
+            reason: "revision_set_changed",
+          });
+        }
+      } catch {
+        console.warn("[Webhook Warning] Tibo source context diagnostic save failed", {
+          reason: "conditional_save_failed",
+        });
+      }
+    };
+
     if (internalOptions.sourceContextRevisionHashes
       && (!aiResult || aiResult.status !== "success")) {
+      await persistSourceContextFailureDiagnostic();
       console.warn("[Webhook Warning] Tibo source context classification did not complete", {
         reason: aiResult?.status ?? "classification_skipped",
       });
@@ -846,10 +883,12 @@ async function handleTiboWebhookPost(
     const selectedClassification = selectTiboClassification(mode, ruleResult, aiResult);
     if (internalOptions.sourceContextRevisionHashes
       && selectedClassification.classificationSource === "rule_fallback") {
+      await persistSourceContextFailureDiagnostic();
       return NextResponse.json({ error: "Source context classification fell back to rules" }, { status: 503 });
     }
     if (internalOptions.sourceContextRevisionHashes && tiboEvidenceContext
       && hasRetryableTiboEvidenceOmission(tiboEvidenceContext)) {
+      await persistSourceContextFailureDiagnostic();
       return NextResponse.json({ error: "Source context dependency is not available yet" }, { status: 503 });
     }
     const contextSafetyDecision = getTiboContextSafetyDecision({
@@ -1004,6 +1043,9 @@ async function handleTiboWebhookPost(
       ai_model: aiResult?.model || null,
       ai_classification_status: aiResult?.status || "skipped",
       ai_classified_at: aiResult?.classifiedAt || null,
+      // This bounded internal field is overwritten for each classification,
+      // so a later successful pass clears prior failure diagnostics.
+      ai_failure_diagnostics: sanitizeGeminiFailureDiagnostics(aiResult?.failureDiagnostics),
       codex_operational_status: aiResult?.codexOperationalStatus ?? null,
       codex_operational_confidence: aiResult?.codexOperationalConfidence ?? null,
       codex_operational_evidence_quote: aiResult?.codexOperationalEvidenceQuote ?? null,
@@ -1389,6 +1431,7 @@ async function handleTiboWebhookPost(
         expected_end_at: _expectedEndAt,
         temporal_resolution_status: _temporalResolutionStatus,
         temporal_resolution_version: _temporalResolutionVersion,
+        ai_failure_diagnostics: _aiFailureDiagnostics,
         codex_operational_status: _codexOperationalStatus,
         codex_operational_confidence: _codexOperationalConfidence,
         codex_operational_evidence_quote: _codexOperationalEvidenceQuote,

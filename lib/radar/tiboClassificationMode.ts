@@ -59,7 +59,14 @@ export async function classifyTiboWithSingleTransientRetry(
 ): Promise<GeminiClassificationOutput> {
   const first = await classify();
   if (!RETRYABLE_GEMINI_FAILURES.has(first.status)) return first;
-  return classify();
+  const retry = await classify();
+  const failureDiagnostics = [
+    ...(first.failureDiagnostics ?? []),
+    ...(retry.failureDiagnostics ?? []),
+  ].slice(0, 2);
+  return failureDiagnostics.length
+    ? { ...retry, failureDiagnostics }
+    : retry;
 }
 
 function isValidGeminiClassification(

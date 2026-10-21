@@ -154,6 +154,7 @@ function installSourceContextDatabase(
   const formalAdoptionClaims: WebhookRow[] = [];
   const appliedRevisions = new Map<string, Set<string>>();
   const upserts: WebhookRow[] = [];
+  const patches: Array<{ url: string; payload: WebhookRow }> = [];
   const urls: string[] = [];
   let contextMergeCalls = 0;
   let failContextClassificationUpdateOnce = options.failContextClassificationUpdateOnce === true;
@@ -272,6 +273,7 @@ function installSourceContextDatabase(
         }
       }
       for (const payload of payloads) {
+        if (method === "PATCH") patches.push({ url: url.toString(), payload: structuredClone(payload) });
         if (method !== "PATCH" || "signal_type" in payload) upserts.push(payload);
         if (method === "PATCH" && patchRoot) {
           Object.assign(patchRoot, payload);
@@ -293,6 +295,7 @@ function installSourceContextDatabase(
   return {
     rows,
     upserts,
+    patches,
     urls,
     formalAdoptionClaims,
     get contextMergeCalls() { return contextMergeCalls; },
@@ -781,6 +784,68 @@ test("context-first delivery retries root_missing after the normal target webhoo
     assert.deepEqual(await duplicateResponse.json(), { success: true, status: "duplicate" });
     assert.equal(gemini.prompts.length, 2);
     assert.equal(database.upserts.filter((row) => row.tweet_id === TARGET_ID).length, 2);
+  } finally {
+    gemini.restore();
+    database.restore();
+    restoreEnvironment(previous);
+  }
+});
+
+test("failed source-context reclassification records diagnostics under the same revision and generation CAS", async () => {
+  const previous = saveEnvironment();
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+  const database = installSourceContextDatabase([parentRow()]);
+  const gemini = installGeminiPromptCapture([
+    {
+      signalType: "official_notice",
+      confidence: 0.94,
+      temporalDirection: "future",
+      evidenceQuote: TARGET_TEXT,
+      reasonJa: "親投稿とつながる告知です。",
+    },
+    {
+      signalType: "official_notice",
+      confidence: 0.94,
+      temporalDirection: "future",
+      evidenceQuote: TARGET_TEXT,
+      reasonJa: "親投稿とつながる告知です。",
+    },
+  ], [200, 503, 503]);
+
+  try {
+    assert.equal((await POST(buildRequest(sourceMetadata()))).status, 200);
+    const initialRow = database.rows.get(TARGET_ID)!;
+    assert.equal(initialRow.ai_failure_diagnostics, null);
+
+    const response = await POST(enrichmentRequest());
+    assert.equal(response.status, 503);
+    const rowAfterFailure = database.rows.get(TARGET_ID)!;
+    assert.equal(rowAfterFailure.source_context_classified_revision_hashes.length, 0);
+    assert.deepEqual(rowAfterFailure.ai_failure_diagnostics, [
+      { category: "provider_server", httpStatus: 503 },
+      { category: "provider_server", httpStatus: 503 },
+    ]);
+
+    const diagnosticPatch = [...database.patches].reverse().find((patch) =>
+      new URL(patch.url).searchParams.get("tweet_id") === `eq.${TARGET_ID}` &&
+      "ai_failure_diagnostics" in patch.payload,
+    );
+    assert.ok(diagnosticPatch);
+    const guardedUrl = new URL(diagnosticPatch.url);
+    const expectedRevisionHash = rowAfterFailure.source_context_revision_hashes[0];
+    assert.equal(
+      guardedUrl.searchParams.get("source_context_revision_hashes"),
+      `eq.{${expectedRevisionHash}}`,
+    );
+    assert.equal(guardedUrl.searchParams.get("source_context_generation"), "eq.1");
+    assert.equal(database.upserts.filter((row) => row.tweet_id === TARGET_ID).length, 1);
   } finally {
     gemini.restore();
     database.restore();

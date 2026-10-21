@@ -50,6 +50,81 @@ export type GeminiClassificationStatus =
   | "api_error"
   | "model_not_configured";
 
+export type GeminiFailureCategory =
+  | "auth"
+  | "rate_limit"
+  | "timeout"
+  | "transport"
+  | "provider_server"
+  | "provider_rejected"
+  | "provider_http_error"
+  | "response_parse"
+  | "response_schema"
+  | "evidence_validation"
+  | "unknown";
+
+export type GeminiFailureDiagnostic = {
+  category: GeminiFailureCategory;
+  httpStatus: number | null;
+};
+
+const GEMINI_FAILURE_CATEGORIES = new Set<GeminiFailureCategory>([
+  "auth",
+  "rate_limit",
+  "timeout",
+  "transport",
+  "provider_server",
+  "provider_rejected",
+  "provider_http_error",
+  "response_parse",
+  "response_schema",
+  "evidence_validation",
+  "unknown",
+]);
+
+/** Return at most the two safe diagnostics allowed for one webhook classification. */
+export function sanitizeGeminiFailureDiagnostics(value: unknown): GeminiFailureDiagnostic[] | null {
+  if (!Array.isArray(value)) return null;
+
+  const sanitized = value.slice(0, 2).flatMap((item): GeminiFailureDiagnostic[] => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const diagnostic = item as Record<string, unknown>;
+    const category = GEMINI_FAILURE_CATEGORIES.has(diagnostic.category as GeminiFailureCategory)
+      ? diagnostic.category as GeminiFailureCategory
+      : "unknown";
+    const httpStatus = typeof diagnostic.httpStatus === "number" &&
+        Number.isInteger(diagnostic.httpStatus) && diagnostic.httpStatus >= 100 && diagnostic.httpStatus <= 599
+      ? diagnostic.httpStatus
+      : null;
+    return [{ category, httpStatus }];
+  });
+
+  return sanitized.length ? sanitized : null;
+}
+
+class GeminiRequestFailure extends Error {
+  constructor(
+    readonly category: "timeout" | "transport" | GeminiFailureCategory,
+    readonly httpStatus: number | null = null,
+  ) {
+    super("Gemini request failed");
+  }
+}
+
+function boundedGeminiHttpStatus(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 100 && value <= 599
+    ? value
+    : null;
+}
+
+function getGeminiHttpFailureCategory(status: number | null): GeminiFailureCategory {
+  if (status === 401 || status === 403) return "auth";
+  if (status === 429) return "rate_limit";
+  if (status !== null && status >= 500) return "provider_server";
+  if (status !== null && status >= 400) return "provider_rejected";
+  return "provider_http_error";
+}
+
 export type GeminiResetType = "ご祝儀リセット" | "詫びリセット";
 
 const GENERIC_FUTURE_CONTINUATION_PATTERN =
@@ -171,6 +246,8 @@ export type GeminiClassificationOutput = {
   model: string | null;
   status: GeminiClassificationStatus;
   classifiedAt: string | null;
+  /** Safe failures from this call chain in order; a later retry can succeed. */
+  failureDiagnostics?: GeminiFailureDiagnostic[];
   /** Raw validated Gemini fields retained when the safety guard changes the effective result. */
   rawAudit?: {
     signalType: GeminiClassificationOutput["signalType"];
@@ -979,7 +1056,10 @@ export async function classifyWithGemini(
   const timeoutMs = options.timeoutMs || 7000; // 7 seconds timeout
 
   // Default fallback output
-  const fallback = (status: GeminiClassificationStatus): GeminiClassificationOutput => ({
+  const fallback = (
+    status: GeminiClassificationStatus,
+    diagnostic?: GeminiFailureDiagnostic,
+  ): GeminiClassificationOutput => ({
     signalType: null,
     confidence: null,
     temporalDirection: null,
@@ -1014,6 +1094,7 @@ export async function classifyWithGemini(
     model: model || null,
     status,
     classifiedAt: status === "skipped" ? null : nowIso,
+    ...(diagnostic ? { failureDiagnostics: [diagnostic] } : {}),
   });
 
   // 2. Check mode & configuration
@@ -1047,6 +1128,17 @@ export async function classifyWithGemini(
   try {
     const rawResponseBody = await new Promise<string>((resolve, reject) => {
       const u = new URL(endpoint);
+      let settled = false;
+      const settleResolve = (body: string) => {
+        if (settled) return;
+        settled = true;
+        resolve(body);
+      };
+      const settleReject = (failure: GeminiRequestFailure) => {
+        if (settled) return;
+        settled = true;
+        reject(failure);
+      };
       const req = https.request(
         u,
         {
@@ -1059,25 +1151,47 @@ export async function classifyWithGemini(
         },
         (res) => {
           let body = "";
-          res.on("data", (chunk) => (body += chunk));
+          let responseEnded = false;
+          const failResponse = () => {
+            if (settled) return;
+            body = "";
+            settleReject(new GeminiRequestFailure("transport"));
+          };
+
+          res.on("data", (chunk) => {
+            // Provider error bodies are not needed to classify a failure.
+            if (!settled && res.statusCode === 200) body += chunk;
+          });
+          res.on("aborted", failResponse);
+          // Keep an error listener for the response lifetime. A timeout can
+          // destroy the request while the response stream reports its own
+          // error, and every later stream error must remain handled.
+          res.on("error", failResponse);
+          res.on("close", () => {
+            if (!responseEnded) failResponse();
+          });
           res.on("end", () => {
+            responseEnded = true;
+            if (settled) return;
             if (res.statusCode === 200) {
-              resolve(body);
-            } else if (res.statusCode === 429) {
-              reject(new Error("RATE_LIMITED"));
+              settleResolve(body);
             } else {
-              reject(new Error(`API_ERROR:${res.statusCode}`));
+              const httpStatus = boundedGeminiHttpStatus(res.statusCode);
+              settleReject(new GeminiRequestFailure(getGeminiHttpFailureCategory(httpStatus), httpStatus));
             }
           });
         }
       );
 
       req.on("timeout", () => {
+        if (settled) return;
+        settleReject(new GeminiRequestFailure("timeout"));
         req.destroy();
-        reject(new Error("TIMEOUT"));
       });
 
-      req.on("error", (err) => reject(err));
+      // Do not read, log, or retain the exception message: request errors can
+      // contain provider URLs, headers, credentials, or request content.
+      req.on("error", () => settleReject(new GeminiRequestFailure("transport")));
       req.write(payload);
       req.end();
     });
@@ -1088,11 +1202,11 @@ export async function classifyWithGemini(
       const apiResult = JSON.parse(rawResponseBody);
       const textContent = apiResult?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!textContent) {
-        return fallback("invalid_json");
+        return fallback("invalid_json", { category: "response_parse", httpStatus: null });
       }
       parsed = JSON.parse(textContent);
     } catch {
-      return fallback("invalid_json");
+      return fallback("invalid_json", { category: "response_parse", httpStatus: null });
     }
 
     // 6. Schema Validation
@@ -1108,29 +1222,29 @@ export async function classifyWithGemini(
       parsed.confidence > 1 ||
       !allowedTemporal.includes(parsed.temporalDirection)
     ) {
-      return fallback("invalid_schema");
+      return fallback("invalid_schema", { category: "response_schema", httpStatus: null });
     }
     if (parsed.signalType === "official_notice" && parsed.temporalDirection === "unclear"
       && parsed.noticeTimingStatus !== "unknown") {
-      return fallback("invalid_schema");
+      return fallback("invalid_schema", { category: "response_schema", httpStatus: null });
     }
 
     // 7. Evidence Quote Validation (Must be actual substring of original tweet text if not null)
     let validQuote: string | null = null;
     if (parsed.evidenceQuote !== null && parsed.evidenceQuote !== undefined) {
       if (typeof parsed.evidenceQuote !== "string" || parsed.evidenceQuote.length > 300) {
-        return fallback("invalid_evidence");
+        return fallback("invalid_evidence", { category: "evidence_validation", httpStatus: null });
       }
       const normQuote = parsed.evidenceQuote.trim().toLowerCase();
       const normText = input.text.toLowerCase();
 
       if (normQuote.length > 0 && !normText.includes(normQuote)) {
-        return fallback("invalid_evidence");
+        return fallback("invalid_evidence", { category: "evidence_validation", httpStatus: null });
       }
       validQuote = parsed.evidenceQuote.trim();
     }
     if (parsed.signalType === "official_notice" && parsed.temporalDirection === "unclear" && !validQuote) {
-      return fallback("invalid_evidence");
+      return fallback("invalid_evidence", { category: "evidence_validation", httpStatus: null });
     }
 
     const contextualResetAssessments: TiboContextualResetAssessment[] = [
@@ -1226,14 +1340,13 @@ export async function classifyWithGemini(
         reasonJa: rawResult.reasonJa,
       },
     };
-  } catch (err: any) {
-    const msg = err?.message || "";
-    if (msg === "TIMEOUT") {
-      return fallback("timeout");
+  } catch (err: unknown) {
+    if (err instanceof GeminiRequestFailure) {
+      const diagnostic = { category: err.category, httpStatus: err.httpStatus };
+      if (err.category === "timeout") return fallback("timeout", diagnostic);
+      if (err.category === "rate_limit") return fallback("rate_limited", diagnostic);
+      return fallback("api_error", diagnostic);
     }
-    if (msg === "RATE_LIMITED") {
-      return fallback("rate_limited");
-    }
-    return fallback("api_error");
+    return fallback("api_error", { category: "unknown", httpStatus: null });
   }
 }

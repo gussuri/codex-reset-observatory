@@ -1849,10 +1849,66 @@ test("a transient Gemini API error is retried once and the BANKED notice is stor
     assert.equal(upsertBody.rule_signal_type, "official_notice");
     assert.equal(upsertBody.classification_source, "gemini");
     assert.equal(upsertBody.ai_classification_status, "success");
+    assert.deepEqual(upsertBody.ai_failure_diagnostics, [
+      { category: "provider_server", httpStatus: 503 },
+    ]);
     assert.equal(upsertBody.expected_start_at, null);
     assert.equal(upsertBody.expected_end_at, null);
+    assert.doesNotMatch(await response.clone().text(), /ai_failure_diagnostics|provider_server|503/);
   } finally {
     gemini.restore();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
+test("a later clean Gemini classification clears the prior diagnostic for the same tweet", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  let restoreGemini = installGeminiHttpErrorMock(503);
+  const tweetId = "2102463847714247199";
+
+  try {
+    const failedResponse = await POST(buildRequest({ tweetId, text: "Ordinary post." }));
+    assert.equal(failedResponse.status, 200);
+    assert.doesNotMatch(await failedResponse.clone().text(), /ai_failure_diagnostics|provider_server|503/);
+    restoreGemini();
+    restoreGemini = installGeminiClassificationMock({
+      signalType: "irrelevant",
+      confidence: 0.9,
+      temporalDirection: "historical",
+      evidenceQuote: null,
+      reasonJa: "通常の投稿です。",
+    });
+
+    const successResponse = await POST(buildRequest({ tweetId, text: "Ordinary post." }));
+    assert.equal(successResponse.status, 200);
+    assert.doesNotMatch(await successResponse.clone().text(), /ai_failure_diagnostics|provider_server|503/);
+
+    const writes = requestBodies.filter((body) =>
+      typeof body === "object" && body !== null && (body as Record<string, unknown>).tweet_id === tweetId,
+    ) as Record<string, unknown>[];
+    assert.equal(writes.length, 2);
+    assert.deepEqual(writes[0]?.ai_failure_diagnostics, [
+      { category: "provider_server", httpStatus: 503 },
+      { category: "provider_server", httpStatus: 503 },
+    ]);
+    assert.equal(writes[0]?.ai_classification_status, "api_error");
+    assert.equal(writes[1]?.ai_failure_diagnostics, null);
+    assert.equal(writes[1]?.ai_classification_status, "success");
+  } finally {
+    restoreGemini();
     restoreFetch();
     restoreEnvironment(previous);
   }
