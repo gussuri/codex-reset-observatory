@@ -76,6 +76,73 @@ test("canonical BANKED completion stays irrelevant while retaining method, scope
   assert.equal(creditsPipeline.bankedHistoryEvent, null, "ordinary credits do not enter the BANKED history path");
 });
 
+test("BANKED history projection follows source facts despite model status, class, method, or scope errors", () => {
+  const fixture = JSON.parse(readFileSync(canonicalFixturePath, "utf8")) as { scenarios: TiboScenario[] };
+  const banked = fixture.scenarios.find((scenario) => scenario.id === "balanced-banked-distribution")!;
+  const baseline = buildFixedGeminiOutput(banked);
+  const outputs = [
+    ["wrong method", {
+      ...baseline,
+      resetMeaning: { ...baseline.resetMeaning!, method: "unknown" as const },
+    }],
+    ["wrong scope", {
+      ...baseline,
+      resetMeaning: { ...baseline.resetMeaning!, scope: "unknown" as const },
+    }],
+    ["wrong method and scope", {
+      ...baseline,
+      resetMeaning: { ...baseline.resetMeaning!, method: "unknown" as const, scope: "unknown" as const },
+    }],
+    ["wrong model class", { ...baseline, signalType: "reset_executed" as const }],
+    ["non-success model status", { ...baseline, status: "invalid_schema" as const }],
+  ] as const;
+
+  for (const [label, output] of outputs) {
+    const pipeline = runTiboScenarioPipeline(banked, output);
+    assert.equal(
+      pipeline.bankedHistoryEvent?.id,
+      "banked-reset-canonical-v2-920000000000000017",
+      `${label} must fail only its independent model-output score, not source-backed history projection`,
+    );
+    assert.equal(pipeline.bankedHistoryEvent?.recordKind, "banked_distribution", label);
+  }
+});
+
+test("BANKED history still requires source-backed notice identity and a supported estimate", () => {
+  const fixture = JSON.parse(readFileSync(canonicalFixturePath, "utf8")) as { scenarios: TiboScenario[] };
+  const banked = fixture.scenarios.find((scenario) => scenario.id === "balanced-banked-distribution")!;
+  const output = buildFixedGeminiOutput(banked);
+  const context = banked.bankedHistoryContext!;
+  const cases: Array<[string, TiboScenario]> = [
+    ["missing context", { ...banked, bankedHistoryContext: undefined }],
+    ["non-BANKED notice source text", {
+      ...banked,
+      bankedHistoryContext: {
+        ...context,
+        officialNotice: { ...context.officialNotice, text: "We shared an update about usage limits." },
+      },
+    }],
+    ["unrelated notice identity", {
+      ...banked,
+      bankedHistoryContext: {
+        ...context,
+        officialNotice: { ...context.officialNotice, tweet_id: "unrelated-notice" },
+      },
+    }],
+    ["unsupported estimate", {
+      ...banked,
+      bankedHistoryContext: {
+        ...context,
+        estimate: { ...context.estimate, estimatorVersion: "unsupported-estimator" },
+      },
+    }],
+  ];
+
+  for (const [label, scenario] of cases) {
+    assert.equal(runTiboScenarioPipeline(scenario, output).bankedHistoryEvent, null, label);
+  }
+});
+
 test("canonical evaluator reports BANKED kind without scoring the completed grant as a reset", async () => {
   const parent = mkdtempSync(path.join(os.tmpdir(), "tibo-canonical-evaluation-"));
   const scenarioId = "balanced-banked-distribution";
@@ -97,6 +164,12 @@ test("canonical evaluator reports BANKED kind without scoring the completed gran
         const output = buildFixedGeminiOutput(scenario);
         return {
           ...output,
+          signalType: "reset_executed",
+          resetMeaning: {
+            ...output.resetMeaning!,
+            method: "unknown",
+            scope: "unknown",
+          },
           reasonJa: `fixture reason containing ${apiKey}`,
           evidenceQuote: `fixture evidence containing ${apiKey}`,
         };
@@ -105,11 +178,13 @@ test("canonical evaluator reports BANKED kind without scoring the completed gran
 
     const row = report?.rows[0];
     assert.equal(row?.expectedSignalType, "irrelevant");
-    assert.equal(row?.predictedSignalType, "irrelevant");
+    assert.equal(row?.predictedSignalType, "reset_executed");
     assert.equal(row?.expectedHistoryRecordKind, "banked_distribution");
     assert.equal(row?.historyRecordKind, "banked_distribution");
     assert.equal(report?.metrics.historyRecordKindAccuracy, 1);
-    assert.equal(report?.metrics.accuracy, 1);
+    assert.equal(report?.metrics.accuracy, 0);
+    assert.equal(report?.metrics.resetMeaningMethodAccuracy, 0);
+    assert.equal(report?.metrics.resetMeaningScopeAccuracy, 0);
     assert.equal(report?.modelResponseFieldAudit.mode, "none");
     assert.equal(row?.reasonJa, "fixture reason containing [redacted]");
     assert.equal(row?.evidenceQuote, "fixture evidence containing [redacted]");

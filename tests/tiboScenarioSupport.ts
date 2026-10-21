@@ -33,7 +33,6 @@ import {
 import {
   convertTiboResetSignalToHistoryEvent,
   findBankedDistributionEvents,
-  findRelatedBankedDistributionNotices,
   getNoticeBackedHistoryInputs,
   isFormalTiboResetSignal,
   type TiboNoticeSignal,
@@ -71,7 +70,6 @@ export type TiboScenarioExpected = {
 export type TiboScenarioBankedHistoryContext = {
   officialNotice: TiboNoticeSignal;
   estimate: ResetExecutionEstimate;
-  observedAt: string;
 };
 
 export type TiboScenarioBaseline = {
@@ -494,8 +492,6 @@ export function runTiboScenarioPipeline(
   const formalAccepted = isFormalTiboResetSignal(formalSignal);
   const bankedHistoryEvent = buildScenarioBankedHistoryEvent(
     scenario,
-    geminiResult,
-    effectiveSelected.signalType,
     formalSignal,
   );
 
@@ -514,20 +510,10 @@ export function runTiboScenarioPipeline(
 
 function buildScenarioBankedHistoryEvent(
   scenario: TiboScenario,
-  geminiResult: GeminiClassificationOutput,
-  effectiveSignalType: ClassificationSignalType,
   completionSignal: FormalTiboResetSignal,
 ) {
   const context = scenario.bankedHistoryContext;
-  if (
-    !context ||
-    geminiResult.status !== "success" ||
-    effectiveSignalType !== "irrelevant" ||
-    geminiResult.resetMeaning?.method !== "banked_distribution" ||
-    geminiResult.resetMeaning.scope !== "affected_users"
-  ) {
-    return null;
-  }
+  if (!context) return null;
 
   const officialNotice: ActiveTiboSignal = {
     tweet_id: context.officialNotice.tweet_id,
@@ -554,13 +540,12 @@ function buildScenarioBankedHistoryEvent(
     tweet_url: completionSignal.tweet_url,
     tweet_created_at: completionSignal.tweet_created_at,
     detected_at: completionSignal.detected_at ?? completionSignal.tweet_created_at,
-    signal_type: "irrelevant",
+    signal_type: completionSignal.signal_type,
     confidence: completionSignal.confidence ?? undefined,
     verification_status: completionSignal.verification_status,
     is_reply: completionSignal.is_reply === true,
   };
   const inputs = getNoticeBackedHistoryInputs({
-    ...getLocalRadarData(),
     canonical_tibo_signals: [canonicalOfficialNotice, completionSignal],
     recent_tibo_signals: [officialNotice, bankedCompletion],
     active_tibo_signals: [],
@@ -569,14 +554,14 @@ function buildScenarioBankedHistoryEvent(
     codex_recovery_observations: [],
     codex_usage_recovery: null,
     reset_execution_estimates: [context.estimate],
+    tibo_formal_adoptions: [],
+    prediction: { probability_history: { events: [] } },
   });
-  const relatedSignals = findRelatedBankedDistributionNotices(
+  return findBankedDistributionEvents(
     inputs.bankedSignals,
-    context.officialNotice.tweet_id,
-    context.observedAt,
-  );
-  if (!relatedSignals.some((signal) => signal.tweet_id === completionSignal.tweet_id)) return null;
-
-  return findBankedDistributionEvents(inputs.bankedSignals, inputs.estimates)
+    inputs.estimates,
+    [],
+    inputs.identityContext,
+  )
     .find((event) => event.id === context.estimate.resetEventKey) ?? null;
 }
