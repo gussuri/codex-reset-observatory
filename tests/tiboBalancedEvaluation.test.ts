@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import balancedJson from "./fixtures/tibo-classification-balanced-v1.json";
@@ -16,12 +17,15 @@ import {
   getClassificationFailureStage,
   isScenarioResumeEligible,
   measureScenarioPromptSize,
+  parseTiboGeminiPromptProfile,
   requestBudgetForBatch,
   runTiboScenarioEvaluation,
   type ScenarioEvaluationRow,
 } from "../scripts/evaluate-tibo-scenarios";
 import {
   TIBO_GEMINI_SYSTEM_PROMPT,
+  TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT,
+  classifyWithGemini,
   type GeminiClassificationInput,
   type GeminiClassificationOutput,
 } from "../lib/radar/geminiClassification";
@@ -301,6 +305,18 @@ test("prompt measurement reports current system and user parts with and without 
   );
 });
 
+test("compact-v1 changes only the fixed prompt in offline size measurements", () => {
+  const scenario = scenarioById.get("balanced-reply-forced-reset")!;
+  const production = measureScenarioPromptSize(scenario, "production");
+  const compact = measureScenarioPromptSize(scenario, "compact-v1");
+
+  assert.equal(production.systemPromptChars, TIBO_GEMINI_SYSTEM_PROMPT.length);
+  assert.equal(compact.systemPromptChars, TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT.length);
+  assert.ok(compact.systemPromptChars < production.systemPromptChars);
+  assert.equal(compact.userPromptCharsWithGraph, production.userPromptCharsWithGraph);
+  assert.equal(compact.userPromptCharsWithoutGraph, production.userPromptCharsWithoutGraph);
+});
+
 test("live evaluation budget is capped and counts each classifier invocation", () => {
   assert.equal(requestBudgetForBatch(undefined, 16), 16);
   assert.equal(requestBudgetForBatch(5, 16), 5);
@@ -308,6 +324,9 @@ test("live evaluation budget is capped and counts each classifier invocation", (
   assert.equal(canStartEvaluationRequest(15, 16), true);
   assert.equal(canStartEvaluationRequest(16, 16), false);
   assert.equal(canStartEvaluationRequest(1, 1), false);
+  assert.equal(parseTiboGeminiPromptProfile(undefined), "production");
+  assert.equal(parseTiboGeminiPromptProfile("compact-v1"), "compact-v1");
+  assert.throws(() => parseTiboGeminiPromptProfile("unknown"), /prompt-profile/i);
 });
 
 test("resume reuses successful rows and gives transient failures at most one further invocation", () => {
@@ -315,11 +334,106 @@ test("resume reuses successful rows and gives transient failures at most one fur
   assert.equal(isScenarioResumeEligible({ status: "invalid_json", attempts: 1 }), false);
   assert.equal(isScenarioResumeEligible({ status: "invalid_schema", attempts: 1 }), false);
   assert.equal(isScenarioResumeEligible({ status: "invalid_evidence", attempts: 1 }), false);
-  assert.equal(isScenarioResumeEligible({ status: "api_error", attempts: 1 }), true);
+  assert.equal(isScenarioResumeEligible({
+    status: "api_error",
+    attempts: 1,
+    failureDiagnostics: [{ category: "provider_server", httpStatus: 503 }],
+  }), true);
   assert.equal(isScenarioResumeEligible({ status: "timeout", attempts: 1 }), true);
-  assert.equal(isScenarioResumeEligible({ status: "rate_limited", attempts: 1 }), true);
+  assert.equal(isScenarioResumeEligible({ status: "rate_limited", attempts: 1 }), false);
+  assert.equal(isScenarioResumeEligible({
+    status: "api_error",
+    attempts: 1,
+    failureDiagnostics: [{ category: "auth", httpStatus: 403 }],
+  }), false);
+  assert.equal(isScenarioResumeEligible({ status: "api_error", attempts: 1 }), false);
   assert.equal(isScenarioResumeEligible({ status: "api_error", attempts: 2 }), false);
   assert.equal(isScenarioResumeEligible({ status: "api_error", attempts: 1, retrySuppressed: true }), false);
+});
+
+test("live evaluation stops and stays stopped after auth, quota, or unknown provider failures", async () => {
+  const failures = [
+    { status: "api_error" as const, diagnostic: { category: "auth" as const, httpStatus: 401 } },
+    { status: "api_error" as const, diagnostic: { category: "auth" as const, httpStatus: 403 } },
+    { status: "rate_limited" as const, diagnostic: { category: "rate_limit" as const, httpStatus: 429 } },
+    { status: "api_error" as const, diagnostic: { category: "provider_rejected" as const, httpStatus: 400 } },
+  ];
+
+  for (let index = 0; index < failures.length; index += 1) {
+    const failure = failures[index];
+    const parent = tempOutputDirectory();
+    const outputDir = path.join(parent, `run-${index}`);
+    let callCount = 0;
+    const classifier: typeof classifyWithGemini = async (input) => {
+      callCount += 1;
+      const scenario = scenarios.find((item) => item.tweetText === input.text)!;
+      return {
+        ...buildFixedGeminiOutput(scenario),
+        status: failure.status,
+        signalType: null,
+        confidence: null,
+        temporalDirection: null,
+        failureDiagnostics: [failure.diagnostic],
+      };
+    };
+    const args = [
+      "--live", "--fixture", "balanced-canonical",
+      "--ids", "balanced-notice-time-unknown,balanced-notice-day-n",
+      "--prompt-profile", "compact-v1", "--request-budget", "2", "--output-dir", outputDir,
+    ];
+
+    try {
+      const report = await runTiboScenarioEvaluation(args, {
+        apiKey: "offline-test-placeholder",
+        model: "fake-gemini-model",
+        classify: classifier,
+      });
+      assert.equal(callCount, 1, `${failure.diagnostic.category} must stop the selected evaluation`);
+      assert.equal(report?.stoppedAfterProviderFailure, true);
+      assert.equal(report?.stoppedAfterRateLimit, failure.status === "rate_limited");
+      assert.equal(report?.classifierInvocations, 1);
+
+      await runTiboScenarioEvaluation([...args, "--resume"], {
+        apiKey: "offline-test-placeholder",
+        model: "fake-gemini-model",
+        classify: classifier,
+      });
+      assert.equal(callCount, 1, "resume must preserve the stop after a fatal provider failure");
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  }
+});
+
+test("direct model evaluation is blocked until evaluation-only free quota is confirmed", async () => {
+  const parent = tempOutputDirectory();
+  const outputDir = path.join(parent, "run");
+  const originalRequest = https.request;
+  const originalConfirmation = process.env.GEMINI_EVALUATION_FREE_TIER_CONFIRMED;
+  let httpRequests = 0;
+  https.request = (() => {
+    httpRequests += 1;
+    throw new Error("unexpected model request");
+  }) as typeof https.request;
+  delete process.env.GEMINI_EVALUATION_FREE_TIER_CONFIRMED;
+  try {
+    await assert.rejects(
+      runTiboScenarioEvaluation([
+        "--live", "--fixture", "balanced-canonical", "--prompt-profile", "compact-v1",
+        "--request-budget", "1", "--output-dir", outputDir,
+      ], {
+        apiKey: "offline-test-placeholder",
+        model: "gemini-3.5-flash-lite",
+      }),
+      /FREE_TIER_CONFIRMED/i,
+    );
+    assert.equal(httpRequests, 0);
+  } finally {
+    https.request = originalRequest;
+    if (originalConfirmation === undefined) delete process.env.GEMINI_EVALUATION_FREE_TIER_CONFIRMED;
+    else process.env.GEMINI_EVALUATION_FREE_TIER_CONFIRMED = originalConfirmation;
+    rmSync(parent, { recursive: true, force: true });
+  }
 });
 
 test("evaluation CLI resumes a success only when the complete processing fingerprint matches", async () => {
@@ -338,12 +452,15 @@ test("evaluation CLI resumes a success only when the complete processing fingerp
     const checkpointPath = path.join(outputDir, "checkpoint.json");
     const checkpoint = JSON.parse(readFileSync(checkpointPath, "utf8"));
     assert.equal(checkpoint.evaluationFingerprint.commitSha, first?.commitSha);
+    assert.equal(checkpoint.evaluationFingerprint.schemaVersion, 2);
+    assert.equal(checkpoint.evaluationFingerprint.promptProfile, "production");
     assert.equal(checkpoint.evaluationFingerprint.generationSettings.temperature, 0);
     assert.equal(checkpoint.evaluationFingerprint.generationSettings.timeoutMs, 7000);
     assert.equal(checkpoint.evaluationFingerprint.responseObservationMode, "none");
     assert.ok(checkpoint.evaluationFingerprint.systemPromptSha256);
     assert.ok(checkpoint.evaluationFingerprint.userPromptSha256ByScenario["balanced-notice-time-unknown"]);
     assert.ok(checkpoint.evaluationFingerprint.processingSourceHashes["lib/radar/tiboContextSafety.ts"]);
+    assert.equal(first?.directHttpRequestAttempts, null, "injected classifiers do not claim observable HTTP sends");
 
     const resumed = await runTiboScenarioEvaluation([...args, "--resume"], evaluationDependencies(classifier));
     assert.equal(resumed?.classifierInvocations, 1);
@@ -358,6 +475,49 @@ test("evaluation CLI resumes a success only when the complete processing fingerp
       /fingerprint/i,
     );
     assert.equal(classifier.callCount, 1, "a fingerprint mismatch must fail before a classifier call");
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
+test("evaluation selects compact-v1 explicitly and fingerprints its prompt before resume", async () => {
+  const parent = tempOutputDirectory();
+  const outputDir = path.join(parent, "run");
+  const observedProfiles: string[] = [];
+  const classifier: typeof classifyWithGemini = async (input, options = {}) => {
+    observedProfiles.push(options.promptProfile ?? "production");
+    const scenario = scenarios.find((item) => item.tweetText === input.text);
+    assert.ok(scenario);
+    return buildFixedGeminiOutput(scenario);
+  };
+  const args = [
+    "--live", "--fixture", "balanced-canonical", "--ids", "balanced-notice-time-unknown",
+    "--prompt-profile", "compact-v1", "--request-budget", "1", "--output-dir", outputDir,
+  ];
+
+  try {
+    const first = await runTiboScenarioEvaluation(args, evaluationDependencies({
+      get callCount() { return observedProfiles.length; },
+      classify: classifier,
+    }));
+    assert.equal(first?.promptProfile, "compact-v1");
+    assert.equal(first?.evaluationFingerprint.promptProfile, "compact-v1");
+    assert.ok(first?.evaluationFingerprint.systemPromptSha256);
+    assert.equal(observedProfiles[0], "compact-v1");
+    assert.equal(first?.classifierInvocations, 1);
+    assert.equal(first?.directHttpRequestAttempts, null);
+
+    await assert.rejects(
+      runTiboScenarioEvaluation([
+        ...args.slice(0, args.indexOf("--prompt-profile")),
+        "--prompt-profile", "production", ...args.slice(args.indexOf("--prompt-profile") + 2), "--resume",
+      ], evaluationDependencies({
+        get callCount() { return observedProfiles.length; },
+        classify: classifier,
+      })),
+      /fingerprint/i,
+    );
+    assert.equal(observedProfiles.length, 1, "a profile hash mismatch must fail before any additional classifier call");
   } finally {
     rmSync(parent, { recursive: true, force: true });
   }

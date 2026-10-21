@@ -10,6 +10,8 @@ import {
   normalizeGeminiResetType,
   sanitizeGeminiFailureDiagnostics,
   TIBO_GEMINI_SYSTEM_PROMPT,
+  TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT,
+  getTiboGeminiSystemPrompt,
 } from "../lib/radar/geminiClassification";
 import { classifyTiboTweet } from "../lib/radar/classification";
 import {
@@ -47,6 +49,27 @@ test("Gemini prompt receives structured reply metadata without treating reply st
   assert.match(prompt, /Source timeline: with_replies/);
   assert.match(prompt, /AUTHOR TEXT: Maybe :\)/);
   assert.match(prompt, /reply status alone must not raise/i);
+});
+
+test("compact-v1 stays an explicit evaluation prompt and production remains the classifier default", () => {
+  assert.equal(getTiboGeminiSystemPrompt(), TIBO_GEMINI_SYSTEM_PROMPT);
+  assert.equal(getTiboGeminiSystemPrompt("production"), TIBO_GEMINI_SYSTEM_PROMPT);
+  assert.equal(getTiboGeminiSystemPrompt("compact-v1"), TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT);
+  assert.ok(TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT.length < TIBO_GEMINI_SYSTEM_PROMPT.length);
+
+  for (const rule of [
+    /AUTHOR TEXT.*speech act/i,
+    /BANKED.*not a global/i,
+    /parent[\s\S]*must not supply/i,
+    /noticeTimingStatus.*unknown/i,
+    /teaserStrength/i,
+    /futureSignal/i,
+    /resetMeaning/i,
+    /codexOperationalStatus/i,
+    /Respond ONLY with one JSON object/i,
+  ]) {
+    assert.match(TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT, rule);
+  }
 });
 
 test("Gemini prompt keeps quoted text separate from Tibo's author text", () => {
