@@ -115,7 +115,7 @@ export type ScenarioMetrics = {
 };
 
 type Checkpoint = {
-  schemaVersion: 2;
+  schemaVersion: 3;
   model: string;
   fixtureName: string;
   fixtureScenarioCount: number;
@@ -128,13 +128,92 @@ type Checkpoint = {
   updatedAt: string;
   commitSha?: string | null;
   fixtureHash?: string | null;
+  evaluationFingerprint: TiboEvaluationFingerprint;
   startedAt?: string;
   resumeCount?: number;
   rateLimitCount?: number;
 };
 
-function loadLocalEnvironment() {
-  const envPath = path.join(process.cwd(), ".env.local");
+export type TiboEvaluationFingerprint = {
+  schemaVersion: 1;
+  fixtureName: string;
+  fixtureHash: string;
+  selectedScenarioIds: string[];
+  commitSha: string | null;
+  model: string;
+  systemPromptSha256: string;
+  userPromptSha256ByScenario: Record<string, string>;
+  generationSettings: {
+    mode: "primary";
+    responseMimeType: "application/json";
+    temperature: 0;
+    timeoutMs: 7000;
+  };
+  processingSourceHashes: Record<string, string>;
+  value: string;
+};
+
+export type TiboScenarioEvaluationReport = {
+  schemaVersion: 3;
+  status: "complete" | "incomplete";
+  complete: boolean;
+  model: string;
+  commitSha: string | null;
+  fixtureName: string;
+  fixtureHash: string;
+  evaluationFingerprint: TiboEvaluationFingerprint;
+  startedAt: string;
+  completedAt: string | null;
+  resumeCount: number;
+  rateLimitCount: number;
+  requestBudget: number;
+  classifierInvocations: number;
+  freshApiSuccessesThisRun: number;
+  reusedCheckpointSuccesses: number;
+  apiSuccessDefinition: string;
+  productionSafetyGuardEnabled: true;
+  fixtureScenarioCount: number;
+  selectedScenarioCount: number;
+  evaluatedScenarioCount: number;
+  existingHistoricalEvaluation23Unchanged: true;
+  mockScenarioLab145Unchanged: true;
+  productionWrites: false;
+  stoppedAfterRateLimit: boolean;
+  stoppedAtRequestBudget: boolean;
+  metrics: ScenarioMetrics;
+  rows: ScenarioEvaluationRow[];
+  resumeCommand: string;
+};
+
+export type TiboScenarioEvaluationDependencies = {
+  apiKey?: string;
+  model?: string;
+  classify?: typeof classifyWithGemini;
+  cwd?: string;
+  projectRoot?: string;
+};
+
+const EVALUATION_PROCESSING_FILES = [
+  "scripts/evaluate-tibo-scenarios.ts",
+  "tests/tiboScenarioSupport.ts",
+  "lib/radar/geminiClassification.ts",
+  "lib/radar/classification.ts",
+  "lib/radar/tiboClassificationMode.ts",
+  "lib/radar/tiboContextSafety.ts",
+  "lib/radar/tiboFormalReplyAdmission.ts",
+  "lib/radar/tiboHistory.ts",
+  "lib/radar/tiboResetEventIdentity.ts",
+  "lib/radar/tiboLogicalProjection.ts",
+  "lib/radar/tiboLogicalPost.ts",
+  "lib/radar/tiboTemporal.ts",
+  "lib/radar/tiboEvidenceContext.ts",
+  "lib/radar/tiboEvidencePrompt.ts",
+  "lib/radar/teaserStrength.ts",
+  "lib/radar/bankedReset.ts",
+] as const;
+
+function loadLocalEnvironment(cwd = process.cwd()) {
+  const envPath = path.join(cwd, ".env.local");
   if (!fs.existsSync(envPath)) return;
   for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
     const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
@@ -226,21 +305,60 @@ function isMainModule() {
   return Boolean(process.argv[1]) && path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1]);
 }
 
-function getCommitSha() {
+function getCommitSha(projectRoot = process.cwd()) {
   try {
-    return execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim() || null;
+    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectRoot, encoding: "utf8" }).trim() || null;
   } catch {
     return null;
   }
 }
 
-function getFixtureHash(fixtureName: string) {
+function getFixtureHash(fixtureName: string, projectRoot = process.cwd()) {
   const filename = fixtureName === "balanced"
     ? "tibo-classification-balanced-v1.json"
     : "tibo-scenarios.json";
   return createHash("sha256")
-    .update(fs.readFileSync(path.join(process.cwd(), "tests", "fixtures", filename)))
+    .update(fs.readFileSync(path.join(projectRoot, "tests", "fixtures", filename)))
     .digest("hex");
+}
+
+export function buildTiboEvaluationFingerprint(
+  fixtureName: string,
+  fixtureHash: string,
+  scenarios: TiboScenario[],
+  commitSha: string | null,
+  model: string,
+  projectRoot: string,
+): TiboEvaluationFingerprint {
+  const userPromptSha256ByScenario = Object.fromEntries(scenarios.map((scenario) => [
+    scenario.id,
+    createHash("sha256").update(buildGeminiPrompt(buildGeminiScenarioInput(scenario))).digest("hex"),
+  ]));
+  const processingSourceHashes = Object.fromEntries(EVALUATION_PROCESSING_FILES.map((filename) => [
+    filename,
+    createHash("sha256").update(fs.readFileSync(path.join(projectRoot, filename))).digest("hex"),
+  ]));
+  const fingerprintPayload = {
+    schemaVersion: 1 as const,
+    fixtureName,
+    fixtureHash,
+    selectedScenarioIds: scenarios.map((scenario) => scenario.id),
+    commitSha,
+    model,
+    systemPromptSha256: createHash("sha256").update(TIBO_GEMINI_SYSTEM_PROMPT).digest("hex"),
+    userPromptSha256ByScenario,
+    generationSettings: {
+      mode: "primary" as const,
+      responseMimeType: "application/json" as const,
+      temperature: 0 as const,
+      timeoutMs: 7000 as const,
+    },
+    processingSourceHashes,
+  };
+  return {
+    ...fingerprintPayload,
+    value: createHash("sha256").update(JSON.stringify(fingerprintPayload)).digest("hex"),
+  };
 }
 
 function sleep(milliseconds: number) {
@@ -380,6 +498,7 @@ async function evaluateScenario(
   scenario: TiboScenario,
   model: string,
   apiKey: string,
+  classifier: typeof classifyWithGemini,
   previousAttempts = 0,
   previousSuccesses = 0,
   previousRateLimits = 0,
@@ -389,7 +508,7 @@ async function evaluateScenario(
   beforeRequest?.(attemptNumber);
   let last: GeminiClassificationOutput | null = null;
   const started = performance.now();
-  last = await classifyWithGemini(buildGeminiScenarioInput(scenario), {
+  last = await classifier(buildGeminiScenarioInput(scenario), {
     apiKey,
     model,
     mode: "primary",
@@ -540,7 +659,9 @@ function readCheckpoint(outputDir: string): Checkpoint | null {
   if (!fs.existsSync(filePath)) return null;
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as Checkpoint;
-    if (parsed.schemaVersion !== 2 || !Array.isArray(parsed.rows) ||
+    if (parsed.schemaVersion !== 3 || !parsed.evaluationFingerprint ||
+      typeof parsed.evaluationFingerprint.value !== "string" ||
+      !Array.isArray(parsed.rows) ||
       !Array.isArray(parsed.selectedScenarioIds) || !Number.isInteger(parsed.requestCount) ||
       !Number.isInteger(parsed.requestBudget) || parsed.requestBudget < 1 ||
       parsed.requestBudget > MAX_EVALUATION_REQUEST_BUDGET || parsed.requestCount < 0 ||
@@ -575,6 +696,7 @@ function renderReport(
     commitSha: string | null;
     fixtureHash: string;
     fixtureName: string;
+    evaluationFingerprint: TiboEvaluationFingerprint;
     startedAt: string;
     completedAt: string | null;
     resumeCount: number;
@@ -593,6 +715,7 @@ function renderReport(
     `- commit SHA: \`${metadata.commitSha ?? "unknown"}\``,
     `- fixture: \`${metadata.fixtureName}\``,
     `- fixture SHA-256: \`${metadata.fixtureHash}\``,
+    `- evaluation processing fingerprint: \`${metadata.evaluationFingerprint.value}\``,
     `- scenario count: ${rows.length}`,
     `- classifier invocations / budget: ${metadata.requestCount} / ${metadata.requestBudget}`,
     `- direct API successes in this run: ${metadata.freshApiSuccessesThisRun}`,
@@ -674,7 +797,7 @@ function renderReport(
   return lines.join("\n");
 }
 
-function writePromptInputLengthReport(args: Map<string, string>) {
+function writePromptInputLengthReport(args: Map<string, string>, cwd = process.cwd()) {
   const { fixtureName, fixture } = getFixture(args);
   const measuredAt = new Date().toISOString();
   const rows = fixture.scenarios.map((scenario) => ({
@@ -682,7 +805,7 @@ function writePromptInputLengthReport(args: Map<string, string>) {
     category: scenario.category,
     ...measureScenarioPromptSize(scenario),
   }));
-  const outputDir = path.resolve(args.get("output-dir") ?? `scratch/${fixtureName}-prompt-input-lengths`);
+  const outputDir = path.resolve(cwd, args.get("output-dir") ?? `scratch/${fixtureName}-prompt-input-lengths`);
   fs.mkdirSync(outputDir, { recursive: true });
   const report = {
     schemaVersion: 1,
@@ -713,8 +836,13 @@ function writePromptInputLengthReport(args: Map<string, string>) {
   console.log(`Wrote ${path.join(outputDir, "prompt-input-lengths.md")}`);
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
+export async function runTiboScenarioEvaluation(
+  argv: string[],
+  dependencies: TiboScenarioEvaluationDependencies = {},
+): Promise<TiboScenarioEvaluationReport | undefined> {
+  const args = parseArgs(argv);
+  const cwd = dependencies.cwd ?? process.cwd();
+  const projectRoot = dependencies.projectRoot ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   if (args.has("help")) {
     console.log("Usage: corepack pnpm run eval:tibo-scenarios -- [--live] [--fixture legacy|balanced] [--request-budget 1..16] [--resume] [--limit N] [--ids id1,id2] [--output-dir DIR]");
     console.log("Offline prompt sizing: corepack pnpm run eval:tibo-scenarios -- --measure-input-lengths --fixture balanced [--output-dir DIR]");
@@ -722,7 +850,7 @@ async function main() {
     return;
   }
   if (args.has("measure-input-lengths")) {
-    writePromptInputLengthReport(args);
+    writePromptInputLengthReport(args, cwd);
     return;
   }
   if (!args.has("live")) {
@@ -731,7 +859,7 @@ async function main() {
   }
 
   const { fixtureName, fixture } = getFixture(args);
-  const outputDir = path.resolve(args.get("output-dir") ?? "scratch/tibo-scenario-evaluation");
+  const outputDir = path.resolve(cwd, args.get("output-dir") ?? "scratch/tibo-scenario-evaluation");
   fs.mkdirSync(outputDir, { recursive: true });
   const checkpointExists = fs.existsSync(checkpointPath(outputDir));
   if (checkpointExists && !args.has("resume")) {
@@ -739,9 +867,9 @@ async function main() {
   }
   const checkpoint = args.has("resume") ? readCheckpoint(outputDir) : null;
 
-  loadLocalEnvironment();
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
-  const model = process.env.GEMINI_MODEL?.trim();
+  if (dependencies.apiKey === undefined || dependencies.model === undefined) loadLocalEnvironment(cwd);
+  const apiKey = (dependencies.apiKey ?? process.env.GEMINI_API_KEY)?.trim();
+  const model = (dependencies.model ?? process.env.GEMINI_MODEL)?.trim();
   if (!apiKey || !model) {
     console.log("SKIPPED: GEMINI_API_KEY or GEMINI_MODEL is not configured; no API call was made.");
     return;
@@ -761,7 +889,7 @@ async function main() {
     throw new Error("A resumed request budget cannot be lower than classifier invocations already made.");
   }
   const requestBudget = requestBudgetForBatch(requestedBudget ?? checkpoint?.requestBudget);
-  const fixtureHash = getFixtureHash(fixtureName);
+  const fixtureHash = getFixtureHash(fixtureName, projectRoot);
   if (checkpoint && checkpoint.fixtureHash !== fixtureHash) {
     throw new Error("Fixture content differs from the checkpoint; use a new output directory.");
   }
@@ -789,7 +917,20 @@ async function main() {
   if (checkpoint && JSON.stringify(checkpoint.selectedScenarioIds) !== JSON.stringify(selectedScenarioIds)) {
     throw new Error("Selected scenario set differs from the checkpoint; resume with the original IDs or use a new output directory.");
   }
-  const commitSha = checkpoint?.commitSha ?? getCommitSha();
+  const currentCommitSha = getCommitSha(projectRoot);
+  const evaluationFingerprint = buildTiboEvaluationFingerprint(
+    fixtureName,
+    fixtureHash,
+    selectedScenarios,
+    currentCommitSha,
+    model,
+    projectRoot,
+  );
+  if (checkpoint && checkpoint.evaluationFingerprint.value !== evaluationFingerprint.value) {
+    throw new Error("Checkpoint evaluation processing fingerprint differs from the current prompts, generation settings, or processing code; use a new output directory.");
+  }
+  const commitSha = checkpoint?.commitSha ?? currentCommitSha;
+  const classifier = dependencies.classify ?? classifyWithGemini;
   const startedAt = checkpoint?.startedAt ?? new Date().toISOString();
   const resumeCount = (checkpoint?.resumeCount ?? 0) + (checkpoint ? 1 : 0);
   let rateLimitCount = checkpoint?.rateLimitCount ?? 0;
@@ -813,7 +954,7 @@ async function main() {
     rowsById.set(scenario.id, buildInterruptedRow(scenario, previous, inFlightRequest.attemptNumber));
     inFlightRequest = null;
     writeCheckpoint(outputDir, {
-      schemaVersion: 2,
+      schemaVersion: 3,
       model,
       fixtureName,
       fixtureScenarioCount: fixture.scenarios.length,
@@ -826,6 +967,7 @@ async function main() {
       updatedAt: new Date().toISOString(),
       commitSha,
       fixtureHash,
+      evaluationFingerprint,
       startedAt,
       resumeCount,
       rateLimitCount,
@@ -855,6 +997,7 @@ async function main() {
         scenario,
         model,
         apiKey,
+        classifier,
         previousAttempts,
         previousSuccesses,
         previousRateLimits,
@@ -862,7 +1005,7 @@ async function main() {
           requestCount += 1;
           inFlightRequest = { scenarioId: scenario.id, attemptNumber, startedAt: new Date().toISOString() };
           writeCheckpoint(outputDir, {
-            schemaVersion: 2,
+            schemaVersion: 3,
             model,
             fixtureName,
             fixtureScenarioCount: fixture.scenarios.length,
@@ -875,6 +1018,7 @@ async function main() {
             updatedAt: new Date().toISOString(),
             commitSha,
             fixtureHash,
+            evaluationFingerprint,
             startedAt,
             resumeCount,
             rateLimitCount,
@@ -888,7 +1032,7 @@ async function main() {
       inFlightRequest = null;
       stoppedAfterRateLimit = row.status === "rate_limited" || stoppedAfterRateLimit;
       writeCheckpoint(outputDir, {
-        schemaVersion: 2,
+        schemaVersion: 3,
         model,
         fixtureName,
         fixtureScenarioCount: fixture.scenarios.length,
@@ -901,6 +1045,7 @@ async function main() {
         updatedAt: new Date().toISOString(),
         commitSha,
         fixtureHash,
+        evaluationFingerprint,
         startedAt,
         resumeCount,
         rateLimitCount,
@@ -929,14 +1074,15 @@ async function main() {
     args.has("ids") ? `--ids ${selectedScenarioIds.join(",")}` : "",
     `--output-dir ${outputDir}`,
   ].filter(Boolean).join(" ");
-  const report = {
-    schemaVersion: 2,
+  const report: TiboScenarioEvaluationReport = {
+    schemaVersion: 3,
     status: complete ? "complete" : "incomplete",
     complete,
     model,
     commitSha,
     fixtureName,
     fixtureHash,
+    evaluationFingerprint,
     startedAt,
     completedAt,
     resumeCount,
@@ -966,6 +1112,7 @@ async function main() {
       commitSha,
       fixtureHash,
       fixtureName,
+      evaluationFingerprint,
       startedAt,
       completedAt,
       resumeCount,
@@ -978,10 +1125,11 @@ async function main() {
   );
   console.log(`Wrote ${path.join(outputDir, "report.json")}`);
   console.log(`Status: ${report.status}; fresh API successes this run: ${freshApiSuccessesThisRun}; classifier invocations: ${requestCount}/${requestBudget}`);
+  return report;
 }
 
 if (isMainModule()) {
-  main().catch((error) => {
+  runTiboScenarioEvaluation(process.argv.slice(2)).catch((error) => {
     console.error(`Scenario evaluation failed: ${error instanceof Error ? error.message : "unknown error"}`);
     process.exitCode = 1;
   });

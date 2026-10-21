@@ -1,5 +1,5 @@
 import { getLocalRadarData } from "../lib/radar";
-import { getTiboContextSafetyDecision } from "../lib/radar/tiboContextSafety";
+import { getTiboContextSafetyDecision, type TiboContextSafetyInput } from "../lib/radar/tiboContextSafety";
 import type { TiboEvidenceContext } from "../lib/radar/tiboEvidenceContext";
 import { formatTiboEvidenceInput } from "../lib/radar/tiboEvidencePrompt";
 import {
@@ -35,6 +35,10 @@ import {
   isFormalTiboResetSignal,
   type FormalTiboResetSignal,
 } from "../lib/radar/tiboHistory";
+import {
+  attachTiboFormalReplyAdmissionProof,
+  createTiboFormalReplyAdmissionProof,
+} from "../lib/radar/tiboFormalReplyAdmission";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import type { ActiveTiboSignal, PublicRadarSnapshot, RadarData } from "../lib/radar/types";
 
@@ -111,6 +115,9 @@ export type TiboScenario = {
   replyToHandles?: string[];
   replyContextText?: string | null;
   validatedSourceContext?: TiboEvidenceContext | null;
+  sourceContextRevisionHashes?: string[];
+  sourceContextClassifiedRevisionHashes?: string[];
+  sourceContextGeneration?: number;
   tiboEvidenceInput?: string | null;
   isQuote?: boolean;
   quoteAuthorHandle?: string | null;
@@ -265,7 +272,11 @@ function buildFormalSignal(
     classification_source: selected.classificationSource,
     rule_signal_type: activeSignal.signal_type,
     ai_signal_type: geminiResult?.signalType ?? null,
+    ai_confidence: geminiResult?.confidence ?? null,
     ai_classification_status: geminiResult?.status ?? "skipped",
+    ai_temporal_direction: geminiResult?.temporalDirection ?? null,
+    ai_notice_timing_status: geminiResult?.noticeTimingStatus ?? null,
+    ai_evidence_quote: geminiResult?.evidenceQuote ?? null,
     ai_reset_type_ja: geminiResult?.resetTypeJa ?? null,
     ai_notice_to_execution: geminiResult?.noticeToExecution ?? null,
     ai_teaser_strength: activeSignal.teaser_strength ?? null,
@@ -289,7 +300,35 @@ function buildFormalSignal(
     reply_to_handles: scenario.replyToHandles ?? null,
     reply_context_text: scenario.replyContextText ?? null,
     source_timeline: scenario.sourceTimeline ?? "profile",
+    source_context_revision_hashes: scenario.sourceContextRevisionHashes ?? [],
+    source_context_classified_revision_hashes: scenario.sourceContextClassifiedRevisionHashes ?? [],
+    source_context_generation: scenario.sourceContextGeneration ?? 0,
   };
+}
+
+function attachCurrentScenarioReplyProof(
+  formalSignal: FormalTiboResetSignal,
+  contextSafetyInput: TiboContextSafetyInput,
+  contextSafetyDecision: ReturnType<typeof getTiboContextSafetyDecision>,
+  selected: SelectedTiboClassification,
+  geminiResult: GeminiClassificationOutput,
+  scenario: TiboScenario,
+) {
+  if (contextSafetyDecision !== null || scenario.isReply !== true || scenario.isQuote === true
+    || selected.signalType !== "reset_executed" || selected.classificationSource !== "gemini"
+    || geminiResult.status !== "success" || geminiResult.signalType !== "reset_executed"
+    || (geminiResult.confidence ?? 0) < 0.95 || geminiResult.temporalDirection !== "completed_now") {
+    return formalSignal;
+  }
+
+  const proof = createTiboFormalReplyAdmissionProof(
+    contextSafetyInput,
+    scenario.sourceContextRevisionHashes ?? [],
+    scenario.sourceContextGeneration ?? 0,
+  );
+  return proof
+    ? attachTiboFormalReplyAdmissionProof(formalSignal, proof) as FormalTiboResetSignal
+    : formalSignal;
 }
 
 export function runTiboScenario(scenario: TiboScenario, now = getScenarioNow(scenario)): TiboScenarioRun {
@@ -391,7 +430,7 @@ export function runTiboScenarioPipeline(
   });
   const selected = selectTiboClassification(modeValue, ruleResult, geminiResult);
   const targetTweetId = scenario.tweetUrl.match(/\/status\/(\d+)/)?.[1] ?? scenario.id;
-  const contextSafetyDecision = getTiboContextSafetyDecision({
+  const contextSafetyInput: TiboContextSafetyInput = {
     authorText: scenario.tweetText,
     isReply: scenario.isReply,
     isQuote: scenario.isQuote,
@@ -413,7 +452,8 @@ export function runTiboScenarioPipeline(
     targetTweetUrl: scenario.tweetUrl,
     targetTweetCreatedAt: scenario.tweetCreatedAt,
     validatedSourceContext: scenario.validatedSourceContext,
-  });
+  };
+  const contextSafetyDecision = getTiboContextSafetyDecision(contextSafetyInput);
   const effectiveSelected = contextSafetyDecision
     ? {
         ...selected,
@@ -429,7 +469,14 @@ export function runTiboScenarioPipeline(
       ? resolveTiboTemporalSchedule(semantics, scenario.tweetCreatedAt, TIBO_SOURCE_TIME_ZONE)
       : null;
   const activeSignal = buildActiveSignal(scenario, effectiveSelected, geminiResult, temporalResolution);
-  const formalSignal = buildFormalSignal(activeSignal, effectiveSelected, geminiResult, scenario);
+  const formalSignal = attachCurrentScenarioReplyProof(
+    buildFormalSignal(activeSignal, effectiveSelected, geminiResult, scenario),
+    contextSafetyInput,
+    contextSafetyDecision,
+    effectiveSelected,
+    geminiResult,
+    scenario,
+  );
   const formalAccepted = isFormalTiboResetSignal(formalSignal);
 
   return {
