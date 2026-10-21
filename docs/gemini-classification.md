@@ -40,6 +40,12 @@ GEMINI_API_KEY=<set outside this repository>
 - 最終的なGeminiステータスが `timeout`、`rate_limited`、`api_error` の場合、Chrome拡張は保存済みfallbackを処理済みにせず、tweet_id単位の再送キューへ入れます。Webhook全体の再送は初回を含め最大3回で、失敗が続く場合は明示的な再試行が必要です。
 - Webhook全体の各再送でもGeminiの分類を再実行するため、拡張機能経由では最大6回のGemini呼び出しが発生し得ます。不正なJSON、スキーマ不一致、証拠引用不一致、モデル未設定などはWebhook全体の自動再送を開始しません。
 
+## 評価用プロンプトプロファイル
+
+`scripts/evaluate-tibo-scenarios.ts` は `--prompt-profile production|compact-v1` を受け付けます。省略時とProductionの通常分類は既存プロンプトを使い、`compact-v1` は比較評価用の候補です。評価結果にはプロファイル名と固定プロンプトのSHA-256が記録され、異なるプロファイルのチェックポイントは再開できません。
+
+直接Geminiを呼び出す評価では、Productionと同じ `gemini-3.5-flash-lite`、APIキー、および評価専用の無料枠を確認した後に `GEMINI_EVALUATION_FREE_TIER_CONFIRMED=true` が必要です。1回の評価のHTTP要求予算は最大16件で、再試行もこの予算に含まれます。Productionと候補を各16ケースで比較する場合は合計最大32要求です。`--measure-input-lengths` はモデル呼び出しを行いません。canonical-v2の16ケースは開発fixtureであり、holdoutではありません。評価runnerはProduction DBやWebhookへ書き込みません。
+
 分類ステータスには `success`、`skipped`、`timeout`、`rate_limited`、`invalid_json`、`invalid_schema`、`invalid_evidence`、`api_error`、`model_not_configured` などがあります。
 
 比較用SQLと監査列の確認方法は、[AI分類の比較・監査用SQL](ai-classification-audit.md)を参照してください。監視全体の運用・復旧手順は、[Tibo監視とリセット履歴更新の運用・復旧手順](operations/tibo-monitor-runbook.md)にあります。

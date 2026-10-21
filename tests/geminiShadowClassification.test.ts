@@ -10,6 +10,8 @@ import {
   normalizeGeminiResetType,
   sanitizeGeminiFailureDiagnostics,
   TIBO_GEMINI_SYSTEM_PROMPT,
+  TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT,
+  getTiboGeminiSystemPrompt,
 } from "../lib/radar/geminiClassification";
 import { classifyTiboTweet } from "../lib/radar/classification";
 import {
@@ -47,6 +49,27 @@ test("Gemini prompt receives structured reply metadata without treating reply st
   assert.match(prompt, /Source timeline: with_replies/);
   assert.match(prompt, /AUTHOR TEXT: Maybe :\)/);
   assert.match(prompt, /reply status alone must not raise/i);
+});
+
+test("compact-v1 stays an explicit evaluation prompt and production remains the classifier default", () => {
+  assert.equal(getTiboGeminiSystemPrompt(), TIBO_GEMINI_SYSTEM_PROMPT);
+  assert.equal(getTiboGeminiSystemPrompt("production"), TIBO_GEMINI_SYSTEM_PROMPT);
+  assert.equal(getTiboGeminiSystemPrompt("compact-v1"), TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT);
+  assert.ok(TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT.length < TIBO_GEMINI_SYSTEM_PROMPT.length);
+
+  for (const rule of [
+    /AUTHOR TEXT.*speech act/i,
+    /BANKED.*not a global/i,
+    /parent[\s\S]*must not supply/i,
+    /noticeTimingStatus.*unknown/i,
+    /teaserStrength/i,
+    /futureSignal/i,
+    /resetMeaning/i,
+    /codexOperationalStatus/i,
+    /Respond ONLY with one JSON object/i,
+  ]) {
+    assert.match(TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT, rule);
+  }
 });
 
 test("Gemini prompt keeps quoted text separate from Tibo's author text", () => {
@@ -327,21 +350,49 @@ type MockGeminiResponse = {
   timeout?: boolean;
   timeoutAfterResponse?: boolean;
   responseFailure?: "aborted" | "error" | "close";
+  responseDelayMs?: number;
+  noResponse?: boolean;
+  partialResponse?: boolean;
 };
 
 function installGeminiHttpMock(responses: MockGeminiResponse[]) {
   const originalHttpsRequest = https.request;
   let calls = 0;
+  let timeoutMs: number | undefined;
+  let destroyCount = 0;
   let responseErrorEscaped = false;
   https.request = ((...args: any[]) => {
     const callback = args[2] as (response: EventEmitter & { statusCode?: number; complete?: boolean }) => void;
+    timeoutMs = args[1]?.timeout;
+    let activeResponse: (EventEmitter & { statusCode?: number; complete?: boolean }) | null = null;
+    let responseTimer: ReturnType<typeof setTimeout> | undefined;
+    let destroyed = false;
     const request = new EventEmitter() as EventEmitter & {
       write: (body: string) => boolean;
       end: () => void;
       destroy: () => void;
     };
     request.write = () => true;
-    request.destroy = () => undefined;
+    const emitResponseError = (response: EventEmitter) => {
+      try {
+        response.emit("error", new Error("Authorization=DO_NOT_STORE"));
+      } catch {
+        responseErrorEscaped = true;
+      }
+    };
+    request.destroy = () => {
+      destroyCount += 1;
+      destroyed = true;
+      if (responseTimer !== undefined) clearTimeout(responseTimer);
+      if (activeResponse) {
+        activeResponse.complete = false;
+        activeResponse.emit("aborted");
+        emitResponseError(activeResponse);
+        activeResponse.emit("close");
+      } else {
+        request.emit("error", new Error("AbortError: The operation was aborted"));
+      }
+    };
     request.end = () => {
       const fixture = responses[Math.min(calls, responses.length - 1)];
       calls += 1;
@@ -353,49 +404,55 @@ function installGeminiHttpMock(responses: MockGeminiResponse[]) {
         queueMicrotask(() => request.emit("error", new Error(fixture.requestError)));
         return;
       }
-      const response = new EventEmitter() as EventEmitter & { statusCode?: number; complete?: boolean };
-      response.statusCode = fixture?.statusCode ?? 200;
-      callback(response);
-      queueMicrotask(() => {
-        if (fixture?.body) response.emit("data", fixture.body);
-        const emitResponseError = () => {
-          try {
-            response.emit("error", new Error("Authorization=DO_NOT_STORE"));
-          } catch {
-            responseErrorEscaped = true;
+      if (fixture?.noResponse) return;
+      const deliverResponse = () => {
+        responseTimer = undefined;
+        if (destroyed) return;
+        const response = new EventEmitter() as EventEmitter & { statusCode?: number; complete?: boolean };
+        activeResponse = response;
+        response.statusCode = fixture?.statusCode ?? 200;
+        callback(response);
+        queueMicrotask(() => {
+          if (destroyed) return;
+          if (fixture?.body) response.emit("data", fixture.body);
+          if (fixture?.partialResponse) return;
+
+          if (fixture?.timeoutAfterResponse) {
+            request.emit("timeout");
+            emitResponseError(response);
+            response.complete = false;
+            response.emit("close");
+            response.emit("end");
+            return;
           }
-        };
 
-        if (fixture?.timeoutAfterResponse) {
-          request.emit("timeout");
-          emitResponseError();
-          response.complete = false;
-          response.emit("close");
+          if (fixture?.responseFailure === "aborted") {
+            response.emit("aborted");
+            emitResponseError(response);
+            response.complete = false;
+            response.emit("close");
+            response.emit("end");
+            return;
+          }
+          if (fixture?.responseFailure === "error") {
+            emitResponseError(response);
+            response.emit("end");
+            return;
+          }
+          if (fixture?.responseFailure === "close") {
+            response.complete = false;
+            response.emit("close");
+            response.emit("end");
+            return;
+          }
           response.emit("end");
-          return;
-        }
-
-        if (fixture?.responseFailure === "aborted") {
-          response.emit("aborted");
-          emitResponseError();
-          response.complete = false;
-          response.emit("close");
-          response.emit("end");
-          return;
-        }
-        if (fixture?.responseFailure === "error") {
-          emitResponseError();
-          response.emit("end");
-          return;
-        }
-        if (fixture?.responseFailure === "close") {
-          response.complete = false;
-          response.emit("close");
-          response.emit("end");
-          return;
-        }
-        response.emit("end");
-      });
+        });
+      };
+      if (fixture?.responseDelayMs) {
+        responseTimer = setTimeout(deliverResponse, fixture.responseDelayMs);
+      } else {
+        deliverResponse();
+      }
     };
     return request;
   }) as typeof https.request;
@@ -403,6 +460,8 @@ function installGeminiHttpMock(responses: MockGeminiResponse[]) {
   return {
     restore: () => { https.request = originalHttpsRequest; },
     getCalls: () => calls,
+    getTimeoutMs: () => timeoutMs,
+    getDestroyCount: () => destroyCount,
     didResponseErrorEscape: () => responseErrorEscaped,
   };
 }
@@ -420,6 +479,144 @@ const validGeminiResponse = {
   evidenceQuote: null,
   reasonJa: "通常の投稿です。",
 };
+
+const EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS = 12_000;
+
+test("Gemini accepts a successful response after the previous 7-second timeout window", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const mock = installGeminiHttpMock([{
+    body: geminiEnvelope(validGeminiResponse),
+    responseDelayMs: 8_621,
+  }]);
+  try {
+    const pending = classifyWithGemini(
+      { text: "Ordinary post." },
+      { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+    );
+    t.mock.timers.tick(8_621);
+    const result = await pending;
+    assert.equal(result.status, "success");
+    assert.equal(mock.getTimeoutMs(), EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS);
+    assert.equal(mock.getDestroyCount(), 0);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("Gemini absolute deadline bounds a request that stalls before response headers", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const mock = installGeminiHttpMock([{ noResponse: true }]);
+  try {
+    let resultStatus: string | null = null;
+    const pending = classifyWithGemini(
+      { text: "Ordinary post." },
+      { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+    ).then((result) => { resultStatus = result.status; });
+    t.mock.timers.tick(EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(resultStatus, "timeout");
+    assert.equal(mock.getDestroyCount(), 1);
+    await pending;
+  } finally {
+    mock.restore();
+  }
+});
+
+test("Gemini timeout override cannot exceed the absolute attempt cap", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const mock = installGeminiHttpMock([{ noResponse: true }]);
+  let pending: Promise<void> | undefined;
+  let resultStatus: string | null = null;
+  try {
+    pending = classifyWithGemini(
+      { text: "Ordinary post." },
+      {
+        mode: "shadow",
+        apiKey: "local-test-key",
+        model: "test-model",
+        timeoutMs: 60_000,
+      },
+    ).then((result) => { resultStatus = result.status; });
+    assert.equal(mock.getTimeoutMs(), EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS);
+    t.mock.timers.tick(EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(resultStatus, "timeout");
+    assert.equal(mock.getDestroyCount(), 1);
+    await pending;
+  } finally {
+    if (pending && resultStatus === null) {
+      t.mock.timers.tick(60_000);
+      await pending;
+    }
+    mock.restore();
+  }
+});
+
+test("Gemini absolute deadline aborts and safely settles a partial response body", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const mock = installGeminiHttpMock([{ body: "{\"candidates\":", partialResponse: true }]);
+  try {
+    let resultStatus: string | null = null;
+    const pending = classifyWithGemini(
+      { text: "Ordinary post." },
+      { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+    ).then((result) => { resultStatus = result.status; });
+    await Promise.resolve();
+    t.mock.timers.tick(EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(resultStatus, "timeout");
+    assert.equal(mock.getDestroyCount(), 1);
+    assert.equal(mock.didResponseErrorEscape(), false);
+    await pending;
+  } finally {
+    mock.restore();
+  }
+});
+
+test("Gemini response completing just before the absolute deadline clears its timer", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const mock = installGeminiHttpMock([{
+    body: geminiEnvelope(validGeminiResponse),
+    responseDelayMs: EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS - 1,
+  }]);
+  try {
+    const pending = classifyWithGemini(
+      { text: "Ordinary post." },
+      { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+    );
+    t.mock.timers.tick(EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS - 1);
+    const result = await pending;
+    t.mock.timers.tick(1);
+    assert.equal(result.status, "success");
+    assert.equal(mock.getTimeoutMs(), EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS);
+    assert.equal(mock.getDestroyCount(), 0);
+  } finally {
+    mock.restore();
+  }
+});
+
+test("Gemini response at the absolute deadline races safely with request destruction", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const mock = installGeminiHttpMock([{
+    body: geminiEnvelope(validGeminiResponse),
+    responseDelayMs: EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS,
+  }]);
+  try {
+    let resultStatus: string | null = null;
+    const pending = classifyWithGemini(
+      { text: "Ordinary post." },
+      { mode: "shadow", apiKey: "local-test-key", model: "test-model" },
+    ).then((result) => { resultStatus = result.status; });
+    t.mock.timers.tick(EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(resultStatus, "timeout");
+    assert.equal(mock.getDestroyCount(), 1);
+    assert.equal(mock.didResponseErrorEscape(), false);
+    await pending;
+  } finally {
+    mock.restore();
+  }
+});
 
 test("Gemini failures retain only bounded categories and HTTP status", async () => {
   const cases = [

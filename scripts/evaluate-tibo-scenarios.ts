@@ -6,11 +6,14 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import {
+  GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS,
   classifyWithGemini,
   buildGeminiPrompt,
-  TIBO_GEMINI_SYSTEM_PROMPT,
+  getTiboGeminiSystemPrompt,
+  type GeminiFailureDiagnostic,
   type GeminiClassificationOutput,
   type GeminiClassificationStatus,
+  type TiboGeminiPromptProfile,
 } from "../lib/radar/geminiClassification";
 import {
   parseTiboTemporalSemantics,
@@ -37,10 +40,10 @@ type SignalType = (typeof SIGNAL_TYPES)[number];
 type ResetMeaningMethod = NonNullable<GeminiClassificationOutput["resetMeaning"]>["method"];
 type ResetMeaningScope = NonNullable<GeminiClassificationOutput["resetMeaning"]>["scope"];
 const RESET_RELATED = new Set<SignalType>(["reset_executed", "official_notice", "teaser"]);
-const RESUMABLE_TRANSIENT_STATUSES = new Set<GeminiClassificationStatus>(["timeout", "api_error", "rate_limited"]);
 const AUTO_RETRY_STATUSES = new Set<GeminiClassificationStatus>(["timeout", "api_error"]);
 export const MAX_EVALUATION_REQUEST_BUDGET = 16;
 export const MAX_ATTEMPTS_PER_SCENARIO = 2;
+export type TiboEvaluationRetryPolicy = "none" | "transient";
 
 export type ScenarioEvaluationRow = {
   id: string;
@@ -83,6 +86,7 @@ export type ScenarioEvaluationRow = {
   successfulClassifierInvocations: number;
   rateLimitResponses: number;
   retrySuppressed: boolean;
+  failureDiagnostics?: GeminiFailureDiagnostic[];
   latencyMs: number;
   text: string;
   promptSize: PromptSizeMeasurement;
@@ -130,7 +134,9 @@ type Checkpoint = {
   selectedScenarioIds: string[];
   rows: ScenarioEvaluationRow[];
   stoppedAfterRateLimit: boolean;
+  stoppedAfterProviderFailure?: boolean;
   requestBudget: number;
+  // A slot is reserved before the classifier call; this can include an unknown in-flight outcome.
   requestCount: number;
   inFlightRequest?: { scenarioId: string; attemptNumber: number; startedAt: string } | null;
   updatedAt: string;
@@ -145,12 +151,14 @@ type Checkpoint = {
 };
 
 export type TiboEvaluationFingerprint = {
-  schemaVersion: 1;
+  schemaVersion: 3;
   fixtureName: string;
   fixtureHash: string;
   selectedScenarioIds: string[];
   commitSha: string | null;
   model: string;
+  promptProfile: TiboGeminiPromptProfile;
+  retryPolicy: TiboEvaluationRetryPolicy;
   systemPromptSha256: string;
   userPromptSha256ByScenario: Record<string, string>;
   responseObservationMode: "none" | "allowlist-v1";
@@ -158,17 +166,19 @@ export type TiboEvaluationFingerprint = {
     mode: "primary";
     responseMimeType: "application/json";
     temperature: 0;
-    timeoutMs: 7000;
+    timeoutMs: typeof GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS;
   };
   processingSourceHashes: Record<string, string>;
   value: string;
 };
 
 export type TiboScenarioEvaluationReport = {
-  schemaVersion: 3;
+  schemaVersion: 4;
   status: "complete" | "incomplete";
   complete: boolean;
   model: string;
+  promptProfile: TiboGeminiPromptProfile;
+  retryPolicy: TiboEvaluationRetryPolicy;
   commitSha: string | null;
   fixtureName: string;
   fixtureHash: string;
@@ -178,10 +188,11 @@ export type TiboScenarioEvaluationReport = {
   resumeCount: number;
   rateLimitCount: number;
   requestBudget: number;
-  classifierInvocations: number;
-  freshApiSuccessesThisRun: number;
+  requestReservations: number;
+  maximumPossibleDirectHttpSends: number | null;
+  successfulClassifierResultsThisRun: number;
   reusedCheckpointSuccesses: number;
-  apiSuccessDefinition: string;
+  successfulClassifierResultsDefinition: string;
   productionSafetyGuardEnabled: true;
   fixtureScenarioCount: number;
   selectedScenarioCount: number;
@@ -190,6 +201,7 @@ export type TiboScenarioEvaluationReport = {
   mockScenarioLab145Unchanged: true;
   productionWrites: false;
   stoppedAfterRateLimit: boolean;
+  stoppedAfterProviderFailure: boolean;
   stoppedAtRequestBudget: boolean;
   modelResponseFieldAudit: {
     mode: "none" | "allowlist-v1";
@@ -270,16 +282,59 @@ export function requestBudgetForBatch(requested: number | undefined, maximum = M
   return budget;
 }
 
+export function parseTiboGeminiPromptProfile(value: string | undefined): TiboGeminiPromptProfile {
+  const profile = value?.trim() || "production";
+  if (profile === "production" || profile === "compact-v1") return profile;
+  throw new Error("--prompt-profile must be 'production' or 'compact-v1'.");
+}
+
+export function parseTiboEvaluationRetryPolicy(value: string | undefined): TiboEvaluationRetryPolicy {
+  const retryPolicy = value?.trim() || "transient";
+  if (retryPolicy === "none" || retryPolicy === "transient") return retryPolicy;
+  throw new Error("--retry-policy must be 'none' or 'transient'.");
+}
+
 export function canStartEvaluationRequest(requestCount: number, requestBudget: number) {
   return Number.isInteger(requestCount) && requestCount >= 0 && requestCount < requestBudget;
 }
 
-export function isScenarioResumeEligible(row: { status?: string; attempts?: number; retrySuppressed?: boolean } | null | undefined) {
+export function isScenarioResumeEligible(row: {
+  status?: string;
+  attempts?: number;
+  retrySuppressed?: boolean;
+  failureDiagnostics?: GeminiFailureDiagnostic[];
+} | null | undefined, retryPolicy: TiboEvaluationRetryPolicy = "transient") {
   if (!row) return true;
   if (row.retrySuppressed) return false;
   const attempts = row.attempts ?? 0;
-  return RESUMABLE_TRANSIENT_STATUSES.has(row.status as GeminiClassificationStatus) &&
-    attempts > 0 && attempts < MAX_ATTEMPTS_PER_SCENARIO;
+  if (attempts <= 0 || attempts >= MAX_ATTEMPTS_PER_SCENARIO) return false;
+  if (retryPolicy === "none") return false;
+  if (row.status === "timeout") return true;
+  return row.status === "api_error" && isSafeToRetryEvaluationFailure(row);
+}
+
+function isSafeToRetryEvaluationFailure(row: {
+  status?: string;
+  failureDiagnostics?: GeminiFailureDiagnostic[];
+}) {
+  if (row.status !== "api_error" || !row.failureDiagnostics?.length) return false;
+  return row.failureDiagnostics.every((diagnostic) =>
+    diagnostic.category === "transport" || diagnostic.category === "provider_server",
+  );
+}
+
+function shouldStopForProviderFailure(row: {
+  status?: string;
+  failureDiagnostics?: GeminiFailureDiagnostic[];
+}) {
+  if (row.status === "rate_limited") return true;
+  if (row.status !== "api_error") return false;
+  if (!row.failureDiagnostics?.length) return true;
+  return row.failureDiagnostics.some((diagnostic) =>
+    diagnostic.category === "auth" ||
+    diagnostic.category === "rate_limit" ||
+    (diagnostic.httpStatus !== null && diagnostic.httpStatus >= 400 && diagnostic.httpStatus < 500),
+  ) || !isSafeToRetryEvaluationFailure(row);
 }
 
 export function getClassificationFailureStage(status: GeminiClassificationStatus) {
@@ -296,12 +351,15 @@ export function getClassificationFailureStage(status: GeminiClassificationStatus
   }
 }
 
-export function measureScenarioPromptSize(scenario: TiboScenario): PromptSizeMeasurement {
+export function measureScenarioPromptSize(
+  scenario: TiboScenario,
+  promptProfile: TiboGeminiPromptProfile = "production",
+): PromptSizeMeasurement {
   const withGraph = buildGeminiScenarioInput(scenario);
   const withoutGraph = { ...withGraph, tiboEvidenceInput: null };
   const userPromptCharsWithGraph = buildGeminiPrompt(withGraph).length;
   const userPromptCharsWithoutGraph = buildGeminiPrompt(withoutGraph).length;
-  const systemPromptChars = TIBO_GEMINI_SYSTEM_PROMPT.length;
+  const systemPromptChars = getTiboGeminiSystemPrompt(promptProfile).length;
   return {
     systemPromptChars,
     userPromptCharsWithGraph,
@@ -353,6 +411,8 @@ export function buildTiboEvaluationFingerprint(
   model: string,
   projectRoot: string,
   responseObservationMode: "none" | "allowlist-v1" = "none",
+  promptProfile: TiboGeminiPromptProfile = "production",
+  retryPolicy: TiboEvaluationRetryPolicy = "transient",
 ): TiboEvaluationFingerprint {
   const userPromptSha256ByScenario = Object.fromEntries(scenarios.map((scenario) => [
     scenario.id,
@@ -363,20 +423,22 @@ export function buildTiboEvaluationFingerprint(
     createHash("sha256").update(fs.readFileSync(path.join(projectRoot, filename))).digest("hex"),
   ]));
   const fingerprintPayload = {
-    schemaVersion: 1 as const,
+    schemaVersion: 3 as const,
     fixtureName,
     fixtureHash,
     selectedScenarioIds: scenarios.map((scenario) => scenario.id),
     commitSha,
     model,
-    systemPromptSha256: createHash("sha256").update(TIBO_GEMINI_SYSTEM_PROMPT).digest("hex"),
+    promptProfile,
+    retryPolicy,
+    systemPromptSha256: createHash("sha256").update(getTiboGeminiSystemPrompt(promptProfile)).digest("hex"),
     userPromptSha256ByScenario,
     responseObservationMode,
     generationSettings: {
       mode: "primary" as const,
       responseMimeType: "application/json" as const,
       temperature: 0 as const,
-      timeoutMs: 7000 as const,
+      timeoutMs: GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS as typeof GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS,
     },
     processingSourceHashes,
   };
@@ -549,6 +611,7 @@ async function evaluateScenario(
   previousRateLimits = 0,
   beforeRequest?: (attemptNumber: number) => void,
   responseAudit?: EvaluationResponseAuditRunner,
+  promptProfile: TiboGeminiPromptProfile = "production",
 ): Promise<ScenarioEvaluationRow> {
   const attemptNumber = previousAttempts + 1;
   beforeRequest?.(attemptNumber);
@@ -558,7 +621,8 @@ async function evaluateScenario(
     apiKey,
     model,
     mode: "primary",
-    timeoutMs: 7000,
+    timeoutMs: GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS,
+    promptProfile,
   });
   last = responseAudit
     ? (await responseAudit({ scenarioId: scenario.id, attemptNumber }, classify)).result
@@ -638,10 +702,14 @@ async function evaluateScenario(
     attempts: attemptNumber,
     successfulClassifierInvocations: previousSuccesses + (prediction.status === "success" ? 1 : 0),
     rateLimitResponses: previousRateLimits + (prediction.status === "rate_limited" ? 1 : 0),
-    retrySuppressed: false,
+    retrySuppressed: shouldStopForProviderFailure({
+      status: prediction.status,
+      failureDiagnostics: prediction.failureDiagnostics,
+    }),
+    failureDiagnostics: prediction.failureDiagnostics ?? [],
     latencyMs: Math.round(performance.now() - started),
     text: scenario.tweetText,
-    promptSize: measureScenarioPromptSize(scenario),
+    promptSize: measureScenarioPromptSize(scenario, promptProfile),
   };
 }
 
@@ -657,6 +725,7 @@ function buildInterruptedRow(
   scenario: TiboScenario,
   previous: ScenarioEvaluationRow | undefined,
   attemptNumber: number,
+  promptProfile: TiboGeminiPromptProfile = "production",
 ): ScenarioEvaluationRow {
   return {
     id: scenario.id,
@@ -699,9 +768,10 @@ function buildInterruptedRow(
     successfulClassifierInvocations: previous?.successfulClassifierInvocations ?? 0,
     rateLimitResponses: previous?.rateLimitResponses ?? 0,
     retrySuppressed: true,
+    failureDiagnostics: [],
     latencyMs: previous?.latencyMs ?? 0,
     text: scenario.tweetText,
-    promptSize: measureScenarioPromptSize(scenario),
+    promptSize: measureScenarioPromptSize(scenario, promptProfile),
   };
 }
 
@@ -776,14 +846,18 @@ function renderReport(
     commitSha: string | null;
     fixtureHash: string;
     fixtureName: string;
+    promptProfile: TiboGeminiPromptProfile;
+    retryPolicy: TiboEvaluationRetryPolicy;
     evaluationFingerprint: TiboEvaluationFingerprint;
     startedAt: string;
     completedAt: string | null;
     resumeCount: number;
     rateLimitCount: number;
     requestBudget: number;
-    requestCount: number;
-    freshApiSuccessesThisRun: number;
+    requestReservations: number;
+    maximumPossibleDirectHttpSends: number | null;
+    successfulClassifierResultsThisRun: number;
+    stoppedAfterProviderFailure: boolean;
     responseObservationMode: "none" | "allowlist-v1";
     responseAuditFileName: string | null;
     responseAuditRecordCount: number;
@@ -798,11 +872,15 @@ function renderReport(
     `- model: \`${model}\``,
     `- commit SHA: \`${metadata.commitSha ?? "unknown"}\``,
     `- fixture: \`${metadata.fixtureName}\``,
+    `- prompt profile: \`${metadata.promptProfile}\``,
+    `- retry policy: \`${metadata.retryPolicy}\``,
+    `- system prompt SHA-256: \`${metadata.evaluationFingerprint.systemPromptSha256}\``,
     `- fixture SHA-256: \`${metadata.fixtureHash}\``,
     `- evaluation processing fingerprint: \`${metadata.evaluationFingerprint.value}\``,
     `- scenario count: ${rows.length}`,
-    `- classifier invocations / budget: ${metadata.requestCount} / ${metadata.requestBudget}`,
-    `- direct API successes in this run: ${metadata.freshApiSuccessesThisRun}`,
+    `- request reservations / budget: ${metadata.requestReservations} / ${metadata.requestBudget}`,
+    `- maximum possible direct HTTP sends: ${metadata.maximumPossibleDirectHttpSends ?? "unknown for injected classifier"} (HTTP sends are not directly counted)`,
+    `- successful classifier results in this run: ${metadata.successfulClassifierResultsThisRun}`,
     `- successful-response field audit: ${metadata.responseObservationMode}; records: ${metadata.responseAuditRecordCount}; observer failures: ${metadata.responseAuditObserverFailureCount}`,
     `- allowlist audit file: ${metadata.responseAuditFileName ?? "disabled"}`,
     `- started at: ${metadata.startedAt}`,
@@ -817,6 +895,7 @@ function renderReport(
       return counts;
     }, {}))}`,
     `- rate limited stop: ${stoppedAfterRateLimit ? "yes" : "no"}`,
+    `- provider failure stop: ${metadata.stoppedAfterProviderFailure ? "yes" : "no"}`,
     "- raw audit fields, returned teaser strength, selection, context-safety decision, effective class, and formal-history admission are reported separately",
     "- optional allowlist-v1 audit records parsed model fields before classifier schema/evidence/safety guards; it never stores raw provider bodies, non-200 bodies, keys, or URLs",
     "- the allowlist audit records field presence separately from explicit null and excludes unapproved model fields",
@@ -887,17 +966,21 @@ function renderReport(
 
 function writePromptInputLengthReport(args: Map<string, string>, cwd = process.cwd()) {
   const { fixtureName, fixture } = getFixture(args);
+  const promptProfile = parseTiboGeminiPromptProfile(args.get("prompt-profile"));
+  const systemPromptSha256 = createHash("sha256").update(getTiboGeminiSystemPrompt(promptProfile)).digest("hex");
   const measuredAt = new Date().toISOString();
   const rows = fixture.scenarios.map((scenario) => ({
     id: scenario.id,
     category: scenario.category,
-    ...measureScenarioPromptSize(scenario),
+    ...measureScenarioPromptSize(scenario, promptProfile),
   }));
   const outputDir = path.resolve(cwd, args.get("output-dir") ?? `scratch/${fixtureName}-prompt-input-lengths`);
   fs.mkdirSync(outputDir, { recursive: true });
   const report = {
     schemaVersion: 1,
     fixtureName,
+    promptProfile,
+    systemPromptSha256,
     fixtureScenarioCount: fixture.scenarios.length,
     measuredAt,
     modelCalls: 0,
@@ -907,10 +990,12 @@ function writePromptInputLengthReport(args: Map<string, string>, cwd = process.c
     "# Tibo Prompt Input Lengths",
     "",
     `- fixture: \`${fixtureName}\``,
+    `- prompt profile: \`${promptProfile}\``,
+    `- system prompt SHA-256: \`${systemPromptSha256}\``,
     `- cases measured: ${rows.length}`,
     `- measured at: ${measuredAt}`,
     "- model calls: 0",
-    "- character counts use the current system prompt and current user prompt builder",
+    "- character counts use the selected fixed system prompt and the unchanged user prompt builder",
     "- no-graph measurement removes only the validated evidence graph input",
     "",
     "| ID | Graph input | System chars | User chars with graph | User chars without graph | Difference | Combined chars with graph | Combined chars without graph |",
@@ -932,11 +1017,14 @@ export async function runTiboScenarioEvaluation(
   const cwd = dependencies.cwd ?? process.cwd();
   const projectRoot = dependencies.projectRoot ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   if (args.has("help")) {
-    console.log("Usage: corepack pnpm run eval:tibo-scenarios -- [--live] [--fixture legacy|balanced-v1|balanced|balanced-canonical] [--request-budget 1..16] [--resume] [--limit N] [--ids id1,id2] [--capture-provider-fields] [--output-dir DIR]");
-    console.log("Offline prompt sizing: corepack pnpm run eval:tibo-scenarios -- --measure-input-lengths --fixture balanced-canonical [--output-dir DIR]");
-    console.log("Live mode requires --live. Offline prompt sizing performs no API calls.");
+    console.log("Usage: corepack pnpm run eval:tibo-scenarios -- [--live] [--fixture legacy|balanced-v1|balanced|balanced-canonical] [--prompt-profile production|compact-v1] [--retry-policy none|transient] [--request-budget 1..16] [--resume] [--limit N] [--ids id1,id2] [--capture-provider-fields] [--output-dir DIR]");
+    console.log("Offline prompt sizing: corepack pnpm run eval:tibo-scenarios -- --measure-input-lengths --fixture balanced-canonical [--prompt-profile production|compact-v1] [--output-dir DIR]");
+    console.log("Live mode requires --live. The direct evaluator also requires the production model and GEMINI_EVALUATION_FREE_TIER_CONFIRMED=true. Offline prompt sizing performs no API calls.");
+    console.log("For a paired prompt comparison, run both profiles with --retry-policy none; the setting is fingerprinted and also disables retry on resume.");
     return;
   }
+  const promptProfile = parseTiboGeminiPromptProfile(args.get("prompt-profile"));
+  const retryPolicy = parseTiboEvaluationRetryPolicy(args.get("retry-policy"));
   if (args.has("capture-provider-fields") &&
     (!args.has("live") || args.has("measure-input-lengths") || dependencies.classify !== undefined)) {
     throw new Error("--capture-provider-fields requires live mode with the direct Gemini classifier.");
@@ -978,6 +1066,14 @@ export async function runTiboScenarioEvaluation(
     console.log("SKIPPED: GEMINI_API_KEY or GEMINI_MODEL is not configured; no API call was made.");
     return;
   }
+  if (dependencies.classify === undefined) {
+    if (model !== "gemini-3.5-flash-lite") {
+      throw new Error("Live evaluation is restricted to the current production model gemini-3.5-flash-lite.");
+    }
+    if (process.env.GEMINI_EVALUATION_FREE_TIER_CONFIRMED !== "true") {
+      throw new Error("Live evaluation is blocked until GEMINI_EVALUATION_FREE_TIER_CONFIRMED=true is set after verifying evaluation-only free quota.");
+    }
+  }
   if (checkpoint && checkpoint.model !== model) {
     throw new Error("Checkpoint model differs from GEMINI_MODEL; use a new output directory.");
   }
@@ -990,7 +1086,7 @@ export async function runTiboScenarioEvaluation(
     throw new Error("A resumed evaluation cannot increase its original request budget.");
   }
   if (checkpoint && requestedBudget !== undefined && requestedBudget < checkpoint.requestCount) {
-    throw new Error("A resumed request budget cannot be lower than classifier invocations already made.");
+    throw new Error("A resumed request budget cannot be lower than request slots already reserved.");
   }
   const requestBudget = requestBudgetForBatch(requestedBudget ?? checkpoint?.requestBudget);
   const fixtureHash = getFixtureHash(fixtureName, projectRoot);
@@ -1030,9 +1126,11 @@ export async function runTiboScenarioEvaluation(
     model,
     projectRoot,
     captureProviderFields ? "allowlist-v1" : "none",
+    promptProfile,
+    retryPolicy,
   );
   if (checkpoint && checkpoint.evaluationFingerprint.value !== evaluationFingerprint.value) {
-    throw new Error("Checkpoint evaluation processing fingerprint differs from the current prompts, generation settings, or processing code; use a new output directory.");
+    throw new Error("Checkpoint evaluation processing fingerprint differs from the selected prompt profile/hash, generation settings, or processing code; use a new output directory.");
   }
   if (captureProviderFields && checkpoint && (checkpoint.responseAuditObserverFailureCount ?? 0) > 0 && !fs.existsSync(responseAuditPath)) {
     throw new Error("Checkpoint records response observer failures but its audit output is missing; preserve the checkpoint and choose a new output directory.");
@@ -1051,9 +1149,11 @@ export async function runTiboScenarioEvaluation(
   let requestCount = checkpoint?.requestCount ?? 0;
   let responseAuditRecordCount = persistedResponseAuditRecordCount;
   let responseAuditObserverFailureCount = checkpoint?.responseAuditObserverFailureCount ?? 0;
-  let freshApiSuccessesThisRun = 0;
+  let successfulClassifierResultsThisRun = 0;
   let reusedCheckpointSuccesses = 0;
   let stoppedAfterRateLimit = checkpoint?.stoppedAfterRateLimit ?? false;
+  let stoppedAfterProviderFailure = checkpoint?.stoppedAfterProviderFailure ??
+    (checkpoint?.rows.some((row) => shouldStopForProviderFailure(row)) ?? false);
   let stoppedAtRequestBudget = false;
   const rowsById = new Map<string, ScenarioEvaluationRow>(
     (checkpoint?.rows ?? []).map((row) => [row.id, row]),
@@ -1081,8 +1181,9 @@ export async function runTiboScenarioEvaluation(
     if (inFlightRequest.attemptNumber !== (previous?.attempts ?? 0) + 1) {
       throw new Error("Checkpoint in-flight attempt does not follow the recorded scenario attempts.");
     }
-    rowsById.set(scenario.id, buildInterruptedRow(scenario, previous, inFlightRequest.attemptNumber));
+    rowsById.set(scenario.id, buildInterruptedRow(scenario, previous, inFlightRequest.attemptNumber, promptProfile));
     inFlightRequest = null;
+    stoppedAfterProviderFailure = true;
     writeCheckpoint(outputDir, {
       schemaVersion: 3,
       model,
@@ -1091,6 +1192,7 @@ export async function runTiboScenarioEvaluation(
       selectedScenarioIds,
       rows: Array.from(rowsById.values()),
       stoppedAfterRateLimit,
+      stoppedAfterProviderFailure,
       requestBudget,
       requestCount,
       inFlightRequest,
@@ -1107,16 +1209,17 @@ export async function runTiboScenarioEvaluation(
     console.log(`${scenario.id}: previous invocation outcome unknown; resume suppressed to avoid duplication`);
   }
 
-  let stopEvaluationAfterRateLimit = false;
+  let stopEvaluationAfterRateLimit = stoppedAfterRateLimit;
 
   for (const scenario of selectedScenarios) {
+    if (stopEvaluationAfterRateLimit || stoppedAfterProviderFailure) break;
     let row = rowsById.get(scenario.id);
-    if (row && !isScenarioResumeEligible(row)) {
+    if (row && !isScenarioResumeEligible(row, retryPolicy)) {
       if (row.status === "success") reusedCheckpointSuccesses += 1;
       continue;
     }
 
-    while (isScenarioResumeEligible(row)) {
+    while (isScenarioResumeEligible(row, retryPolicy)) {
       if (!canStartEvaluationRequest(requestCount, requestBudget)) {
         stoppedAtRequestBudget = true;
         break;
@@ -1144,6 +1247,7 @@ export async function runTiboScenarioEvaluation(
             selectedScenarioIds,
             rows: Array.from(rowsById.values()),
             stoppedAfterRateLimit,
+            stoppedAfterProviderFailure,
             requestBudget,
             requestCount,
             inFlightRequest,
@@ -1159,13 +1263,15 @@ export async function runTiboScenarioEvaluation(
           });
         },
         responseAudit,
+        promptProfile,
       );
-      freshApiSuccessesThisRun += evaluated.successfulClassifierInvocations - previousSuccesses;
+      successfulClassifierResultsThisRun += evaluated.successfulClassifierInvocations - previousSuccesses;
       rateLimitCount += evaluated.rateLimitResponses - previousRateLimits;
       row = evaluated;
       rowsById.set(scenario.id, row);
       inFlightRequest = null;
       stoppedAfterRateLimit = row.status === "rate_limited" || stoppedAfterRateLimit;
+      if (shouldStopForProviderFailure(row)) stoppedAfterProviderFailure = true;
       writeCheckpoint(outputDir, {
         schemaVersion: 3,
         model,
@@ -1174,6 +1280,7 @@ export async function runTiboScenarioEvaluation(
         selectedScenarioIds,
         rows: Array.from(rowsById.values()),
         stoppedAfterRateLimit,
+        stoppedAfterProviderFailure,
         requestBudget,
         requestCount,
         inFlightRequest,
@@ -1192,10 +1299,11 @@ export async function runTiboScenarioEvaluation(
         stopEvaluationAfterRateLimit = true;
         break;
       }
-      if (!AUTO_RETRY_STATUSES.has(row.status) || !isScenarioResumeEligible(row)) break;
+      if (stoppedAfterProviderFailure) break;
+      if (retryPolicy === "none" || !AUTO_RETRY_STATUSES.has(row.status) || !isScenarioResumeEligible(row, retryPolicy)) break;
       await sleep(1500);
     }
-    if (stopEvaluationAfterRateLimit) break;
+    if (stopEvaluationAfterRateLimit || stoppedAfterProviderFailure) break;
   }
 
   const rows = selectedScenarios
@@ -1207,15 +1315,19 @@ export async function runTiboScenarioEvaluation(
   const resumeCommand = [
     "corepack pnpm run eval:tibo-scenarios -- --live --resume",
     `--fixture ${fixtureName}`,
+    `--prompt-profile ${promptProfile}`,
+    `--retry-policy ${retryPolicy}`,
     `--request-budget ${requestBudget}`,
     args.has("ids") ? `--ids ${selectedScenarioIds.join(",")}` : "",
     `--output-dir ${outputDir}`,
   ].filter(Boolean).join(" ");
   const report: TiboScenarioEvaluationReport = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     status: complete ? "complete" : "incomplete",
     complete,
     model,
+    promptProfile,
+    retryPolicy,
     commitSha,
     fixtureName,
     fixtureHash,
@@ -1225,10 +1337,11 @@ export async function runTiboScenarioEvaluation(
     resumeCount,
     rateLimitCount,
     requestBudget,
-    classifierInvocations: requestCount,
-    freshApiSuccessesThisRun,
+    requestReservations: requestCount,
+    maximumPossibleDirectHttpSends: classifier === classifyWithGemini ? requestCount : null,
+    successfulClassifierResultsThisRun,
     reusedCheckpointSuccesses,
-    apiSuccessDefinition: "Direct classifyWithGemini invocations returning status=success in this run; checkpoint-reused rows and fixed-output tests are excluded.",
+    successfulClassifierResultsDefinition: "Classifier results returning status=success in this run; only the built-in Gemini classifier represents an observed provider response. Checkpoint-reused rows are excluded.",
     productionSafetyGuardEnabled: true,
     fixtureScenarioCount: fixture.scenarios.length,
     selectedScenarioCount: selectedScenarios.length,
@@ -1237,6 +1350,7 @@ export async function runTiboScenarioEvaluation(
     mockScenarioLab145Unchanged: true,
     productionWrites: false,
     stoppedAfterRateLimit,
+    stoppedAfterProviderFailure,
     stoppedAtRequestBudget,
     modelResponseFieldAudit: {
       mode: captureProviderFields ? "allowlist-v1" : "none",
@@ -1255,14 +1369,18 @@ export async function runTiboScenarioEvaluation(
       commitSha,
       fixtureHash,
       fixtureName,
+      promptProfile,
+      retryPolicy,
       evaluationFingerprint,
       startedAt,
       completedAt,
       resumeCount,
       rateLimitCount,
       requestBudget,
-      requestCount,
-      freshApiSuccessesThisRun,
+      requestReservations: requestCount,
+      maximumPossibleDirectHttpSends: classifier === classifyWithGemini ? requestCount : null,
+      successfulClassifierResultsThisRun,
+      stoppedAfterProviderFailure,
       responseObservationMode: captureProviderFields ? "allowlist-v1" : "none",
       responseAuditFileName: captureProviderFields ? responseAuditFileName : null,
       responseAuditRecordCount,
@@ -1271,7 +1389,7 @@ export async function runTiboScenarioEvaluation(
     "utf8",
   );
   console.log(`Wrote ${path.join(outputDir, "report.json")}`);
-  console.log(`Status: ${report.status}; fresh API successes this run: ${freshApiSuccessesThisRun}; classifier invocations: ${requestCount}/${requestBudget}`);
+  console.log(`Status: ${report.status}; prompt profile: ${promptProfile}; retry policy: ${retryPolicy}; successful classifier results this run: ${successfulClassifierResultsThisRun}; request reservations: ${requestCount}/${requestBudget}`);
   return report;
 }
 

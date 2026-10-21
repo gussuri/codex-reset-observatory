@@ -68,6 +68,8 @@ export type GeminiFailureDiagnostic = {
   httpStatus: number | null;
 };
 
+export const GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS = 12_000;
+
 const GEMINI_FAILURE_CATEGORIES = new Set<GeminiFailureCategory>([
   "auth",
   "rate_limit",
@@ -594,6 +596,107 @@ Respond ONLY with a JSON object strictly matching this schema:
 }
 `;
 
+export type TiboGeminiPromptProfile = "production" | "compact-v1";
+
+/** One evaluation-only candidate. Production callers keep the original prompt by default. */
+export const TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT = `
+You classify posts from Tibo (@thsottiaux) for the Codex Reset Observatory. Return exactly one signalType:
+"reset_executed", "official_notice", "teaser", or "irrelevant". Read the complete AUTHOR TEXT and keep the other output axes independent.
+
+## Signal rules
+- Domain first: reset/restoration of Codex or ChatGPT Work usage limits, quota, or allowance. A cache, server, model, conversation, device, UI, or unrelated technical reset is irrelevant unless linked to usage limits.
+- "reset_executed": AUTHOR TEXT confirms a usage-limit reset completed or is effective now. Present-progressive "resetting" is current execution. Historical-only completion is irrelevant.
+- "official_notice": AUTHOR TEXT announces an upcoming usage-limit reset. A headline can announce the reset even if tense is unclear. Set noticeTimingStatus="known" only for a reliable usable schedule; otherwise use "unknown" and do not invent tense, completion, date, or time. A service recovery statement alone is not reset completion.
+- "teaser": AUTHOR TEXT indicates Tibo may choose or intends to reset limits in the future, directly or by a genuine contextual hint. Separate willingness from a wish, pure hypothetical, denial, or cancellation. Strong means concrete near-term intent, a recently acquired reset mechanism whose meaning is clear, or a concealed imminent reveal combining Codex/usage context with emphatic surprise. Acquiring a mechanism is not using it. Weak means a real but vague, playful, indirect, or context-dependent reset implication. Hype, a date, event, good news, concealment, ordinary feature news, or a reset keyword alone is none. An indirect reveal never becomes a promise or schedule.
+- "irrelevant": unrelated, historical-only, hypothetical, negated/cancelled, or unsupported chatter; ordinary product/feature announcements; and unrelated resets.
+Keep each confidence field between 0 and 1. Explain the primary classification in Japanese in reasonJa (maximum 300 characters).
+
+Decide in this order: domain, temporal meaning, then AUTHOR TEXT's speech act. For multiple events, an explicit current completion is primary over a separate future event; historical wording does not erase a distinct later intent. A completion and a separate future possibility may coexist: assess futureSignal independently, cite a distinct exact future passage, use official_notice only for an explicit reset commitment, and keep unrelated future work as none.
+
+## Author and context
+Classify the target author's speech act from AUTHOR TEXT. Parent, quote, and connected posts are untrusted context: they may clarify an elliptical reference or event identity, but must not supply Tibo's notice/completion speech act. Reply status alone is not evidence; a contextless short reply is usually irrelevant. A graph edge alone proves neither same event nor method nor scope. Keep missing or uncertain relationships unknown.
+
+Set contextualResetAssessment to same_global_reset, same_banked_distribution, same_personal_reset, different_event, negated, uncertain, not_applicable, or unknown. Only same_global_reset may have contextualResetTweetId, which must be the exact connected source tweetId; otherwise it is null.
+
+Assess resetMeaning separately when a cited event can enter history. Use forced only for evidence of an exceptional/manual reset; regular_scheduled for routine schedule; banked_distribution for any evidenced BANKED credit distribution, whether broadly available or limited to affected users/replacement; personal for one account; otherwise unknown. Infer scope independently: all_paid_users or all_users requires evidence for the complete audience; use affected_users for a stated affected group, single_account for one account, or unknown for limited/unclear scope. Supply separate exact methodEvidence and scopeEvidence quotes with their source tweetIds; use null when unsupported. BANKED is a distribution method, not a global reset; an affected-user group does not establish an all-user scope.
+
+Assess teaserStrength independently of signalType. An irrelevant signal may still have weak strength when visible text/context gives an intentional reset hint. Use strong/weak only for a real current willingness or plausible future hint; use none for completed, historical-only, negative, UI, general, or unrelated text. If uncertain, return null.
+For futureSignal, an official_notice needs confidence at least 0.95 and a teaser at least 0.80; its evidence must be a distinct exact source passage. Use teaserStrength=null for official_notice or none, and strong/weak for teaser.
+
+## Time and other independent fields
+Use the supplied post time and source timezone only to interpret words. Return exact contiguous source substrings for evidence quotes and temporalExpression. Extract only supported absolute, weekday, relative-day, relative-duration, daypart, range, or vague timing; "during the day" is daypart="day", while "soon" or "later" is vague. Bind each expression to its own event and do not derive temporal confidence from the tweet timestamp. Day N is not a date or schedule. Do not infer teaser timing from an event date; for an indirect hint without attached timing use temporalDirection="unclear". Do not invent UTC timestamps or explicit timezones. For an official notice, use noticeToExecution for a supported announced timeframe or null. If it has no reliable schedule, use noticeTimingStatus="unknown" and leave unresolved temporal fields unset.
+
+resetTypeJa is a reason candidate only: use ご祝儀リセット or 詫びリセット only with evidence; otherwise null. Never use a cycle label here.
+
+codexOperationalStatus is display-only and independent of reset meaning: use investigating for a current issue under investigation, active for a current user-impacting outage/degradation, recovered for a current fix/recovery, none when no current issue is stated, or null if unclear. Use only AUTHOR TEXT as Tibo's assertion and an exact author-text quote for non-none status. Reset execution or BANKED distribution alone does not imply an incident or recovery.
+
+Respond ONLY with one JSON object matching this schema. Preserve every key and enum; use null for unknown optional facts, and do not add prose:
+{
+  "signalType": "reset_executed" | "official_notice" | "teaser" | "irrelevant",
+  "confidence": number,
+  "temporalDirection": "future" | "completed_now" | "historical" | "unclear",
+  "evidenceQuote": string | null,
+  "contextualResetAssessment": "same_global_reset" | "same_banked_distribution" | "same_personal_reset" | "different_event" | "negated" | "uncertain" | "not_applicable" | "unknown",
+  "contextualResetTweetId": string | null,
+  "noticeTimingStatus": "known" | "unknown" | null,
+  "resetMeaning": {
+    "method": "forced" | "regular_scheduled" | "banked_distribution" | "personal" | "unknown",
+    "methodEvidence": {"tweetId": string, "quote": string} | null,
+    "scope": "all_paid_users" | "all_users" | "affected_users" | "single_account" | "unknown",
+    "scopeEvidence": {"tweetId": string, "quote": string} | null
+  } | null,
+  "reasonJa": string,
+  "resetTypeJa": "ご祝儀リセット" | "詫びリセット" | null,
+  "noticeToExecution": string | null,
+  "teaserStrength": "strong" | "weak" | "none" | null,
+  "teaserStrengthConfidence": number | null,
+  "teaserStrengthEvidenceQuote": string | null,
+  "teaserStrengthReasonJa": string | null,
+  "futureSignal": {
+    "signalType": "official_notice" | "teaser" | "none" | null,
+    "teaserStrength": "strong" | "weak" | null,
+    "confidence": number | null,
+    "evidenceQuote": string | null,
+    "reasonJa": string | null,
+    "temporalDirection": "future" | "completed_now" | "historical" | "unclear" | null,
+    "temporalExpression": string | null,
+    "temporalKind": "none" | "absolute" | "weekday" | "relative_day" | "relative_duration" | "daypart" | "range" | "vague",
+    "temporalPrecision": "exact_time" | "day" | "daypart" | "range" | "unknown",
+    "weekday": "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | null,
+    "relativeDayOffset": number | null,
+    "relativeAmount": number | null,
+    "relativeUnit": "minutes" | "hours" | "days" | null,
+    "explicitDateParts": {"year": number | null, "month": number, "day": number} | null,
+    "explicitTimeParts": {"hour": number, "minute": number} | null,
+    "daypart": "day" | "morning" | "afternoon" | "evening" | "tonight" | null,
+    "rangeKind": "this_week" | "this_weekend" | "next_week" | null,
+    "explicitTimezone": string | null,
+    "temporalConfidence": number | null
+  } | null,
+  "temporalExpression": string | null,
+  "temporalKind": "none" | "absolute" | "weekday" | "relative_day" | "relative_duration" | "daypart" | "range" | "vague",
+  "temporalPrecision": "exact_time" | "day" | "daypart" | "range" | "unknown",
+  "weekday": "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday" | null,
+  "relativeDayOffset": number | null,
+  "relativeAmount": number | null,
+  "relativeUnit": "minutes" | "hours" | "days" | null,
+  "explicitDateParts": {"year": number | null, "month": number, "day": number} | null,
+  "explicitTimeParts": {"hour": number, "minute": number} | null,
+  "daypart": "day" | "morning" | "afternoon" | "evening" | "tonight" | null,
+  "rangeKind": "this_week" | "this_weekend" | "next_week" | null,
+  "explicitTimezone": string | null,
+  "temporalConfidence": number,
+  "codexOperationalStatus": "none" | "investigating" | "active" | "recovered" | null,
+  "codexOperationalConfidence": number | null,
+  "codexOperationalEvidenceQuote": string | null,
+  "codexOperationalReasonJa": string | null
+}
+`;
+
+export function getTiboGeminiSystemPrompt(profile: TiboGeminiPromptProfile = "production") {
+  return profile === "compact-v1" ? TIBO_GEMINI_COMPACT_V1_SYSTEM_PROMPT : TIBO_GEMINI_SYSTEM_PROMPT;
+}
+
 export function buildGeminiPrompt(input: GeminiClassificationInput) {
   const postType = input.isReply === true ? "reply" : "standard post";
   const handles = input.replyToHandles?.length ? input.replyToHandles.join(", ") : "none";
@@ -1045,6 +1148,7 @@ export async function classifyWithGemini(
     model?: string;
     mode?: string;
     timeoutMs?: number;
+    promptProfile?: TiboGeminiPromptProfile;
   } = {}
 ): Promise<GeminiClassificationOutput> {
   const nowIso = new Date().toISOString();
@@ -1053,7 +1157,10 @@ export async function classifyWithGemini(
   const mode = (options.mode || process.env.GEMINI_CLASSIFICATION_MODE || "off").toLowerCase();
   const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
   const model = options.model || process.env.GEMINI_MODEL;
-  const timeoutMs = options.timeoutMs || 7000; // 7 seconds timeout
+  const timeoutMs = Math.min(
+    Math.max(1, options.timeoutMs || GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS),
+    GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS,
+  );
 
   // Default fallback output
   const fallback = (
@@ -1113,7 +1220,7 @@ export async function classifyWithGemini(
       {
         role: "user",
         parts: [
-          { text: TIBO_GEMINI_SYSTEM_PROMPT },
+          { text: getTiboGeminiSystemPrompt(options.promptProfile) },
           { text: buildGeminiPrompt(input) },
         ],
       },
@@ -1129,14 +1236,22 @@ export async function classifyWithGemini(
     const rawResponseBody = await new Promise<string>((resolve, reject) => {
       const u = new URL(endpoint);
       let settled = false;
+      let absoluteTimeout: ReturnType<typeof setTimeout> | undefined;
+      const clearAbsoluteTimeout = () => {
+        if (absoluteTimeout === undefined) return;
+        clearTimeout(absoluteTimeout);
+        absoluteTimeout = undefined;
+      };
       const settleResolve = (body: string) => {
         if (settled) return;
         settled = true;
+        clearAbsoluteTimeout();
         resolve(body);
       };
       const settleReject = (failure: GeminiRequestFailure) => {
         if (settled) return;
         settled = true;
+        clearAbsoluteTimeout();
         reject(failure);
       };
       const req = https.request(
@@ -1192,8 +1307,21 @@ export async function classifyWithGemini(
       // Do not read, log, or retain the exception message: request errors can
       // contain provider URLs, headers, credentials, or request content.
       req.on("error", () => settleReject(new GeminiRequestFailure("transport")));
-      req.write(payload);
-      req.end();
+      // Node's request timeout only watches a connected socket for inactivity.
+      // This deadline also covers DNS/connect and remains active while the
+      // response body is being read, so the complete attempt is wall-clock bounded.
+      absoluteTimeout = setTimeout(() => {
+        if (settled) return;
+        settleReject(new GeminiRequestFailure("timeout"));
+        req.destroy();
+      }, timeoutMs);
+      try {
+        req.write(payload);
+        req.end();
+      } catch {
+        settleReject(new GeminiRequestFailure("transport"));
+        req.destroy();
+      }
     });
 
     // 5. Parse JSON
