@@ -1055,7 +1055,10 @@ export async function classifyWithGemini(
   const mode = (options.mode || process.env.GEMINI_CLASSIFICATION_MODE || "off").toLowerCase();
   const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
   const model = options.model || process.env.GEMINI_MODEL;
-  const timeoutMs = options.timeoutMs ?? GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS;
+  const timeoutMs = Math.min(
+    Math.max(1, options.timeoutMs || GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS),
+    GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS,
+  );
 
   // Default fallback output
   const fallback = (

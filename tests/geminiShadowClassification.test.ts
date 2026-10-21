@@ -499,6 +499,36 @@ test("Gemini absolute deadline bounds a request that stalls before response head
   }
 });
 
+test("Gemini timeout override cannot exceed the absolute attempt cap", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const mock = installGeminiHttpMock([{ noResponse: true }]);
+  let pending: Promise<void> | undefined;
+  let resultStatus: string | null = null;
+  try {
+    pending = classifyWithGemini(
+      { text: "Ordinary post." },
+      {
+        mode: "shadow",
+        apiKey: "local-test-key",
+        model: "test-model",
+        timeoutMs: 60_000,
+      },
+    ).then((result) => { resultStatus = result.status; });
+    assert.equal(mock.getTimeoutMs(), EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS);
+    t.mock.timers.tick(EXPECTED_GEMINI_CLASSIFICATION_TIMEOUT_MS);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(resultStatus, "timeout");
+    assert.equal(mock.getDestroyCount(), 1);
+    await pending;
+  } finally {
+    if (pending && resultStatus === null) {
+      t.mock.timers.tick(60_000);
+      await pending;
+    }
+    mock.restore();
+  }
+});
+
 test("Gemini absolute deadline aborts and safely settles a partial response body", async (t) => {
   t.mock.timers.enable({ apis: ["setTimeout"] });
   const mock = installGeminiHttpMock([{ body: "{\"candidates\":", partialResponse: true }]);
