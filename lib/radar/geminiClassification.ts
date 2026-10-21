@@ -68,7 +68,7 @@ export type GeminiFailureDiagnostic = {
   httpStatus: number | null;
 };
 
-const GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS = 12_000;
+export const GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS = 12_000;
 
 const GEMINI_FAILURE_CATEGORIES = new Set<GeminiFailureCategory>([
   "auth",
@@ -618,7 +618,7 @@ Classify the target author's speech act from AUTHOR TEXT. Parent, quote, and con
 
 Set contextualResetAssessment to same_global_reset, same_banked_distribution, same_personal_reset, different_event, negated, uncertain, not_applicable, or unknown. Only same_global_reset may have contextualResetTweetId, which must be the exact connected source tweetId; otherwise it is null.
 
-Assess resetMeaning separately when a cited event can enter history. Use forced only for evidence of an exceptional/manual reset; regular_scheduled for routine schedule; banked_distribution for conditional/replacement distribution; personal for one account; otherwise unknown. Scope all_paid_users or all_users requires evidence for the complete audience; use affected_users, single_account, or unknown for limited/unclear scope. Supply separate exact methodEvidence and scopeEvidence quotes with their source tweetIds; use null when unsupported. BANKED/compensation distribution is not a global reset, even when "everyone" refers to an affected group.
+Assess resetMeaning separately when a cited event can enter history. Use forced only for evidence of an exceptional/manual reset; regular_scheduled for routine schedule; banked_distribution for any evidenced BANKED credit distribution, whether broadly available or limited to affected users/replacement; personal for one account; otherwise unknown. Infer scope independently: all_paid_users or all_users requires evidence for the complete audience; use affected_users for a stated affected group, single_account for one account, or unknown for limited/unclear scope. Supply separate exact methodEvidence and scopeEvidence quotes with their source tweetIds; use null when unsupported. BANKED is a distribution method, not a global reset; an affected-user group does not establish an all-user scope.
 
 Assess teaserStrength independently of signalType. An irrelevant signal may still have weak strength when visible text/context gives an intentional reset hint. Use strong/weak only for a real current willingness or plausible future hint; use none for completed, historical-only, negative, UI, general, or unrelated text. If uncertain, return null.
 For futureSignal, an official_notice needs confidence at least 0.95 and a teaser at least 0.80; its evidence must be a distinct exact source passage. Use teaserStrength=null for official_notice or none, and strong/weak for teaser.
