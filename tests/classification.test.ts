@@ -20,6 +20,58 @@ test("the Production apology post is a future official notice, even if Gemini ca
   assert.equal(hasCurrentResetExecution(TIBO_APOLOGY_RESET_NOTICE.text), false);
 });
 
+test("all-paid-user reset plans remain future notices when the audience sits between reset and usage limits", () => {
+  const futureCases = [
+    "We plan to reset all paid users' usage limits at 10:00 UTC on Thursday, October 22.",
+    "We're planning to reset all paid users' usage limits this Thursday.",
+    "We intend to reset all paid users' usage limits tomorrow.",
+    "We'll reset all paid users' usage limits tomorrow.",
+    "All paid users' usage limits will be reset tomorrow.",
+    "We plan to reset everyone's limits tomorrow.",
+    "We plan to reset for all users tomorrow.",
+  ];
+
+  for (const text of futureCases) {
+    const result = classifyTiboTweet(text, "https://x.com/thsottiaux/status/2100000000000000001");
+    const safety = getTiboClassificationSafetyDecision(text, "reset_executed");
+
+    assert.equal(result.signalType, "official_notice", text);
+    assert.equal(safety.signalType, "official_notice", text);
+    assert.equal(safety.reasonCode, "explicit_future_notice", text);
+    assert.equal(hasCurrentResetExecution(text), false, text);
+  }
+});
+
+test("explicit completion and current execution win over separate future notices without admitting negation or history", () => {
+  for (const text of [
+    "We have now reset all paid users' usage limits.",
+    "All paid users' usage limits have been reset.",
+    "We are resetting usage limits for all paid users now.",
+    "We are resetting all paid users' usage limits now.",
+    "We have now reset all paid users' usage limits, and we'll reset all paid users' usage limits again tomorrow.",
+  ]) {
+    assert.equal(
+      classifyTiboTweet(text, "https://x.com/thsottiaux/status/2100000000000000002").signalType,
+      "reset_executed",
+      text,
+    );
+    assert.equal(getTiboClassificationSafetyDecision(text, "reset_executed").signalType, "reset_executed", text);
+  }
+
+  for (const text of [
+    "We do not plan to reset all paid users' usage limits tomorrow.",
+    "No reset is planned for tomorrow.",
+    "We reset all paid users' usage limits yesterday.",
+  ]) {
+    assert.equal(
+      classifyTiboTweet(text, "https://x.com/thsottiaux/status/2100000000000000003").signalType,
+      "irrelevant",
+      text,
+    );
+    assert.equal(getTiboClassificationSafetyDecision(text, "reset_executed").signalType, "irrelevant", text);
+  }
+});
+
 test("explicit reply metadata takes priority over legacy text heuristics", () => {
   const url = "https://x.com/thsottiaux/status/12345";
   assert.equal(
