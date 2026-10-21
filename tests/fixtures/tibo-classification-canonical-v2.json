@@ -1,0 +1,561 @@
+{
+  "schemaVersion": 2,
+  "fixtureId": "tibo-classification-canonical-v2",
+  "evaluationScope": "Sixteen development cases with canonical taxonomy. Class counts follow the gold (4 official_notice, 3 reset_executed, 4 teaser, 5 irrelevant); this is not a holdout. The earlier balanced-v1 baseline remains a separate historical gold.",
+  "teaserStrengthGoldPolicy": "Score teaser strength independently from the four-class label. Confirmed near-future schedules are strong; when timing is unknown and the prompt does not support a clear point label, leave the expected teaserStrength unscored rather than defaulting to none.",
+  "sourceEvidence": {
+    "tweetId": "2112592264686149749",
+    "tweetUrl": "https://x.com/thsottiaux/status/2112592264686149749",
+    "tweetCreatedAtDatabaseValue": "2026-10-20 17:10:20+00"
+  },
+  "scenarios": [
+    {
+      "id": "balanced-notice-exact-time",
+      "category": "official_notice",
+      "description": "Official notice with an explicit clock time",
+      "tweetText": "We plan to reset all paid users' usage limits at 10:00 UTC on Thursday, October 22.",
+      "tweetCreatedAt": "2026-10-20T12:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000001",
+      "goldingNote": "The announced reset is scheduled for a specific near-future time, so the independent strength axis is strong.",
+      "expected": {
+        "signalType": "official_notice",
+        "temporalDirection": "future",
+        "teaserStrength": "strong",
+        "noticeTimingStatus": "known",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "official_notice",
+        "temporalDirection": "future",
+        "noticeTimingStatus": "known",
+        "teaserStrength": "strong"
+      }
+    },
+    {
+      "id": "balanced-notice-time-unknown",
+      "category": "official_notice",
+      "description": "Official notice without a usable schedule",
+      "tweetText": "We plan to reset usage limits for all paid accounts, but the timing is still being finalized.",
+      "tweetCreatedAt": "2026-10-20T12:05:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000002",
+      "goldingNote": "This is an explicit plan but has no usable near-future timing; the point label is ambiguous under the prompt and is intentionally unscored.",
+      "expected": {
+        "signalType": "official_notice",
+        "temporalDirection": "unclear",
+        "noticeTimingStatus": "unknown",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "official_notice",
+        "temporalDirection": "unclear",
+        "noticeTimingStatus": "unknown"
+      }
+    },
+    {
+      "id": "balanced-notice-day-n",
+      "category": "official_notice",
+      "description": "Day N post with a relative reset day",
+      "tweetText": "Day 15/ We will reset usage limits for all paid users tomorrow.",
+      "tweetCreatedAt": "2026-10-20T12:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000003",
+      "goldingNote": "The reset is explicitly promised for tomorrow, a concrete near-future indication, so the independent strength axis is strong.",
+      "expected": {
+        "signalType": "official_notice",
+        "temporalDirection": "future",
+        "teaserStrength": "strong",
+        "noticeTimingStatus": "known",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "official_notice",
+        "temporalDirection": "future",
+        "noticeTimingStatus": "known",
+        "teaserStrength": "strong"
+      }
+    },
+    {
+      "id": "balanced-notice-window",
+      "category": "official_notice",
+      "description": "Official notice with a weekday but no clock time",
+      "tweetText": "All paid subscribers are scheduled to receive a usage-limit reset this Friday.",
+      "tweetCreatedAt": "2026-10-20T12:15:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000004",
+      "goldingNote": "The reset is explicitly scheduled for the upcoming Friday, a concrete near-future indication, so the independent strength axis is strong.",
+      "expected": {
+        "signalType": "official_notice",
+        "temporalDirection": "future",
+        "teaserStrength": "strong",
+        "noticeTimingStatus": "known",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "official_notice",
+        "temporalDirection": "future",
+        "noticeTimingStatus": "known",
+        "teaserStrength": "strong"
+      }
+    },
+    {
+      "id": "balanced-reset-all-paid-forced",
+      "category": "reset_executed",
+      "description": "Completed forced reset for every paid user",
+      "tweetText": "Usage limits have been reset for all paid users. This was a forced reset.",
+      "tweetCreatedAt": "2026-10-20T12:20:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000005",
+      "expected": {
+        "signalType": "reset_executed",
+        "temporalDirection": "completed_now",
+        "teaserStrength": "none",
+        "resetMeaningMethod": "forced",
+        "resetMeaningScope": "all_paid_users",
+        "shouldCreateResetHistoryEvent": true
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "reset_executed",
+        "temporalDirection": "completed_now",
+        "teaserStrength": "none",
+        "resetMeaning": {
+          "method": "forced",
+          "methodEvidence": {
+            "tweetId": "920000000000000005",
+            "quote": "This was a forced reset."
+          },
+          "scope": "all_paid_users",
+          "scopeEvidence": {
+            "tweetId": "920000000000000005",
+            "quote": "all paid users"
+          }
+        }
+      }
+    },
+    {
+      "id": "balanced-reset-affected-users-forced",
+      "category": "reset_executed",
+      "description": "Completed forced reset limited to affected accounts",
+      "tweetText": "Usage limits have been reset for the 40,000 accounts affected by the selected-plan bug; all other accounts are unchanged. This was a targeted forced reset.",
+      "tweetCreatedAt": "2026-10-20T12:25:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000006",
+      "expected": {
+        "signalType": "reset_executed",
+        "temporalDirection": "completed_now",
+        "teaserStrength": "none",
+        "resetMeaningMethod": "forced",
+        "resetMeaningScope": "affected_users",
+        "shouldCreateResetHistoryEvent": true
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "reset_executed",
+        "temporalDirection": "completed_now",
+        "teaserStrength": "none",
+        "resetMeaning": {
+          "method": "forced",
+          "methodEvidence": {
+            "tweetId": "920000000000000006",
+            "quote": "targeted forced reset"
+          },
+          "scope": "affected_users",
+          "scopeEvidence": {
+            "tweetId": "920000000000000006",
+            "quote": "40,000 accounts affected by the selected-plan bug"
+          }
+        }
+      }
+    },
+    {
+      "id": "balanced-banked-distribution",
+      "category": "irrelevant",
+      "description": "Explicit completed BANKED reset-button distribution to affected users",
+      "tweetText": "The BANKED reset buttons have been distributed to affected accounts. They can redeem them later.",
+      "tweetCreatedAt": "2026-10-20T12:30:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000007",
+      "expected": {
+        "signalType": "irrelevant",
+        "temporalDirection": "completed_now",
+        "teaserStrength": "none",
+        "resetMeaningMethod": "banked_distribution",
+        "resetMeaningScope": "affected_users",
+        "historyRecordKind": "banked_distribution"
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "irrelevant",
+        "temporalDirection": "completed_now",
+        "teaserStrength": "none",
+        "resetMeaning": {
+          "method": "banked_distribution",
+          "methodEvidence": {
+            "tweetId": "920000000000000007",
+            "quote": "BANKED reset buttons have been distributed"
+          },
+          "scope": "affected_users",
+          "scopeEvidence": {
+            "tweetId": "920000000000000007",
+            "quote": "distributed to affected accounts"
+          }
+        }
+      },
+      "bankedHistoryContext": {
+        "officialNotice": {
+          "tweet_id": "920000000000000017",
+          "text": "During the day we will credit all Codex and ChatGPT Work users with a BANKED reset.",
+          "tweet_url": "https://x.com/thsottiaux/status/920000000000000017",
+          "tweet_created_at": "2026-10-20T12:00:00.000Z",
+          "signal_type": "official_notice",
+          "confidence": 0.96,
+          "verification_status": "auto_unverified"
+        },
+        "estimate": {
+          "resetEventKey": "banked-reset-canonical-v2-920000000000000017",
+          "displayExecutionAt": "2026-10-20T13:00:00.000Z",
+          "executionTimeSource": "usage_observation",
+          "executionTimeConfidence": "high",
+          "executionTimePrecision": "approximate",
+          "executionWindowStartAt": null,
+          "executionWindowEndAt": null,
+          "recoveryObservationId": null,
+          "tiboAnnouncedAt": "2026-10-20T12:00:00.000Z",
+          "tiboPrimaryTweetId": "920000000000000017",
+          "tiboSourceTweetIds": [
+            "920000000000000017",
+            "920000000000000007"
+          ],
+          "officialNoticeTweetId": "920000000000000017",
+          "officialNoticeAt": "2026-10-20T12:00:00.000Z",
+          "estimatorVersion": "banked-distribution-observation-v2"
+        },
+        "observedAt": "2026-10-20T13:00:00.000Z"
+      }
+    },
+    {
+      "id": "balanced-reply-forced-reset",
+      "category": "reset_executed",
+      "description": "The same short reply is a reset completion only with verified reset context",
+      "tweetText": "Done.",
+      "tweetCreatedAt": "2026-10-20T13:05:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000008",
+      "isReply": true,
+      "replyToHandles": [
+        "@thsottiaux"
+      ],
+      "replyParentTweetId": "940000000000000008",
+      "replyParentTweetUrl": "https://x.com/thsottiaux/status/940000000000000008",
+      "replyContextText": "Please force-reset usage limits for all paid accounts now. Reply here when it's complete.",
+      "sourceTimeline": "with_replies",
+      "validatedSourceContext": {
+        "version": "tibo-evidence-context-v1",
+        "status": "complete",
+        "target": {
+          "tweetId": "920000000000000008",
+          "tweetUrl": "https://x.com/thsottiaux/status/920000000000000008",
+          "authorHandle": "@thsottiaux",
+          "text": "Done.",
+          "createdAt": "2026-10-20T13:05:00.000Z",
+          "sourceContextRevisionHashes": [
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          ]
+        },
+        "relatedPosts": [
+          {
+            "tweetId": "940000000000000008",
+            "tweetUrl": "https://x.com/thsottiaux/status/940000000000000008",
+            "authorHandle": "@thsottiaux",
+            "text": "Please force-reset usage limits for all paid accounts now. Reply here when it's complete.",
+            "createdAt": "2026-10-20T13:00:00.000Z"
+          }
+        ],
+        "edges": [
+          {
+            "fromTweetId": "920000000000000008",
+            "toTweetId": "940000000000000008",
+            "relation": "reply"
+          }
+        ],
+        "omissions": [],
+        "lookupCount": 1
+      },
+      "sourceContextRevisionHashes": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "sourceContextClassifiedRevisionHashes": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ],
+      "sourceContextGeneration": 1,
+      "expected": {
+        "signalType": "reset_executed",
+        "temporalDirection": "completed_now",
+        "teaserStrength": "none",
+        "resetMeaningMethod": "forced",
+        "resetMeaningScope": "all_paid_users",
+        "shouldCreateResetHistoryEvent": true
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "reset_executed",
+        "temporalDirection": "completed_now",
+        "teaserStrength": "none",
+        "contextualResetAssessment": "same_global_reset",
+        "contextualResetTweetId": "940000000000000008",
+        "resetMeaning": {
+          "method": "forced",
+          "methodEvidence": {
+            "tweetId": "940000000000000008",
+            "quote": "force-reset usage limits for all paid accounts"
+          },
+          "scope": "all_paid_users",
+          "scopeEvidence": {
+            "tweetId": "940000000000000008",
+            "quote": "all paid accounts"
+          }
+        }
+      }
+    },
+    {
+      "id": "balanced-teaser-weak-reset-soon",
+      "category": "teaser",
+      "description": "Weak future reset hint",
+      "tweetText": "We might have a small usage-limit reset surprise for everyone next week.",
+      "tweetCreatedAt": "2026-10-20T12:35:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000009",
+      "expected": {
+        "signalType": "teaser",
+        "temporalDirection": "future",
+        "teaserStrength": "weak",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "teaser",
+        "temporalDirection": "future",
+        "teaserStrength": "weak",
+        "teaserStrengthConfidence": 0.91
+      }
+    },
+    {
+      "id": "balanced-teaser-strong-button",
+      "category": "teaser",
+      "description": "Strong future reset-button hint",
+      "tweetText": "Next week, the reset button is getting something big. You'll see.",
+      "tweetCreatedAt": "2026-10-20T12:40:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000010",
+      "expected": {
+        "signalType": "teaser",
+        "temporalDirection": "future",
+        "teaserStrength": "strong",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "teaser",
+        "temporalDirection": "future",
+        "teaserStrength": "strong",
+        "teaserStrengthConfidence": 0.92
+      }
+    },
+    {
+      "id": "balanced-teaser-quota-later",
+      "category": "teaser",
+      "description": "Future quota refresh hint without a date",
+      "tweetText": "Thinking about giving everyone a fresh quota soon. More details later.",
+      "tweetCreatedAt": "2026-10-20T12:45:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000011",
+      "expected": {
+        "signalType": "teaser",
+        "temporalDirection": "future",
+        "teaserStrength": "weak",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "teaser",
+        "temporalDirection": "future",
+        "teaserStrength": "weak",
+        "teaserStrengthConfidence": 0.9
+      }
+    },
+    {
+      "id": "balanced-teaser-upcoming-twist",
+      "category": "teaser",
+      "description": "Strong upcoming quota-reset hint",
+      "tweetText": "The upcoming quota reset has one fun twist we're not ready to explain yet.",
+      "tweetCreatedAt": "2026-10-20T12:50:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000012",
+      "expected": {
+        "signalType": "teaser",
+        "temporalDirection": "future",
+        "teaserStrength": "strong",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "teaser",
+        "temporalDirection": "future",
+        "teaserStrength": "strong",
+        "teaserStrengthConfidence": 0.93
+      }
+    },
+    {
+      "id": "balanced-credit-compensation-source",
+      "category": "irrelevant",
+      "description": "Production source: ordinary account-credit compensation, not a reset",
+      "tweetText": "There were reports of usage draining faster than anticipated for some users over the weekend. We've identified approximately 40,000 accounts that had an inconsistency on which usage limits where the actual usage that was applied did not correspond to their actual selected plan. We are reaching out individually to all these users and have corrected the issue. If this affected you, we'll add credits to your account. Sorry we got this wrong.",
+      "tweetCreatedAt": "2026-10-20T17:10:20.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2112592264686149749",
+      "expected": {
+        "signalType": "irrelevant",
+        "temporalDirection": "unclear",
+        "teaserStrength": "none",
+        "resetMeaningMethod": "unknown",
+        "resetMeaningScope": "unknown",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "irrelevant",
+        "temporalDirection": "unclear",
+        "teaserStrength": "none",
+        "resetMeaning": {
+          "method": "unknown",
+          "methodEvidence": null,
+          "scope": "unknown",
+          "scopeEvidence": null
+        }
+      }
+    },
+    {
+      "id": "balanced-reply-credit-compensation",
+      "category": "irrelevant",
+      "description": "The same short reply remains unrelated under an ordinary credit-compensation parent",
+      "tweetText": "Done.",
+      "tweetCreatedAt": "2026-10-20T13:15:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000014",
+      "isReply": true,
+      "replyToHandles": [
+        "@thsottiaux"
+      ],
+      "replyParentTweetId": "940000000000000014",
+      "replyParentTweetUrl": "https://x.com/thsottiaux/status/940000000000000014",
+      "replyContextText": "If your usage limit was applied against the wrong selected plan, we will correct it and add account credits. We are not resetting the limits.",
+      "sourceTimeline": "with_replies",
+      "sourceContextRevisionHashes": [
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "sourceContextClassifiedRevisionHashes": [
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "sourceContextGeneration": 1,
+      "validatedSourceContext": {
+        "version": "tibo-evidence-context-v1",
+        "status": "complete",
+        "target": {
+          "tweetId": "920000000000000014",
+          "tweetUrl": "https://x.com/thsottiaux/status/920000000000000014",
+          "authorHandle": "@thsottiaux",
+          "text": "Done.",
+          "createdAt": "2026-10-20T13:15:00.000Z",
+          "sourceContextRevisionHashes": [
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          ]
+        },
+        "relatedPosts": [
+          {
+            "tweetId": "940000000000000014",
+            "tweetUrl": "https://x.com/thsottiaux/status/940000000000000014",
+            "authorHandle": "@thsottiaux",
+            "text": "If your usage limit was applied against the wrong selected plan, we will correct it and add account credits. We are not resetting the limits.",
+            "createdAt": "2026-10-20T13:10:00.000Z"
+          }
+        ],
+        "edges": [
+          {
+            "fromTweetId": "920000000000000014",
+            "toTweetId": "940000000000000014",
+            "relation": "reply"
+          }
+        ],
+        "omissions": [],
+        "lookupCount": 1
+      },
+      "expected": {
+        "signalType": "irrelevant",
+        "temporalDirection": "unclear",
+        "teaserStrength": "none",
+        "resetMeaningMethod": "unknown",
+        "resetMeaningScope": "unknown",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "irrelevant",
+        "temporalDirection": "unclear",
+        "teaserStrength": "none",
+        "contextualResetAssessment": "not_applicable",
+        "resetMeaning": {
+          "method": "unknown",
+          "methodEvidence": null,
+          "scope": "unknown",
+          "scopeEvidence": null
+        }
+      }
+    },
+    {
+      "id": "balanced-reply-long-unrelated-parent",
+      "category": "irrelevant",
+      "description": "Long unrelated parent must not turn a short acknowledgement into a reset signal",
+      "tweetText": "The guide is ready.",
+      "tweetCreatedAt": "2026-10-20T13:20:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000015",
+      "isReply": true,
+      "replyToHandles": [
+        "@theo"
+      ],
+      "replyParentTweetId": "940000000000000015",
+      "replyParentTweetUrl": "https://x.com/theo/status/940000000000000015",
+      "replyContextText": "I finished editing the long draft this morning and exported the diagrams in three sizes. The introduction now explains the audience and the release notes summarize the compatibility work. I also checked the screenshots, fixed the broken links, and asked the design team to review the final wording. The examples use fictional accounts, and the appendix lists the remaining documentation tasks. We can publish the guide after legal gives the usual approval; there is no product rollout or account change in this post.",
+      "sourceTimeline": "with_replies",
+      "expected": {
+        "signalType": "irrelevant",
+        "temporalDirection": "unclear",
+        "teaserStrength": "none",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "irrelevant",
+        "temporalDirection": "unclear",
+        "teaserStrength": "none",
+        "contextualResetAssessment": "not_applicable"
+      }
+    },
+    {
+      "id": "balanced-reply-missing-context",
+      "category": "irrelevant",
+      "description": "Contextless short reply cannot prove a reset or teaser",
+      "tweetText": "Done.",
+      "tweetCreatedAt": "2026-10-20T13:25:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/920000000000000016",
+      "isReply": true,
+      "replyToHandles": [
+        "@thsottiaux"
+      ],
+      "sourceTimeline": "with_replies",
+      "expected": {
+        "signalType": "irrelevant",
+        "temporalDirection": "unclear",
+        "teaserStrength": "none",
+        "shouldCreateResetHistoryEvent": false
+      },
+      "pipeline": true,
+      "mockGeminiOutput": {
+        "signalType": "irrelevant",
+        "temporalDirection": "unclear",
+        "teaserStrength": "none"
+      }
+    }
+  ]
+}

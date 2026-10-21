@@ -32,7 +32,11 @@ import {
 } from "../lib/radar/tiboTemporal";
 import {
   convertTiboResetSignalToHistoryEvent,
+  findBankedDistributionEvents,
+  findRelatedBankedDistributionNotices,
+  getNoticeBackedHistoryInputs,
   isFormalTiboResetSignal,
+  type TiboNoticeSignal,
   type FormalTiboResetSignal,
 } from "../lib/radar/tiboHistory";
 import {
@@ -41,6 +45,7 @@ import {
 } from "../lib/radar/tiboFormalReplyAdmission";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import type { ActiveTiboSignal, PublicRadarSnapshot, RadarData } from "../lib/radar/types";
+import type { ResetExecutionEstimate } from "../lib/radar/resetExecution";
 
 export type TiboScenarioExpected = {
   signalType?: ClassificationSignalType;
@@ -60,6 +65,13 @@ export type TiboScenarioExpected = {
   shouldRemainActive?: boolean;
   shouldBeDeduplicated?: boolean;
   shouldBeRejected?: boolean;
+  historyRecordKind?: string | null;
+};
+
+export type TiboScenarioBankedHistoryContext = {
+  officialNotice: TiboNoticeSignal;
+  estimate: ResetExecutionEstimate;
+  observedAt: string;
 };
 
 export type TiboScenarioBaseline = {
@@ -131,6 +143,7 @@ export type TiboScenario = {
   regressionGroup?: string;
   baseline?: TiboScenarioBaseline;
   mockGeminiOutput?: TiboScenarioMockGeminiOutput;
+  bankedHistoryContext?: TiboScenarioBankedHistoryContext;
 };
 
 export type TiboScenarioFixture = {
@@ -412,6 +425,7 @@ export type TiboScenarioPipelineResult = {
   formalSignal: FormalTiboResetSignal;
   formalAccepted: boolean;
   historyEvent: ReturnType<typeof convertTiboResetSignalToHistoryEvent> | null;
+  bankedHistoryEvent: ReturnType<typeof findBankedDistributionEvents>[number] | null;
 };
 
 /**
@@ -478,6 +492,12 @@ export function runTiboScenarioPipeline(
     scenario,
   );
   const formalAccepted = isFormalTiboResetSignal(formalSignal);
+  const bankedHistoryEvent = buildScenarioBankedHistoryEvent(
+    scenario,
+    geminiResult,
+    effectiveSelected.signalType,
+    formalSignal,
+  );
 
   return {
     ruleResult,
@@ -488,5 +508,75 @@ export function runTiboScenarioPipeline(
     formalSignal,
     formalAccepted,
     historyEvent: formalAccepted ? convertTiboResetSignalToHistoryEvent(formalSignal) : null,
+    bankedHistoryEvent,
   };
+}
+
+function buildScenarioBankedHistoryEvent(
+  scenario: TiboScenario,
+  geminiResult: GeminiClassificationOutput,
+  effectiveSignalType: ClassificationSignalType,
+  completionSignal: FormalTiboResetSignal,
+) {
+  const context = scenario.bankedHistoryContext;
+  if (
+    !context ||
+    geminiResult.status !== "success" ||
+    effectiveSignalType !== "irrelevant" ||
+    geminiResult.resetMeaning?.method !== "banked_distribution" ||
+    geminiResult.resetMeaning.scope !== "affected_users"
+  ) {
+    return null;
+  }
+
+  const officialNotice: ActiveTiboSignal = {
+    tweet_id: context.officialNotice.tweet_id,
+    text: context.officialNotice.text,
+    tweet_url: context.officialNotice.tweet_url,
+    tweet_created_at: context.officialNotice.tweet_created_at,
+    detected_at: context.officialNotice.tweet_created_at,
+    signal_type: "official_notice",
+    confidence: context.officialNotice.confidence ?? undefined,
+    verification_status: context.officialNotice.verification_status,
+  };
+  const canonicalOfficialNotice: FormalTiboResetSignal = {
+    tweet_id: context.officialNotice.tweet_id,
+    text: context.officialNotice.text,
+    tweet_url: context.officialNotice.tweet_url,
+    tweet_created_at: context.officialNotice.tweet_created_at,
+    signal_type: "official_notice",
+    confidence: context.officialNotice.confidence ?? null,
+    verification_status: context.officialNotice.verification_status,
+  };
+  const bankedCompletion: ActiveTiboSignal = {
+    tweet_id: completionSignal.tweet_id,
+    text: completionSignal.text,
+    tweet_url: completionSignal.tweet_url,
+    tweet_created_at: completionSignal.tweet_created_at,
+    detected_at: completionSignal.detected_at ?? completionSignal.tweet_created_at,
+    signal_type: "irrelevant",
+    confidence: completionSignal.confidence ?? undefined,
+    verification_status: completionSignal.verification_status,
+    is_reply: completionSignal.is_reply === true,
+  };
+  const inputs = getNoticeBackedHistoryInputs({
+    ...getLocalRadarData(),
+    canonical_tibo_signals: [canonicalOfficialNotice, completionSignal],
+    recent_tibo_signals: [officialNotice, bankedCompletion],
+    active_tibo_signals: [],
+    formal_tibo_resets: [],
+    rejected_tibo_resets: [],
+    codex_recovery_observations: [],
+    codex_usage_recovery: null,
+    reset_execution_estimates: [context.estimate],
+  });
+  const relatedSignals = findRelatedBankedDistributionNotices(
+    inputs.bankedSignals,
+    context.officialNotice.tweet_id,
+    context.observedAt,
+  );
+  if (!relatedSignals.some((signal) => signal.tweet_id === completionSignal.tweet_id)) return null;
+
+  return findBankedDistributionEvents(inputs.bankedSignals, inputs.estimates)
+    .find((event) => event.id === context.estimate.resetEventKey) ?? null;
 }

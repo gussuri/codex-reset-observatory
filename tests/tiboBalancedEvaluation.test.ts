@@ -327,7 +327,7 @@ test("evaluation CLI resumes a success only when the complete processing fingerp
   const outputDir = path.join(parent, "run");
   const classifier = createFakeClassifier();
   const args = [
-    "--live", "--fixture", "balanced", "--ids", "balanced-notice-time-unknown",
+    "--live", "--fixture", "balanced-v1", "--ids", "balanced-notice-time-unknown",
     "--request-budget", "1", "--output-dir", outputDir,
   ];
   try {
@@ -340,6 +340,7 @@ test("evaluation CLI resumes a success only when the complete processing fingerp
     assert.equal(checkpoint.evaluationFingerprint.commitSha, first?.commitSha);
     assert.equal(checkpoint.evaluationFingerprint.generationSettings.temperature, 0);
     assert.equal(checkpoint.evaluationFingerprint.generationSettings.timeoutMs, 7000);
+    assert.equal(checkpoint.evaluationFingerprint.responseObservationMode, "none");
     assert.ok(checkpoint.evaluationFingerprint.systemPromptSha256);
     assert.ok(checkpoint.evaluationFingerprint.userPromptSha256ByScenario["balanced-notice-time-unknown"]);
     assert.ok(checkpoint.evaluationFingerprint.processingSourceHashes["lib/radar/tiboContextSafety.ts"]);
@@ -367,7 +368,7 @@ test("evaluation CLI recovers an in-flight request as unknown and persists its r
   const outputDir = path.join(parent, "run");
   const interruptedClassifier = createFakeClassifier(true);
   const args = [
-    "--live", "--fixture", "balanced", "--ids", "balanced-notice-time-unknown",
+    "--live", "--fixture", "balanced-v1", "--ids", "balanced-notice-time-unknown",
     "--request-budget", "1", "--output-dir", outputDir,
   ];
   try {
@@ -396,13 +397,13 @@ test("evaluation CLI keeps the original request budget across resume", async () 
   const outputDir = path.join(parent, "run");
   const classifier = createFakeClassifier();
   const ids = "balanced-credit-compensation-source,balanced-reply-credit-compensation";
-  const args = ["--live", "--fixture", "balanced", "--ids", ids, "--request-budget", "1", "--output-dir", outputDir];
+  const args = ["--live", "--fixture", "balanced-v1", "--ids", ids, "--request-budget", "1", "--output-dir", outputDir];
   try {
     const first = await runTiboScenarioEvaluation(args, evaluationDependencies(classifier));
     assert.equal(first?.classifierInvocations, 1);
     assert.equal(first?.stoppedAtRequestBudget, true);
     const resumed = await runTiboScenarioEvaluation(
-      ["--live", "--fixture", "balanced", "--ids", ids, "--resume", "--output-dir", outputDir],
+      ["--live", "--fixture", "balanced-v1", "--ids", ids, "--resume", "--output-dir", outputDir],
       evaluationDependencies(classifier),
     );
     assert.equal(resumed?.requestBudget, 1);
