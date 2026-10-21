@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import {
   classifyWithGemini,
+  buildGeminiPrompt,
+  TIBO_GEMINI_SYSTEM_PROMPT,
   type GeminiClassificationOutput,
   type GeminiClassificationStatus,
 } from "../lib/radar/geminiClassification";
@@ -17,16 +19,22 @@ import {
 } from "../lib/radar/tiboTemporal";
 import {
   buildGeminiScenarioInput,
+  runTiboScenarioPipeline,
   type TiboScenario,
   type TiboScenarioFixture,
 } from "../tests/tiboScenarioSupport";
 import fixtureJson from "../tests/fixtures/tibo-scenarios.json";
+import balancedFixtureJson from "../tests/fixtures/tibo-classification-balanced-v1.json";
 
 const SIGNAL_TYPES = ["reset_executed", "official_notice", "teaser", "irrelevant"] as const;
 type SignalType = (typeof SIGNAL_TYPES)[number];
+type ResetMeaningMethod = NonNullable<GeminiClassificationOutput["resetMeaning"]>["method"];
+type ResetMeaningScope = NonNullable<GeminiClassificationOutput["resetMeaning"]>["scope"];
 const RESET_RELATED = new Set<SignalType>(["reset_executed", "official_notice", "teaser"]);
-const MAX_TRANSIENT_ATTEMPTS = 2;
-const TRANSIENT_STATUSES = new Set<GeminiClassificationStatus>(["timeout", "api_error"]);
+const RESUMABLE_TRANSIENT_STATUSES = new Set<GeminiClassificationStatus>(["timeout", "api_error", "rate_limited"]);
+const AUTO_RETRY_STATUSES = new Set<GeminiClassificationStatus>(["timeout", "api_error"]);
+export const MAX_EVALUATION_REQUEST_BUDGET = 16;
+export const MAX_ATTEMPTS_PER_SCENARIO = 2;
 
 export type ScenarioEvaluationRow = {
   id: string;
@@ -37,18 +45,49 @@ export type ScenarioEvaluationRow = {
   expectedTeaserStrength?: TiboScenario["expected"]["teaserStrength"];
   expectedTemporalResolutionStatus?: TemporalResolutionStatus;
   expectedTemporalPrecision?: TiboScenario["expected"]["temporalPrecision"];
+  expectedNoticeTimingStatus?: TiboScenario["expected"]["noticeTimingStatus"];
+  expectedResetMeaningMethod?: ResetMeaningMethod;
+  expectedResetMeaningScope?: ResetMeaningScope;
   predictedSignalType: SignalType | null;
+  rawSignalType: SignalType | null;
+  rawTemporalDirection: GeminiClassificationOutput["temporalDirection"];
   confidence: number | null;
   temporalDirection: GeminiClassificationOutput["temporalDirection"];
   teaserStrength: GeminiClassificationOutput["teaserStrength"];
+  classifierReturnedTeaserStrength: GeminiClassificationOutput["teaserStrength"];
+  modelOutputNoticeTimingStatus: GeminiClassificationOutput["noticeTimingStatus"];
+  modelOutputResetMeaningMethod: ResetMeaningMethod | null;
+  modelOutputResetMeaningScope: ResetMeaningScope | null;
+  selectedSignalType: SignalType | null;
+  selectedSource: string | null;
+  contextSafetyApplied: boolean;
+  contextSafetySignalType: SignalType | null;
+  effectiveSignalType: SignalType | null;
+  effectiveTeaserStrength: GeminiClassificationOutput["teaserStrength"];
+  formalResetAccepted: boolean;
+  historyRecordKind: string | null;
+  failureStage: string;
   temporalResolutionStatus: TemporalResolutionStatus;
   temporalPrecision: GeminiClassificationOutput["temporalPrecision"] | null;
   reasonJa: string | null;
   evidenceQuote: string | null;
   status: GeminiClassificationStatus;
   attempts: number;
+  successfulClassifierInvocations: number;
+  rateLimitResponses: number;
+  retrySuppressed: boolean;
   latencyMs: number;
   text: string;
+  promptSize: PromptSizeMeasurement;
+};
+
+export type PromptSizeMeasurement = {
+  systemPromptChars: number;
+  userPromptCharsWithGraph: number;
+  userPromptCharsWithoutGraph: number;
+  combinedPromptCharsWithGraph: number;
+  combinedPromptCharsWithoutGraph: number;
+  graphInputIncluded: boolean;
 };
 
 export type ScenarioMetrics = {
@@ -67,17 +106,25 @@ export type ScenarioMetrics = {
   teaserStrengthAccuracy: number | null;
   temporalResolutionAccuracy: number | null;
   temporalPrecisionAccuracy: number | null;
+  noticeTimingStatusAccuracy: number | null;
+  resetMeaningMethodAccuracy: number | null;
+  resetMeaningScopeAccuracy: number | null;
   falsePositives: Array<{ id: string; category: string; text: string; predicted: SignalType | null }>;
   falseNegatives: Array<{ id: string; category: string; text: string; predicted: SignalType | null }>;
   byCategory: Record<string, { total: number; evaluated: number; correct: number; accuracy: number | null }>;
 };
 
 type Checkpoint = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   model: string;
+  fixtureName: string;
   fixtureScenarioCount: number;
+  selectedScenarioIds: string[];
   rows: ScenarioEvaluationRow[];
   stoppedAfterRateLimit: boolean;
+  requestBudget: number;
+  requestCount: number;
+  inFlightRequest?: { scenarioId: string; attemptNumber: number; startedAt: string } | null;
   updatedAt: string;
   commitSha?: string | null;
   fixtureHash?: string | null;
@@ -118,6 +165,63 @@ function parseArgs(argv: string[]) {
   return args;
 }
 
+export function requestBudgetForBatch(requested: number | undefined, maximum = MAX_EVALUATION_REQUEST_BUDGET) {
+  const budget = requested ?? maximum;
+  if (!Number.isInteger(budget) || budget < 1 || budget > maximum) {
+    throw new Error(`Request budget must be an integer from 1 through the maximum of ${maximum}.`);
+  }
+  return budget;
+}
+
+export function canStartEvaluationRequest(requestCount: number, requestBudget: number) {
+  return Number.isInteger(requestCount) && requestCount >= 0 && requestCount < requestBudget;
+}
+
+export function isScenarioResumeEligible(row: { status?: string; attempts?: number; retrySuppressed?: boolean } | null | undefined) {
+  if (!row) return true;
+  if (row.retrySuppressed) return false;
+  const attempts = row.attempts ?? 0;
+  return RESUMABLE_TRANSIENT_STATUSES.has(row.status as GeminiClassificationStatus) &&
+    attempts > 0 && attempts < MAX_ATTEMPTS_PER_SCENARIO;
+}
+
+export function getClassificationFailureStage(status: GeminiClassificationStatus) {
+  switch (status) {
+    case "success": return "none";
+    case "api_error": return "provider_api";
+    case "timeout": return "timeout";
+    case "rate_limited": return "rate_limit";
+    case "invalid_json": return "json_parse";
+    case "invalid_schema": return "schema_validation";
+    case "invalid_evidence": return "evidence_validation";
+    case "skipped":
+    case "model_not_configured": return "configuration";
+  }
+}
+
+export function measureScenarioPromptSize(scenario: TiboScenario): PromptSizeMeasurement {
+  const withGraph = buildGeminiScenarioInput(scenario);
+  const withoutGraph = { ...withGraph, tiboEvidenceInput: null };
+  const userPromptCharsWithGraph = buildGeminiPrompt(withGraph).length;
+  const userPromptCharsWithoutGraph = buildGeminiPrompt(withoutGraph).length;
+  const systemPromptChars = TIBO_GEMINI_SYSTEM_PROMPT.length;
+  return {
+    systemPromptChars,
+    userPromptCharsWithGraph,
+    userPromptCharsWithoutGraph,
+    combinedPromptCharsWithGraph: systemPromptChars + userPromptCharsWithGraph,
+    combinedPromptCharsWithoutGraph: systemPromptChars + userPromptCharsWithoutGraph,
+    graphInputIncluded: Boolean(withGraph.tiboEvidenceInput),
+  };
+}
+
+function getFixture(args: Map<string, string>) {
+  const fixtureName = args.get("fixture") ?? "legacy";
+  if (fixtureName === "legacy") return { fixtureName, fixture: fixtureJson as TiboScenarioFixture };
+  if (fixtureName === "balanced") return { fixtureName, fixture: balancedFixtureJson as TiboScenarioFixture };
+  throw new Error(`Unknown fixture '${fixtureName}'. Use 'legacy' or 'balanced'.`);
+}
+
 function isMainModule() {
   return Boolean(process.argv[1]) && path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1]);
 }
@@ -130,9 +234,12 @@ function getCommitSha() {
   }
 }
 
-function getFixtureHash() {
+function getFixtureHash(fixtureName: string) {
+  const filename = fixtureName === "balanced"
+    ? "tibo-classification-balanced-v1.json"
+    : "tibo-scenarios.json";
   return createHash("sha256")
-    .update(fs.readFileSync(path.join(process.cwd(), "tests", "fixtures", "tibo-scenarios.json")))
+    .update(fs.readFileSync(path.join(process.cwd(), "tests", "fixtures", filename)))
     .digest("hex");
 }
 
@@ -197,6 +304,9 @@ export function calculateScenarioMetrics(rows: ScenarioEvaluationRow[]): Scenari
   const teaserRows = valid.filter((row) => row.expectedTeaserStrength);
   const resolutionRows = valid.filter((row) => row.expectedTemporalResolutionStatus);
   const precisionRows = valid.filter((row) => row.expectedTemporalPrecision);
+  const timingStatusRows = valid.filter((row) => row.expectedNoticeTimingStatus);
+  const resetMethodRows = valid.filter((row) => row.expectedResetMeaningMethod);
+  const resetScopeRows = valid.filter((row) => row.expectedResetMeaningScope);
   const accuracy = (count: number, total: number) => total === 0 ? null : count / total;
   const byCategory: ScenarioMetrics["byCategory"] = {};
 
@@ -239,6 +349,18 @@ export function calculateScenarioMetrics(rows: ScenarioEvaluationRow[]): Scenari
       precisionRows.filter((row) => row.temporalPrecision === row.expectedTemporalPrecision).length,
       precisionRows.length,
     ),
+    noticeTimingStatusAccuracy: accuracy(
+      timingStatusRows.filter((row) => row.modelOutputNoticeTimingStatus === row.expectedNoticeTimingStatus).length,
+      timingStatusRows.length,
+    ),
+    resetMeaningMethodAccuracy: accuracy(
+      resetMethodRows.filter((row) => row.modelOutputResetMeaningMethod === row.expectedResetMeaningMethod).length,
+      resetMethodRows.length,
+    ),
+    resetMeaningScopeAccuracy: accuracy(
+      resetScopeRows.filter((row) => row.modelOutputResetMeaningScope === row.expectedResetMeaningScope).length,
+      resetScopeRows.length,
+    ),
     falsePositives: rows
       .filter((row) => !row.ambiguous && row.expectedSignalType === "irrelevant" && RESET_RELATED.has(row.predictedSignalType as SignalType))
       .map((row) => ({ id: row.id, category: row.category, text: row.text, predicted: row.predictedSignalType })),
@@ -254,22 +376,25 @@ function resolutionFor(scenario: TiboScenario, prediction: GeminiClassificationO
   return resolveTiboTemporalSchedule(semantics, scenario.tweetCreatedAt, TIBO_SOURCE_TIME_ZONE);
 }
 
-async function evaluateScenario(scenario: TiboScenario, model: string, apiKey: string): Promise<ScenarioEvaluationRow> {
-  let attempts = 0;
+async function evaluateScenario(
+  scenario: TiboScenario,
+  model: string,
+  apiKey: string,
+  previousAttempts = 0,
+  previousSuccesses = 0,
+  previousRateLimits = 0,
+  beforeRequest?: (attemptNumber: number) => void,
+): Promise<ScenarioEvaluationRow> {
+  const attemptNumber = previousAttempts + 1;
+  beforeRequest?.(attemptNumber);
   let last: GeminiClassificationOutput | null = null;
   const started = performance.now();
-
-  while (attempts < MAX_TRANSIENT_ATTEMPTS) {
-    attempts += 1;
-    last = await classifyWithGemini(buildGeminiScenarioInput(scenario), {
-      apiKey,
-      model,
-      mode: "primary",
-      timeoutMs: 7000,
-    });
-    if (!TRANSIENT_STATUSES.has(last.status) || attempts >= MAX_TRANSIENT_ATTEMPTS) break;
-    await sleep(1500);
-  }
+  last = await classifyWithGemini(buildGeminiScenarioInput(scenario), {
+    apiKey,
+    model,
+    mode: "primary",
+    timeoutMs: 7000,
+  });
 
   const prediction = last ?? {
     signalType: null,
@@ -301,6 +426,9 @@ async function evaluateScenario(scenario: TiboScenario, model: string, apiKey: s
     classifiedAt: null,
   };
   const resolution = resolutionFor(scenario, prediction);
+  const pipeline = runTiboScenarioPipeline(scenario, prediction, "primary");
+  const rawSignalType = (prediction.rawAudit?.signalType ?? prediction.signalType) as SignalType | null;
+  const rawTemporalDirection = prediction.rawAudit?.temporalDirection ?? prediction.temporalDirection;
 
   return {
     id: scenario.id,
@@ -311,18 +439,40 @@ async function evaluateScenario(scenario: TiboScenario, model: string, apiKey: s
     expectedTeaserStrength: scenario.expected.teaserStrength,
     expectedTemporalResolutionStatus: scenario.expected.temporalResolutionStatus,
     expectedTemporalPrecision: scenario.expected.temporalPrecision,
+    expectedNoticeTimingStatus: scenario.expected.noticeTimingStatus,
+    expectedResetMeaningMethod: scenario.expected.resetMeaningMethod,
+    expectedResetMeaningScope: scenario.expected.resetMeaningScope,
     predictedSignalType: prediction.signalType,
+    rawSignalType,
+    rawTemporalDirection,
     confidence: prediction.confidence,
     temporalDirection: prediction.temporalDirection,
     teaserStrength: prediction.teaserStrength ?? null,
+    classifierReturnedTeaserStrength: prediction.teaserStrength ?? null,
+    modelOutputNoticeTimingStatus: prediction.noticeTimingStatus ?? null,
+    modelOutputResetMeaningMethod: prediction.resetMeaning?.method ?? null,
+    modelOutputResetMeaningScope: prediction.resetMeaning?.scope ?? null,
+    selectedSignalType: pipeline.selected.signalType,
+    selectedSource: pipeline.selected.classificationSource,
+    contextSafetyApplied: pipeline.contextSafetyDecision !== null,
+    contextSafetySignalType: pipeline.contextSafetyDecision?.signalType ?? null,
+    effectiveSignalType: pipeline.effectiveSignalType,
+    effectiveTeaserStrength: pipeline.effectiveTeaserStrength,
+    formalResetAccepted: pipeline.formalAccepted,
+    historyRecordKind: pipeline.historyEvent?.recordKind ?? null,
+    failureStage: getClassificationFailureStage(prediction.status),
     temporalResolutionStatus: resolution.status,
     temporalPrecision: resolution.status === "resolved" ? resolution.temporalPrecision : prediction.temporalPrecision,
     reasonJa: prediction.reasonJa,
     evidenceQuote: prediction.evidenceQuote,
     status: prediction.status,
-    attempts,
+    attempts: attemptNumber,
+    successfulClassifierInvocations: previousSuccesses + (prediction.status === "success" ? 1 : 0),
+    rateLimitResponses: previousRateLimits + (prediction.status === "rate_limited" ? 1 : 0),
+    retrySuppressed: false,
     latencyMs: Math.round(performance.now() - started),
     text: scenario.tweetText,
+    promptSize: measureScenarioPromptSize(scenario),
   };
 }
 
@@ -334,15 +484,80 @@ function writeCheckpoint(outputDir: string, checkpoint: Checkpoint) {
   fs.writeFileSync(checkpointPath(outputDir), `${JSON.stringify(checkpoint, null, 2)}\n`, "utf8");
 }
 
+function buildInterruptedRow(
+  scenario: TiboScenario,
+  previous: ScenarioEvaluationRow | undefined,
+  attemptNumber: number,
+): ScenarioEvaluationRow {
+  return {
+    id: scenario.id,
+    category: scenario.category,
+    ambiguous: scenario.ambiguous === true,
+    expectedSignalType: scenario.expected.signalType ?? "irrelevant",
+    expectedTemporalDirection: scenario.expected.temporalDirection,
+    expectedTeaserStrength: scenario.expected.teaserStrength,
+    expectedTemporalResolutionStatus: scenario.expected.temporalResolutionStatus,
+    expectedTemporalPrecision: scenario.expected.temporalPrecision,
+    expectedNoticeTimingStatus: scenario.expected.noticeTimingStatus,
+    expectedResetMeaningMethod: scenario.expected.resetMeaningMethod,
+    expectedResetMeaningScope: scenario.expected.resetMeaningScope,
+    predictedSignalType: null,
+    rawSignalType: null,
+    rawTemporalDirection: null,
+    confidence: null,
+    temporalDirection: null,
+    teaserStrength: null,
+    classifierReturnedTeaserStrength: null,
+    modelOutputNoticeTimingStatus: null,
+    modelOutputResetMeaningMethod: null,
+    modelOutputResetMeaningScope: null,
+    selectedSignalType: null,
+    selectedSource: null,
+    contextSafetyApplied: false,
+    contextSafetySignalType: null,
+    effectiveSignalType: null,
+    effectiveTeaserStrength: null,
+    formalResetAccepted: false,
+    historyRecordKind: null,
+    failureStage: "interrupted_unknown",
+    temporalResolutionStatus: "unresolved",
+    temporalPrecision: null,
+    reasonJa: null,
+    evidenceQuote: null,
+    status: "api_error",
+    attempts: attemptNumber,
+    successfulClassifierInvocations: previous?.successfulClassifierInvocations ?? 0,
+    rateLimitResponses: previous?.rateLimitResponses ?? 0,
+    retrySuppressed: true,
+    latencyMs: previous?.latencyMs ?? 0,
+    text: scenario.tweetText,
+    promptSize: measureScenarioPromptSize(scenario),
+  };
+}
+
 function readCheckpoint(outputDir: string): Checkpoint | null {
   const filePath = checkpointPath(outputDir);
   if (!fs.existsSync(filePath)) return null;
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf8")) as Checkpoint;
-    if (parsed.schemaVersion !== 1 || !Array.isArray(parsed.rows)) return null;
+    if (parsed.schemaVersion !== 2 || !Array.isArray(parsed.rows) ||
+      !Array.isArray(parsed.selectedScenarioIds) || !Number.isInteger(parsed.requestCount) ||
+      !Number.isInteger(parsed.requestBudget) || parsed.requestBudget < 1 ||
+      parsed.requestBudget > MAX_EVALUATION_REQUEST_BUDGET || parsed.requestCount < 0 ||
+      parsed.requestCount > parsed.requestBudget ||
+      (parsed.inFlightRequest !== undefined && parsed.inFlightRequest !== null &&
+        (typeof parsed.inFlightRequest.scenarioId !== "string" ||
+          !Number.isInteger(parsed.inFlightRequest.attemptNumber) || parsed.inFlightRequest.attemptNumber < 1))) {
+      throw new Error("Checkpoint schema is unsupported; use a new output directory for this evaluation.");
+    }
+    const completedAttempts = parsed.rows.reduce((sum, row) => sum + (Number.isInteger(row.attempts) ? row.attempts : 0), 0);
+    if (completedAttempts + (parsed.inFlightRequest ? 1 : 0) > parsed.requestCount) {
+      throw new Error("Checkpoint request count does not cover its recorded attempts; use a new output directory.");
+    }
     return parsed;
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Checkpoint schema")) throw error;
+    throw new Error("Checkpoint is unreadable; preserve it and use a new output directory to restart.");
   }
 }
 
@@ -359,10 +574,14 @@ function renderReport(
   metadata: {
     commitSha: string | null;
     fixtureHash: string;
+    fixtureName: string;
     startedAt: string;
     completedAt: string | null;
     resumeCount: number;
     rateLimitCount: number;
+    requestBudget: number;
+    requestCount: number;
+    freshApiSuccessesThisRun: number;
   },
 ) {
   const status = complete ? "complete" : "incomplete";
@@ -372,8 +591,11 @@ function renderReport(
     `- status: **${status}**`,
     `- model: \`${model}\``,
     `- commit SHA: \`${metadata.commitSha ?? "unknown"}\``,
+    `- fixture: \`${metadata.fixtureName}\``,
     `- fixture SHA-256: \`${metadata.fixtureHash}\``,
     `- scenario count: ${rows.length}`,
+    `- classifier invocations / budget: ${metadata.requestCount} / ${metadata.requestBudget}`,
+    `- direct API successes in this run: ${metadata.freshApiSuccessesThisRun}`,
     `- started at: ${metadata.startedAt}`,
     `- completed at: ${metadata.completedAt ?? "—"}`,
     `- resume count: ${metadata.resumeCount}`,
@@ -381,7 +603,14 @@ function renderReport(
     "- production safety guard enabled: yes",
     `- valid predictions: ${metrics.validPredictions}`,
     `- API failures / invalid predictions: ${metrics.invalidPredictions}`,
+    `- failure stages: ${JSON.stringify(rows.reduce<Record<string, number>>((counts, row) => {
+      if (row.failureStage !== "none") counts[row.failureStage] = (counts[row.failureStage] ?? 0) + 1;
+      return counts;
+    }, {}))}`,
     `- rate limited stop: ${stoppedAfterRateLimit ? "yes" : "no"}`,
+    "- raw audit fields, returned teaser strength, selection, context-safety decision, effective class, and formal-history admission are reported separately",
+    "- raw audit retains signal class and temporal direction; teaser strength is the field returned by classifyWithGemini after its existing classifier guard",
+    "- mocked fixture outputs are used only by offline tests and never counted as API successes",
     "- existing 23-post evaluation: unchanged and separate",
     "- production DB/webhook writes: none",
     "",
@@ -394,6 +623,9 @@ function renderReport(
     `- teaser strength accuracy: ${percent(metrics.teaserStrengthAccuracy)}`,
     `- temporal resolution accuracy: ${percent(metrics.temporalResolutionAccuracy)}`,
     `- temporal precision accuracy: ${percent(metrics.temporalPrecisionAccuracy)}`,
+    `- notice timing status accuracy: ${percent(metrics.noticeTimingStatusAccuracy)}`,
+    `- reset method accuracy: ${percent(metrics.resetMeaningMethodAccuracy)}`,
+    `- reset scope accuracy: ${percent(metrics.resetMeaningScopeAccuracy)}`,
     "",
     "## Per class",
     "",
@@ -432,9 +664,9 @@ function renderReport(
     "",
     "## Case results",
     "",
-    "| ID | Category | Expected | Predicted | Status | Temporal | Teaser |",
-    "| --- | --- | --- | --- | --- | --- | --- |",
-    ...rows.map((row) => `| ${row.id} | ${row.category} | ${row.expectedSignalType} | ${row.predictedSignalType ?? "—"} | ${row.status} | ${row.temporalResolutionStatus} | ${row.teaserStrength ?? "—"} |`),
+    "| ID | Expected | Raw AI | Time | Timing status | Teaser | Method | Scope | Selected | Source | Effective | Formal reset | Status | Fail stage |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ...rows.map((row) => `| ${row.id} | ${row.expectedSignalType} | ${row.rawSignalType ?? "—"} | ${row.rawTemporalDirection ?? "—"} | ${row.modelOutputNoticeTimingStatus ?? "—"} | ${row.classifierReturnedTeaserStrength ?? "—"} | ${row.modelOutputResetMeaningMethod ?? "—"} | ${row.modelOutputResetMeaningScope ?? "—"} | ${row.selectedSignalType ?? "—"} | ${row.selectedSource ?? "—"} | ${row.effectiveSignalType ?? "—"} | ${row.formalResetAccepted ? row.historyRecordKind ?? "yes" : "no"} | ${row.status} | ${row.failureStage} |`),
     "",
     "This is a manual classifier evaluation only. It never writes synthetic data to Production and does not change the existing 23-post historical evaluation.",
     "",
@@ -442,13 +674,70 @@ function renderReport(
   return lines.join("\n");
 }
 
+function writePromptInputLengthReport(args: Map<string, string>) {
+  const { fixtureName, fixture } = getFixture(args);
+  const measuredAt = new Date().toISOString();
+  const rows = fixture.scenarios.map((scenario) => ({
+    id: scenario.id,
+    category: scenario.category,
+    ...measureScenarioPromptSize(scenario),
+  }));
+  const outputDir = path.resolve(args.get("output-dir") ?? `scratch/${fixtureName}-prompt-input-lengths`);
+  fs.mkdirSync(outputDir, { recursive: true });
+  const report = {
+    schemaVersion: 1,
+    fixtureName,
+    fixtureScenarioCount: fixture.scenarios.length,
+    measuredAt,
+    modelCalls: 0,
+    rows,
+  };
+  const lines = [
+    "# Tibo Prompt Input Lengths",
+    "",
+    `- fixture: \`${fixtureName}\``,
+    `- cases measured: ${rows.length}`,
+    `- measured at: ${measuredAt}`,
+    "- model calls: 0",
+    "- character counts use the current system prompt and current user prompt builder",
+    "- no-graph measurement removes only the validated evidence graph input",
+    "",
+    "| ID | Graph input | System chars | User chars with graph | User chars without graph | Difference | Combined chars with graph | Combined chars without graph |",
+    "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ...rows.map((row) => `| ${row.id} | ${row.graphInputIncluded ? "yes" : "no"} | ${row.systemPromptChars} | ${row.userPromptCharsWithGraph} | ${row.userPromptCharsWithoutGraph} | ${row.userPromptCharsWithGraph - row.userPromptCharsWithoutGraph} | ${row.combinedPromptCharsWithGraph} | ${row.combinedPromptCharsWithoutGraph} |`),
+    "",
+  ];
+  fs.writeFileSync(path.join(outputDir, "prompt-input-lengths.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  fs.writeFileSync(path.join(outputDir, "prompt-input-lengths.md"), lines.join("\n"), "utf8");
+  console.log(`Measured ${rows.length} prompt inputs with no model calls.`);
+  console.log(`Wrote ${path.join(outputDir, "prompt-input-lengths.md")}`);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (args.has("help") || !args.has("live")) {
-    console.log("Usage: corepack pnpm run eval:tibo-scenarios -- --live [--resume] [--limit N] [--ids id1,id2] [--output-dir DIR]");
-    console.log("Without --live this script performs no API calls.");
+  if (args.has("help")) {
+    console.log("Usage: corepack pnpm run eval:tibo-scenarios -- [--live] [--fixture legacy|balanced] [--request-budget 1..16] [--resume] [--limit N] [--ids id1,id2] [--output-dir DIR]");
+    console.log("Offline prompt sizing: corepack pnpm run eval:tibo-scenarios -- --measure-input-lengths --fixture balanced [--output-dir DIR]");
+    console.log("Live mode requires --live. Offline prompt sizing performs no API calls.");
     return;
   }
+  if (args.has("measure-input-lengths")) {
+    writePromptInputLengthReport(args);
+    return;
+  }
+  if (!args.has("live")) {
+    console.log("No API calls made. Use --measure-input-lengths for offline prompt sizing or --live for model evaluation.");
+    return;
+  }
+
+  const { fixtureName, fixture } = getFixture(args);
+  const outputDir = path.resolve(args.get("output-dir") ?? "scratch/tibo-scenario-evaluation");
+  fs.mkdirSync(outputDir, { recursive: true });
+  const checkpointExists = fs.existsSync(checkpointPath(outputDir));
+  if (checkpointExists && !args.has("resume")) {
+    throw new Error("Checkpoint already exists; use --resume or choose a new output directory.");
+  }
+  const checkpoint = args.has("resume") ? readCheckpoint(outputDir) : null;
 
   loadLocalEnvironment();
   const apiKey = process.env.GEMINI_API_KEY?.trim();
@@ -457,47 +746,83 @@ async function main() {
     console.log("SKIPPED: GEMINI_API_KEY or GEMINI_MODEL is not configured; no API call was made.");
     return;
   }
+  if (checkpoint && checkpoint.model !== model) {
+    throw new Error("Checkpoint model differs from GEMINI_MODEL; use a new output directory.");
+  }
+  if (checkpoint && checkpoint.fixtureName !== fixtureName) {
+    throw new Error("Checkpoint fixture differs from the requested fixture; use a new output directory.");
+  }
 
-  const fixture = fixtureJson as TiboScenarioFixture;
-  const outputDir = path.resolve(args.get("output-dir") ?? "scratch/tibo-scenario-evaluation");
-  fs.mkdirSync(outputDir, { recursive: true });
-  const limit = args.has("limit") ? Math.max(1, Number(args.get("limit"))) : fixture.scenarios.length;
+  const requestedBudget = args.has("request-budget") ? Number(args.get("request-budget")) : undefined;
+  if (checkpoint && requestedBudget !== undefined && requestedBudget > checkpoint.requestBudget) {
+    throw new Error("A resumed evaluation cannot increase its original request budget.");
+  }
+  if (checkpoint && requestedBudget !== undefined && requestedBudget < checkpoint.requestCount) {
+    throw new Error("A resumed request budget cannot be lower than classifier invocations already made.");
+  }
+  const requestBudget = requestBudgetForBatch(requestedBudget ?? checkpoint?.requestBudget);
+  const fixtureHash = getFixtureHash(fixtureName);
+  if (checkpoint && checkpoint.fixtureHash !== fixtureHash) {
+    throw new Error("Fixture content differs from the checkpoint; use a new output directory.");
+  }
+
   const requestedIds = args.get("ids")
     ?.split(",")
     .map((id) => id.trim())
-    .filter(Boolean);
-  const selectedScenarios = requestedIds?.length
+    .filter(Boolean) ?? (checkpoint ? checkpoint.selectedScenarioIds : undefined);
+  if (requestedIds && new Set(requestedIds).size !== requestedIds.length) {
+    throw new Error("Scenario IDs must be unique.");
+  }
+  const parsedLimit = args.has("limit") ? Number(args.get("limit")) : undefined;
+  if (parsedLimit !== undefined && (!Number.isInteger(parsedLimit) || parsedLimit < 1)) {
+    throw new Error("--limit must be a positive integer.");
+  }
+  const selectedScenarios = requestedIds
     ? fixture.scenarios.filter((scenario) => requestedIds.includes(scenario.id))
-    : fixture.scenarios.slice(0, limit);
-  if (requestedIds?.length && selectedScenarios.length !== requestedIds.length) {
+    : fixture.scenarios.slice(0, Math.min(fixture.scenarios.length, parsedLimit ?? requestBudget));
+  if (requestedIds && selectedScenarios.length !== requestedIds.length) {
     const selectedIds = new Set(selectedScenarios.map((scenario) => scenario.id));
     const missingIds = requestedIds.filter((id) => !selectedIds.has(id));
     throw new Error(`Unknown scenario id(s): ${missingIds.join(", ")}`);
   }
-  const checkpoint = args.has("resume") ? readCheckpoint(outputDir) : null;
+  const selectedScenarioIds = selectedScenarios.map((scenario) => scenario.id);
+  if (checkpoint && JSON.stringify(checkpoint.selectedScenarioIds) !== JSON.stringify(selectedScenarioIds)) {
+    throw new Error("Selected scenario set differs from the checkpoint; resume with the original IDs or use a new output directory.");
+  }
   const commitSha = checkpoint?.commitSha ?? getCommitSha();
-  const fixtureHash = checkpoint?.fixtureHash ?? getFixtureHash();
   const startedAt = checkpoint?.startedAt ?? new Date().toISOString();
   const resumeCount = (checkpoint?.resumeCount ?? 0) + (checkpoint ? 1 : 0);
   let rateLimitCount = checkpoint?.rateLimitCount ?? 0;
+  let requestCount = checkpoint?.requestCount ?? 0;
+  let freshApiSuccessesThisRun = 0;
+  let reusedCheckpointSuccesses = 0;
+  let stoppedAfterRateLimit = checkpoint?.stoppedAfterRateLimit ?? false;
+  let stoppedAtRequestBudget = false;
   const rowsById = new Map<string, ScenarioEvaluationRow>(
     (checkpoint?.rows ?? []).map((row) => [row.id, row]),
   );
-  let stoppedAfterRateLimit = checkpoint?.stoppedAfterRateLimit ?? false;
+  let inFlightRequest = checkpoint?.inFlightRequest ?? null;
 
-  for (const scenario of selectedScenarios) {
+  if (inFlightRequest) {
+    const scenario = selectedScenarios.find((item) => item.id === inFlightRequest!.scenarioId);
+    if (!scenario) throw new Error("Checkpoint has an in-flight scenario outside the selected set.");
     const previous = rowsById.get(scenario.id);
-    if (previous?.status === "success") continue;
-
-    const row = await evaluateScenario(scenario, model, apiKey);
-    rowsById.set(scenario.id, row);
-    if (row.status === "rate_limited") rateLimitCount += 1;
+    if (inFlightRequest.attemptNumber !== (previous?.attempts ?? 0) + 1) {
+      throw new Error("Checkpoint in-flight attempt does not follow the recorded scenario attempts.");
+    }
+    rowsById.set(scenario.id, buildInterruptedRow(scenario, previous, inFlightRequest.attemptNumber));
+    inFlightRequest = null;
     writeCheckpoint(outputDir, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       model,
+      fixtureName,
       fixtureScenarioCount: fixture.scenarios.length,
+      selectedScenarioIds,
       rows: Array.from(rowsById.values()),
-      stoppedAfterRateLimit: row.status === "rate_limited" || stoppedAfterRateLimit,
+      stoppedAfterRateLimit,
+      requestBudget,
+      requestCount,
+      inFlightRequest,
       updatedAt: new Date().toISOString(),
       commitSha,
       fixtureHash,
@@ -505,11 +830,90 @@ async function main() {
       resumeCount,
       rateLimitCount,
     });
-    console.log(`${row.id}: ${row.status}${row.predictedSignalType ? ` → ${row.predictedSignalType}` : ""}`);
-    if (row.status === "rate_limited") {
-      stoppedAfterRateLimit = true;
-      break;
+    console.log(`${scenario.id}: previous invocation outcome unknown; resume suppressed to avoid duplication`);
+  }
+
+  let stopEvaluationAfterRateLimit = false;
+
+  for (const scenario of selectedScenarios) {
+    let row = rowsById.get(scenario.id);
+    if (row && !isScenarioResumeEligible(row)) {
+      if (row.status === "success") reusedCheckpointSuccesses += 1;
+      continue;
     }
+
+    while (isScenarioResumeEligible(row)) {
+      if (!canStartEvaluationRequest(requestCount, requestBudget)) {
+        stoppedAtRequestBudget = true;
+        break;
+      }
+      const previousAttempts = row?.attempts ?? 0;
+      if (previousAttempts >= MAX_ATTEMPTS_PER_SCENARIO) break;
+      const previousSuccesses = row?.successfulClassifierInvocations ?? 0;
+      const previousRateLimits = row?.rateLimitResponses ?? 0;
+      const evaluated = await evaluateScenario(
+        scenario,
+        model,
+        apiKey,
+        previousAttempts,
+        previousSuccesses,
+        previousRateLimits,
+        (attemptNumber) => {
+          requestCount += 1;
+          inFlightRequest = { scenarioId: scenario.id, attemptNumber, startedAt: new Date().toISOString() };
+          writeCheckpoint(outputDir, {
+            schemaVersion: 2,
+            model,
+            fixtureName,
+            fixtureScenarioCount: fixture.scenarios.length,
+            selectedScenarioIds,
+            rows: Array.from(rowsById.values()),
+            stoppedAfterRateLimit,
+            requestBudget,
+            requestCount,
+            inFlightRequest,
+            updatedAt: new Date().toISOString(),
+            commitSha,
+            fixtureHash,
+            startedAt,
+            resumeCount,
+            rateLimitCount,
+          });
+        },
+      );
+      freshApiSuccessesThisRun += evaluated.successfulClassifierInvocations - previousSuccesses;
+      rateLimitCount += evaluated.rateLimitResponses - previousRateLimits;
+      row = evaluated;
+      rowsById.set(scenario.id, row);
+      inFlightRequest = null;
+      stoppedAfterRateLimit = row.status === "rate_limited" || stoppedAfterRateLimit;
+      writeCheckpoint(outputDir, {
+        schemaVersion: 2,
+        model,
+        fixtureName,
+        fixtureScenarioCount: fixture.scenarios.length,
+        selectedScenarioIds,
+        rows: Array.from(rowsById.values()),
+        stoppedAfterRateLimit,
+        requestBudget,
+        requestCount,
+        inFlightRequest,
+        updatedAt: new Date().toISOString(),
+        commitSha,
+        fixtureHash,
+        startedAt,
+        resumeCount,
+        rateLimitCount,
+      });
+      console.log(`${row.id}: ${row.status}${row.predictedSignalType ? ` → ${row.predictedSignalType}` : ""}`);
+      if (row.status === "rate_limited") {
+        stopEvaluationAfterRateLimit = true;
+        break;
+      }
+      if (!AUTO_RETRY_STATUSES.has(row.status) || !isScenarioResumeEligible(row)) break;
+      await sleep(1500);
+    }
+    if (stopEvaluationAfterRateLimit) break;
   }
 
   const rows = selectedScenarios
@@ -520,27 +924,37 @@ async function main() {
   const completedAt = complete ? new Date().toISOString() : null;
   const resumeCommand = [
     "corepack pnpm run eval:tibo-scenarios -- --live --resume",
-    requestedIds?.length ? `--ids ${requestedIds.join(",")}` : "",
+    `--fixture ${fixtureName}`,
+    `--request-budget ${requestBudget}`,
+    args.has("ids") ? `--ids ${selectedScenarioIds.join(",")}` : "",
     `--output-dir ${outputDir}`,
   ].filter(Boolean).join(" ");
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     status: complete ? "complete" : "incomplete",
     complete,
     model,
     commitSha,
+    fixtureName,
     fixtureHash,
     startedAt,
     completedAt,
     resumeCount,
     rateLimitCount,
+    requestBudget,
+    classifierInvocations: requestCount,
+    freshApiSuccessesThisRun,
+    reusedCheckpointSuccesses,
+    apiSuccessDefinition: "Direct classifyWithGemini invocations returning status=success in this run; checkpoint-reused rows and fixed-output tests are excluded.",
     productionSafetyGuardEnabled: true,
     fixtureScenarioCount: fixture.scenarios.length,
     selectedScenarioCount: selectedScenarios.length,
     evaluatedScenarioCount: rows.length,
     existingHistoricalEvaluation23Unchanged: true,
+    mockScenarioLab145Unchanged: true,
     productionWrites: false,
     stoppedAfterRateLimit,
+    stoppedAtRequestBudget,
     metrics,
     rows,
     resumeCommand,
@@ -551,15 +965,19 @@ async function main() {
     `${renderReport(model, rows, metrics, complete, stoppedAfterRateLimit, {
       commitSha,
       fixtureHash,
+      fixtureName,
       startedAt,
       completedAt,
       resumeCount,
       rateLimitCount,
+      requestBudget,
+      requestCount,
+      freshApiSuccessesThisRun,
     })}\n`,
     "utf8",
   );
   console.log(`Wrote ${path.join(outputDir, "report.json")}`);
-  console.log(`Status: ${report.status}; valid predictions: ${metrics.validPredictions}/${selectedScenarios.length}`);
+  console.log(`Status: ${report.status}; fresh API successes this run: ${freshApiSuccessesThisRun}; classifier invocations: ${requestCount}/${requestBudget}`);
 }
 
 if (isMainModule()) {

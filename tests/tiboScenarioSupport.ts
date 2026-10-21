@@ -1,4 +1,7 @@
 import { getLocalRadarData } from "../lib/radar";
+import { getTiboContextSafetyDecision } from "../lib/radar/tiboContextSafety";
+import type { TiboEvidenceContext } from "../lib/radar/tiboEvidenceContext";
+import { formatTiboEvidenceInput } from "../lib/radar/tiboEvidencePrompt";
 import {
   classifyTiboTweet,
   type ClassificationResult,
@@ -43,6 +46,9 @@ export type TiboScenarioExpected = {
   temporalPrecision?: TemporalPrecision;
   expectedStartAt?: string | null;
   expectedEndAt?: string | null;
+  noticeTimingStatus?: "known" | "unknown";
+  resetMeaningMethod?: "forced" | "regular_scheduled" | "banked_distribution" | "personal" | "unknown";
+  resetMeaningScope?: "all_paid_users" | "all_users" | "affected_users" | "single_account" | "unknown";
   shouldCreateActiveNotice?: boolean;
   shouldCreateTeaser?: boolean;
   shouldCreateResetHistoryEvent?: boolean;
@@ -71,6 +77,10 @@ export type TiboScenarioMockGeminiOutput = Partial<
     | "teaserStrengthConfidence"
     | "teaserStrengthEvidenceQuote"
     | "teaserStrengthReasonJa"
+    | "noticeTimingStatus"
+    | "resetMeaning"
+    | "contextualResetAssessment"
+    | "contextualResetTweetId"
     | "futureSignal"
     | "temporalExpression"
     | "temporalKind"
@@ -96,8 +106,12 @@ export type TiboScenario = {
   tweetCreatedAt: string;
   tweetUrl: string;
   isReply?: boolean;
+  replyParentTweetId?: string | null;
+  replyParentTweetUrl?: string | null;
   replyToHandles?: string[];
   replyContextText?: string | null;
+  validatedSourceContext?: TiboEvidenceContext | null;
+  tiboEvidenceInput?: string | null;
   isQuote?: boolean;
   quoteAuthorHandle?: string | null;
   quoteContextText?: string | null;
@@ -152,6 +166,10 @@ export function buildFixedGeminiOutput(scenario: TiboScenario): GeminiClassifica
     evidenceQuote,
     reasonJa: mock.reasonJa ?? `Scenario fixture: ${scenario.description}`,
     resetTypeJa: null,
+    contextualResetAssessment: mock.contextualResetAssessment ?? "unknown",
+    contextualResetTweetId: mock.contextualResetTweetId ?? null,
+    noticeTimingStatus: mock.noticeTimingStatus ?? null,
+    resetMeaning: mock.resetMeaning ?? null,
     noticeToExecution: null,
     teaserStrength: mock.teaserStrength ?? expectedTeaser,
     teaserStrengthConfidence: mock.teaserStrengthConfidence ?? (expectedTeaser ? 0.92 : null),
@@ -336,10 +354,92 @@ export function buildGeminiScenarioInput(scenario: TiboScenario) {
     quoteAuthorHandle: scenario.quoteAuthorHandle ?? null,
     quoteContextText: scenario.quoteContextText ?? null,
     quoteTweetUrl: scenario.quoteTweetUrl ?? null,
+    tiboEvidenceInput: scenario.validatedSourceContext
+      ? formatTiboEvidenceInput(scenario.validatedSourceContext)
+      : scenario.tiboEvidenceInput ?? null,
     sourceTimeZone: TIBO_SOURCE_TIME_ZONE,
   };
 }
 
 export function buildScenarioPrompt(scenario: TiboScenario) {
   return buildGeminiPrompt(buildGeminiScenarioInput(scenario));
+}
+export type TiboScenarioPipelineResult = {
+  ruleResult: ClassificationResult;
+  selected: SelectedTiboClassification;
+  contextSafetyDecision: ReturnType<typeof getTiboContextSafetyDecision>;
+  effectiveSignalType: ClassificationSignalType;
+  effectiveTeaserStrength: GeminiClassificationOutput["teaserStrength"] | null;
+  formalSignal: FormalTiboResetSignal;
+  formalAccepted: boolean;
+  historyEvent: ReturnType<typeof convertTiboResetSignalToHistoryEvent> | null;
+};
+
+/**
+ * Run classification selection and context safety with an explicit model result.
+ * Fixed-output pipeline tests use this helper; the live evaluator still calls
+ * classifyWithGemini directly and records its output separately.
+ */
+export function runTiboScenarioPipeline(
+  scenario: TiboScenario,
+  geminiResult: GeminiClassificationOutput,
+  modeValue = "primary",
+): TiboScenarioPipelineResult {
+  const ruleResult = classifyTiboTweet(scenario.tweetText, scenario.tweetUrl, {
+    isReply: scenario.isReply,
+    isQuote: scenario.isQuote,
+  });
+  const selected = selectTiboClassification(modeValue, ruleResult, geminiResult);
+  const targetTweetId = scenario.tweetUrl.match(/\/status\/(\d+)/)?.[1] ?? scenario.id;
+  const contextSafetyDecision = getTiboContextSafetyDecision({
+    authorText: scenario.tweetText,
+    isReply: scenario.isReply,
+    isQuote: scenario.isQuote,
+    replyContextText: scenario.replyContextText,
+    replyParentTweetId: scenario.replyParentTweetId,
+    replyParentTweetUrl: scenario.replyParentTweetUrl,
+    quoteContextText: scenario.quoteContextText,
+    quoteAuthorHandle: scenario.quoteAuthorHandle,
+    quoteTweetUrl: scenario.quoteTweetUrl,
+    selectedSignalType: selected.signalType,
+    aiTeaserStrength: geminiResult.teaserStrength,
+    evidenceQuote: geminiResult.evidenceQuote,
+    temporalDirection: geminiResult.temporalDirection,
+    noticeTimingStatus: geminiResult.noticeTimingStatus,
+    contextualResetAssessment: geminiResult.contextualResetAssessment,
+    contextualResetTweetId: geminiResult.contextualResetTweetId,
+    resetMeaning: geminiResult.resetMeaning,
+    targetTweetId,
+    targetTweetUrl: scenario.tweetUrl,
+    targetTweetCreatedAt: scenario.tweetCreatedAt,
+    validatedSourceContext: scenario.validatedSourceContext,
+  });
+  const effectiveSelected = contextSafetyDecision
+    ? {
+        ...selected,
+        signalType: contextSafetyDecision.signalType,
+        reason: contextSafetyDecision.reasonJa,
+      }
+    : selected;
+  const semantics = geminiResult.status === "success"
+    ? parseTiboTemporalSemantics(geminiResult, scenario.tweetText)
+    : null;
+  const temporalResolution =
+    (effectiveSelected.signalType === "official_notice" || effectiveSelected.signalType === "teaser") && semantics
+      ? resolveTiboTemporalSchedule(semantics, scenario.tweetCreatedAt, TIBO_SOURCE_TIME_ZONE)
+      : null;
+  const activeSignal = buildActiveSignal(scenario, effectiveSelected, geminiResult, temporalResolution);
+  const formalSignal = buildFormalSignal(activeSignal, effectiveSelected, geminiResult, scenario);
+  const formalAccepted = isFormalTiboResetSignal(formalSignal);
+
+  return {
+    ruleResult,
+    selected,
+    contextSafetyDecision,
+    effectiveSignalType: effectiveSelected.signalType,
+    effectiveTeaserStrength: contextSafetyDecision?.teaserStrength ?? geminiResult.teaserStrength ?? null,
+    formalSignal,
+    formalAccepted,
+    historyEvent: formalAccepted ? convertTiboResetSignalToHistoryEvent(formalSignal) : null,
+  };
 }
