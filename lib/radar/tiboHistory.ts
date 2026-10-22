@@ -1825,7 +1825,7 @@ function collectTiboRecoveryEvidenceSignals(
       isCurrentUsageResetAnnouncement(signal.text ?? "");
     if (
       (signal.signal_type !== "official_notice" && signal.signal_type !== "teaser" && !isLinkedExecutionAnnouncement) ||
-      signal.is_reply === true ||
+      (signal.is_reply === true && !isVerifiedTiboFutureReplyNotice(signal)) ||
       seen.has(signal.tweet_id)
     ) {
       continue;
@@ -1846,9 +1846,12 @@ function collectTiboRecoveryEvidenceSignals(
       verification_status: signal.verification_status ?? "auto_unverified",
       classification_source: signal.classification_source ?? null,
       ai_signal_type: signal.ai_signal_type ?? null,
+      ai_confidence: signal.ai_confidence ?? null,
       ai_classification_status: signal.ai_classification_status ?? null,
       ai_temporal_direction: signal.ai_temporal_direction ?? null,
       ai_notice_timing_status: signal.ai_notice_timing_status ?? null,
+      ai_contextual_reset_assessment: signal.ai_contextual_reset_assessment ?? null,
+      ai_contextual_reset_tweet_id: signal.ai_contextual_reset_tweet_id ?? null,
       ai_evidence_quote: signal.ai_evidence_quote ?? null,
       ai_notice_to_execution: signal.ai_notice_to_execution ?? null,
       ai_temporal_confidence: signal.ai_temporal_confidence ?? null,
@@ -1866,8 +1869,15 @@ function collectTiboRecoveryEvidenceSignals(
       expected_start_at: signal.expected_start_at ?? null,
       expected_end_at: signal.expected_end_at ?? null,
       temporal_resolution_status: signal.temporal_resolution_status ?? null,
+      temporal_resolution_version: signal.temporal_resolution_version ?? null,
       is_reply: signal.is_reply ?? null,
       is_quote: signal.is_quote ?? null,
+      reply_to_handles: signal.reply_to_handles ?? null,
+      reply_context_text: signal.reply_context_text ?? null,
+      source_context_snapshot: signal.source_context_snapshot ?? null,
+      source_context_revision_hashes: signal.source_context_revision_hashes ?? null,
+      source_context_classified_revision_hashes: signal.source_context_classified_revision_hashes ?? null,
+      source_context_generation: signal.source_context_generation ?? null,
       logical_post_id: signal.logical_post_id ?? null,
       edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
       edit_version: signal.edit_version ?? null,

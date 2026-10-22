@@ -1,9 +1,14 @@
-import { hasDeadlineSemantics, TIBO_TEMPORAL_DEADLINE_ESTIMATE_VERSION } from "./tiboTemporal";
+import {
+  hasDeadlineSemantics,
+  parseTiboTemporalSemantics,
+  resolveTiboTemporalSchedule,
+  TIBO_RESET_DEADLINE_LEAD_WINDOW_MS,
+  TIBO_TEMPORAL_DEADLINE_ESTIMATE_VERSION,
+} from "./tiboTemporal";
 import { isTiboHandle } from "./tiboHandle";
 
 const MAX_SOURCE_CONTEXT_SNAPSHOT_BYTES = 8 * 1024;
 const MAX_SOURCE_CONTEXT_REVISIONS = 3;
-const DEADLINE_WINDOW_MS = 3 * 60 * 60 * 1000;
 const TWEET_ID_PATTERN = /^\d{15,30}$/;
 const REVISION_HASH_PATTERN = /^[a-f0-9]{64}$/;
 const RESET_TOPIC_PATTERN = /\b(?:reset|usage\s+limits?|rate\s+limits?|quota)\b/i;
@@ -38,7 +43,9 @@ export type TiboFutureReplyNoticeLike = {
   source_context_classified_revision_hashes?: string[] | null;
   source_context_generation?: number | null;
   temporal_expression?: string | null;
+  temporal_kind?: string | null;
   temporal_precision?: string | null;
+  temporal_confidence?: number | null;
   expected_start_at?: string | null;
   expected_end_at?: string | null;
   temporal_resolution_status?: string | null;
@@ -153,8 +160,23 @@ export function isVerifiedTiboFutureReplyNotice(signal: TiboFutureReplyNoticeLik
   const createdAt = Date.parse(signal.tweet_created_at);
   const startAt = Date.parse(signal.expected_start_at);
   const endAt = Date.parse(signal.expected_end_at);
-  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) ||
-      startAt < createdAt || endAt <= createdAt || endAt - startAt !== DEADLINE_WINDOW_MS ||
+  const sourceSemantics = parseTiboTemporalSemantics({
+    temporalExpression: signal.temporal_expression,
+    temporalKind: signal.temporal_kind,
+    temporalPrecision: signal.temporal_precision,
+    temporalConfidence: signal.temporal_confidence,
+  }, signal.text);
+  const sourceSchedule = sourceSemantics
+    ? resolveTiboTemporalSchedule(sourceSemantics, signal.tweet_created_at)
+    : null;
+  const sourceDeadlineAt = sourceSchedule?.expectedEndAt
+    ? Date.parse(sourceSchedule.expectedEndAt)
+    : Number.NaN;
+  // Keep the lead estimate clamped to the post, and anchor its end to the source text.
+  const expectedStartAt = Math.max(createdAt, endAt - TIBO_RESET_DEADLINE_LEAD_WINDOW_MS);
+  if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt <= createdAt ||
+      startAt !== expectedStartAt || sourceSchedule?.status !== "resolved" ||
+      sourceSchedule.isDeadline !== true || sourceDeadlineAt !== endAt ||
       !hasDeadlineSemantics({
         temporalExpression: signal.temporal_expression || signal.ai_temporal_expression,
         expectedStartAt: signal.expected_start_at,

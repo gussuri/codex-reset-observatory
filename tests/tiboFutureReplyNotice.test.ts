@@ -82,6 +82,46 @@ test("a complete source-validated future self-reply is an official deadline noti
   assert.equal(snapshot.viewModel.activeWindow.source, `https://x.com/thsottiaux/status/${replyId}`);
 });
 
+test("a short deadline reply clamps its estimate to the post time and rejects inconsistent windows", () => {
+  const shortReply = verifiedReplySignal({
+    text: "Lands today before 2am PST.",
+    ai_evidence_quote: "Lands today before 2am PST.",
+    ai_temporal_expression: "today before 2am PST",
+    temporal_expression: "today before 2am PST",
+    tweet_created_at: "2026-10-22T08:30:00.000Z",
+    expected_start_at: "2026-10-22T08:30:00.000Z",
+    expected_end_at: "2026-10-22T10:00:00.000Z",
+  });
+
+  assert.equal(
+    interpretTiboSignal(shortReply, new Date("2026-10-22T08:40:00.000Z")).officialNoticeEligible,
+    true,
+  );
+
+  const invalidWindows: Array<[string, Record<string, unknown>]> = [
+    ["fabricated start", { expected_start_at: "2026-10-22T08:31:00.000Z" }],
+    ["deadline overrun", {
+      expected_start_at: "2026-10-22T10:00:00.000Z",
+      expected_end_at: "2026-10-22T13:00:00.000Z",
+    }],
+    ["past deadline", {
+      expected_start_at: "2026-10-22T08:30:00.000Z",
+      expected_end_at: "2026-10-22T08:00:00.000Z",
+    }],
+  ];
+
+  for (const [label, override] of invalidWindows) {
+    assert.equal(
+      interpretTiboSignal(
+        verifiedReplySignal({ ...shortReply, ...override }),
+        new Date("2026-10-22T08:40:00.000Z"),
+      ).officialNoticeEligible,
+      false,
+      label,
+    );
+  }
+});
+
 test("manual confirmation keeps the existing official reply admission path", () => {
   const signal = verifiedReplySignal({
     verification_status: "confirmed",

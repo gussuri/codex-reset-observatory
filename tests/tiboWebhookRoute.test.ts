@@ -1852,7 +1852,14 @@ test("official notice deadline resolves source midnight and expires after the de
 });
 
 test("a validated self-reply supplies its own deadline and retains the actual Tibo parent context", async () => {
-  const fixture = deadlineReplyFixture;
+  const fixture = {
+    ...deadlineReplyFixture,
+    reply: {
+      ...deadlineReplyFixture.reply,
+      createdAt: "2026-10-22T08:30:00.000Z",
+      text: "Lands today before 2am PST.",
+    },
+  };
   const previous = Object.fromEntries(
     ENV_KEYS.map((key) => [key, process.env[key]]),
   ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
@@ -1952,11 +1959,11 @@ test("a validated self-reply supplies its own deadline and retains the actual Ti
     noticeTimingStatus: "known",
     contextualResetAssessment: "same_global_reset",
     contextualResetTweetId: fixture.parent.tweetId,
-    temporalExpression: "tomorrow before 10am PST",
+    temporalExpression: "today before 2am PST",
     temporalKind: "relative_day",
     temporalPrecision: "range",
-    relativeDayOffset: 1,
-    explicitTimeParts: { hour: 10, minute: 0 },
+    relativeDayOffset: 0,
+    explicitTimeParts: { hour: 2, minute: 0 },
     explicitTimezone: "PST",
     temporalConfidence: 0.95,
   };
@@ -1969,7 +1976,7 @@ test("a validated self-reply supplies its own deadline and retains the actual Ti
       text: fixture.reply.text,
       tweetUrl: fixture.reply.tweetUrl,
       tweetCreatedAt: fixture.reply.createdAt,
-      detectedAt: "2026-10-22T06:56:00.000Z",
+      detectedAt: "2026-10-22T08:30:30.000Z",
       isReply: true,
       replyToHandles: fixture.reply.replyToHandles,
       replyParentTweetId: fixture.parent.tweetId,
@@ -1986,11 +1993,11 @@ test("a validated self-reply supplies its own deadline and retains the actual Ti
     assert.equal(persisted.signal_type, "official_notice");
     assert.equal(persisted.verification_status, "auto_unverified");
     assert.equal(persisted.classification_source, "gemini");
-    assert.equal(persisted.ai_temporal_expression, "tomorrow before 10am PST");
+    assert.equal(persisted.ai_temporal_expression, "today before 2am PST");
     assert.equal(persisted.ai_temporal_timezone, "PST");
-    assert.equal(persisted.temporal_expression, "tomorrow before 10am PST");
-    assert.equal(persisted.expected_start_at, "2026-10-22T15:00:00.000Z");
-    assert.equal(persisted.expected_end_at, "2026-10-22T18:00:00.000Z");
+    assert.equal(persisted.temporal_expression, "today before 2am PST");
+    assert.equal(persisted.expected_start_at, "2026-10-22T08:30:00.000Z");
+    assert.equal(persisted.expected_end_at, "2026-10-22T10:00:00.000Z");
     assert.equal(persisted.temporal_resolution_version, "tibo-temporal-v9-deadline-start-estimate");
     assert.equal(persisted.formal_reply_admission_proof, null);
     assert.equal(persisted.ai_contextual_reset_assessment, "same_global_reset");
@@ -2014,28 +2021,28 @@ test("a validated self-reply supplies its own deadline and retains the actual Ti
     const noticeSource = fixture.reply.tweetUrl;
     const publicBeforeReset = toPublicRadarSnapshot(
       getLocalRadarData({
-        calculationNow: new Date("2026-10-22T10:00:00.000Z"),
+        calculationNow: new Date("2026-10-22T08:40:00.000Z"),
         activeTiboSignals: [savedSignal],
         recentTiboSignals: [savedSignal],
       }),
       "en",
-      { calculationNow: new Date("2026-10-22T10:00:00.000Z") },
+      { calculationNow: new Date("2026-10-22T08:40:00.000Z") },
     );
     assert.equal(publicBeforeReset.viewModel.activeWindow.kind, "official");
-    assert.equal(publicBeforeReset.viewModel.activeWindow.expectedAt, "2026-10-22T15:00:00.000Z");
-    assert.equal(publicBeforeReset.viewModel.activeWindow.expectedEndAt, "2026-10-22T18:00:00.000Z");
+    assert.equal(publicBeforeReset.viewModel.activeWindow.expectedAt, "2026-10-22T08:30:00.000Z");
+    assert.equal(publicBeforeReset.viewModel.activeWindow.expectedEndAt, "2026-10-22T10:00:00.000Z");
     assert.equal(publicBeforeReset.viewModel.activeWindow.source, noticeSource);
 
     const publicAfterReset = toPublicRadarSnapshot(
       getLocalRadarData({
-        calculationNow: new Date("2026-10-22T10:05:00.000Z"),
+        calculationNow: new Date("2026-10-22T09:05:00.000Z"),
         activeTiboSignals: [savedSignal],
         recentTiboSignals: [savedSignal],
         formalTiboResets: [{
           tweet_id: "2113163000000000000",
           text: "We reset usage limits for all Codex users.",
           tweet_url: "https://x.com/thsottiaux/status/2113163000000000000",
-          tweet_created_at: "2026-10-22T10:00:00.000Z",
+          tweet_created_at: "2026-10-22T09:00:00.000Z",
           signal_type: "reset_executed",
           confidence: 0.99,
           verification_status: "confirmed",
@@ -2046,16 +2053,22 @@ test("a validated self-reply supplies its own deadline and retains the actual Ti
         }],
       }),
       "en",
-      { calculationNow: new Date("2026-10-22T10:05:00.000Z") },
+      { calculationNow: new Date("2026-10-22T09:05:00.000Z") },
     );
     assert.notEqual(publicAfterReset.viewModel.activeWindow.source, noticeSource);
-    assert.ok(publicAfterReset.viewModel.recentHistory.some((item) => item.key.includes("2113163000000000000")));
+    const completion = publicAfterReset.viewModel.recentHistory.find((item) =>
+      item.key.includes("2113163000000000000"),
+    );
+    assert.ok(completion);
+    assert.equal(completion.source, noticeSource);
+    assert.equal(completion.details?.noticeType, "Announcement");
+    assert.equal(completion.details?.noticeToExecution, "30 minutes");
 
     const geminiRequest = geminiPayloads[0] as { contents?: Array<{ parts?: Array<{ text?: string }> }> };
     const promptText = geminiRequest.contents?.flatMap((content) => content.parts ?? [])
       .map((part) => part.text ?? "").join("\n") ?? "";
     assert.match(promptText, /Day 17\/ Bet you thought we forgot/);
-    assert.match(promptText, /Lands tomorrow before 10am PST\./);
+    assert.match(promptText, /Lands today before 2am PST\./);
   } finally {
     globalThis.fetch = originalFetch;
     restoreGemini();
