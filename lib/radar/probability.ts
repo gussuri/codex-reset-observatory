@@ -63,6 +63,10 @@ import {
   hasDeadlineSemantics,
   isExplicitClockDeadlineExpression,
   isTemporalNoticeConsumedAtReset,
+  parseTiboTemporalSemantics,
+  resolveTiboTemporalSchedule,
+  TIBO_RESET_DEADLINE_LEAD_WINDOW_MS,
+  TIBO_SOURCE_TIME_ZONE,
   TIBO_TEMPORAL_DEADLINE_ESTIMATE_VERSION,
   TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS,
   TIBO_NOTICE_GRACE_MS,
@@ -228,6 +232,53 @@ function getSignalTemporalWindow(signal: {
     : null;
 }
 
+function isConfirmedManualDeadlineStartEstimate(signal: ActiveTiboSignal) {
+  const temporalExpression = signal.temporal_expression?.trim();
+  const temporalPrecision = signal.temporal_precision ?? signal.ai_temporal_precision;
+  if (
+    signal.signal_type !== "official_notice" ||
+    signal.classification_source !== "manual" ||
+    signal.verification_status !== "confirmed" ||
+    signal.temporal_resolution_status !== "resolved" ||
+    temporalPrecision !== "range" ||
+    !temporalExpression ||
+    !isExplicitClockDeadlineExpression(temporalExpression)
+  ) {
+    return false;
+  }
+
+  const createdAt = Date.parse(signal.tweet_created_at);
+  const expectedStartAt = Date.parse(signal.expected_start_at ?? "");
+  const expectedEndAt = Date.parse(signal.expected_end_at ?? "");
+  if (!Number.isFinite(createdAt) || !Number.isFinite(expectedStartAt) ||
+      !Number.isFinite(expectedEndAt) || expectedEndAt <= createdAt) {
+    return false;
+  }
+
+  // The shared parser needs reset context; this neutral cue only supplies that
+  // context while it resolves the already confirmed effective expression.
+  const semantics = parseTiboTemporalSemantics(null, `Reset ${temporalExpression}`);
+  if (!semantics?.explicitTimeParts) return false;
+  const resolvedSchedule = resolveTiboTemporalSchedule(
+    semantics,
+    signal.tweet_created_at,
+    signal.temporal_timezone ?? signal.ai_temporal_timezone ?? TIBO_SOURCE_TIME_ZONE,
+  );
+  const resolvedEndAt = resolvedSchedule.expectedEndAt
+    ? Date.parse(resolvedSchedule.expectedEndAt)
+    : Number.NaN;
+  const expectedDeadlineStartAt = Math.max(
+    createdAt,
+    expectedEndAt - TIBO_RESET_DEADLINE_LEAD_WINDOW_MS,
+  );
+
+  return resolvedSchedule.status === "resolved" &&
+    resolvedSchedule.temporalPrecision === "range" &&
+    Number.isFinite(resolvedEndAt) &&
+    expectedEndAt === resolvedEndAt &&
+    expectedStartAt === expectedDeadlineStartAt;
+}
+
 function toDynamicOfficialNotice(
   signal: ActiveTiboSignal,
   options: {
@@ -278,11 +329,11 @@ function toDynamicOfficialNotice(
     consumption,
     isDeadline,
     isDeadlineStartEstimated: !hideInitialSchedule &&
-      signal.temporal_resolution_version === TIBO_TEMPORAL_DEADLINE_ESTIMATE_VERSION &&
-      isDeadline &&
-      isExplicitClockDeadlineExpression(
-        signal.temporal_expression ?? signal.ai_temporal_expression ?? signal.text,
-      ),
+      ((signal.temporal_resolution_version === TIBO_TEMPORAL_DEADLINE_ESTIMATE_VERSION &&
+        isDeadline &&
+        isExplicitClockDeadlineExpression(
+          signal.temporal_expression ?? signal.ai_temporal_expression ?? signal.text,
+        )) || isConfirmedManualDeadlineStartEstimate(signal)),
     ...(isOngoingBankedDistribution ? {
       isOngoingBankedDistribution: true,
       temporalPrecision: "unknown" as const,

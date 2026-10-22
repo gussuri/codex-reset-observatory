@@ -881,6 +881,92 @@ test("labels a clock-deadline start as an Observatory estimate in Japanese, Engl
   }
 });
 
+test("labels only a confirmed manual clock-deadline window as an estimate", () => {
+  const calculationNow = new Date("2026-10-22T10:00:00.000Z");
+  const manualNotice: ActiveTiboSignal = {
+    tweet_id: "2113162277688070445",
+    signal_type: "official_notice",
+    text: "Day 17/ Bet you thought we forgot, but no, it’s reset day today.\n\nAlso good time to remind you to get Daybreak Blue access, it only takes 15 mins and you don’t want to have to do it in the middle of an incident.",
+    tweet_url: "https://x.com/thsottiaux/status/2113162277688070445",
+    tweet_created_at: "2026-10-22T06:55:22.000Z",
+    expires_at: "2026-10-23T02:00:00.000Z",
+    confidence: 0.99,
+    verification_status: "confirmed",
+    classification_source: "manual",
+    temporal_expression: "tomorrow before 10am PST",
+    temporal_kind: "relative_day",
+    temporal_precision: "range",
+    temporal_timezone: "PST",
+    temporal_confidence: 0.99,
+    expected_start_at: "2026-10-22T15:00:00.000Z",
+    expected_end_at: "2026-10-22T18:00:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_resolution_version: "tibo-temporal-v8",
+  };
+  const getSnapshot = (notice: ActiveTiboSignal, locale: Locale = "en") => {
+    const data = getLocalRadarData({
+      calculationNow,
+      activeTiboSignals: [notice],
+    });
+    return toPublicRadarSnapshot(data, locale, { calculationNow });
+  };
+  const estimateCopy = {
+    ja: "範囲の開始時刻は、投稿時刻を下限に期限の最大3時間前までを当サイトが推定したものです。投稿が示すのは期限です。時刻はお使いの地域の時間で表示しています。",
+    en: "The range start is our estimate, up to 3 hours before the deadline and anchored at the post time. Tibo's post confirms the deadline. Times are shown in your local time.",
+    zh: "范围开始时间是本站的估算，最多提前至截止时间前3小时，并以帖子发布时间为下限。Tibo 的帖子确认的是截止时间。时刻按您所在地区的本地时间显示。",
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = getSnapshot(manualNotice, locale);
+    assert.equal(snapshot.viewModel.activeWindow.isDeadlineStartEstimated, true);
+    assert.equal(snapshot.viewModel.activeWindow.expectedAt, "2026-10-22T15:00:00.000Z");
+    assert.equal(snapshot.viewModel.activeWindow.expectedEndAt, "2026-10-22T18:00:00.000Z");
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: snapshot, locale }),
+    );
+    const visibleText = html.replace(/<[^>]*>/g, "").replace(/&#x27;/g, "'");
+    assert.ok(visibleText.includes(estimateCopy[locale]), locale);
+    assert.doesNotMatch(visibleText, /Tibo's notice date and time are shown in your local time\./);
+  }
+
+  const negativeCases: Array<[string, Partial<ActiveTiboSignal>]> = [
+    ["explicit between range", {
+      temporal_expression: "between 8am and 10am PST tomorrow",
+      expected_start_at: "2026-10-22T16:00:00.000Z",
+    }],
+    ["explicit from range", {
+      temporal_expression: "from 8am to 10am PST tomorrow",
+      expected_start_at: "2026-10-22T16:00:00.000Z",
+    }],
+    ["exact point time", {
+      temporal_expression: "tomorrow at 10am PST",
+      temporal_precision: "exact_time",
+      expected_start_at: "2026-10-22T18:00:00.000Z",
+    }],
+    ["unsupported non-deadline expression", {
+      temporal_expression: "tomorrow around 10am PST",
+    }],
+    ["unresolved schedule", {
+      temporal_resolution_status: "unresolved",
+    }],
+    ["wrong start width", {
+      expected_start_at: "2026-10-22T16:00:00.000Z",
+    }],
+    ["wrong stored end", {
+      expected_start_at: "2026-10-22T16:00:00.000Z",
+      expected_end_at: "2026-10-22T19:00:00.000Z",
+    }],
+    ["unconfirmed manual classification", {
+      verification_status: "auto_unverified",
+    }],
+  ];
+
+  for (const [label, overrides] of negativeCases) {
+    const notice = { ...manualNotice, ...overrides };
+    assert.equal(getSnapshot(notice).viewModel.activeWindow.isDeadlineStartEstimated, false, label);
+  }
+});
+
 test("publishes an EOD notice window in three locales and consumes it after the related completed reset", () => {
   const noticeId = "2109045392684032299";
   const source = `https://x.com/thsottiaux/status/${noticeId}`;
