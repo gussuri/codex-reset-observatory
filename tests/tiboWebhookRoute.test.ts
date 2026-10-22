@@ -1851,13 +1851,47 @@ test("official notice deadline resolves source midnight and expires after the de
   }
 });
 
-test("a validated self-reply supplies its own deadline and retains the actual Tibo parent context", async () => {
+const validatedSelfReplyDeadlineScenarios = [
+  {
+    name: "original three-hour estimate",
+    createdAt: deadlineReplyFixture.reply.createdAt,
+    detectedAt: "2026-10-22T06:56:00.000Z",
+    text: deadlineReplyFixture.reply.text,
+    temporalExpression: "tomorrow before 10am PST",
+    relativeDayOffset: 1,
+    hour: 10,
+    expectedStartAt: "2026-10-22T15:00:00.000Z",
+    expectedEndAt: "2026-10-22T18:00:00.000Z",
+    calculationNow: "2026-10-22T10:00:00.000Z",
+    resetAt: "2026-10-22T10:00:00.000Z",
+    completionNow: "2026-10-22T10:05:00.000Z",
+    noticeToExecution: "3 hours 4 minutes",
+  },
+  {
+    name: "short deadline clamps to reply creation",
+    createdAt: "2026-10-22T08:30:00.000Z",
+    detectedAt: "2026-10-22T08:30:30.000Z",
+    text: "Lands today before 2am PST.",
+    temporalExpression: "today before 2am PST",
+    relativeDayOffset: 0,
+    hour: 2,
+    expectedStartAt: "2026-10-22T08:30:00.000Z",
+    expectedEndAt: "2026-10-22T10:00:00.000Z",
+    calculationNow: "2026-10-22T08:40:00.000Z",
+    resetAt: "2026-10-22T09:00:00.000Z",
+    completionNow: "2026-10-22T09:05:00.000Z",
+    noticeToExecution: "30 minutes",
+  },
+] as const;
+
+for (const scenario of validatedSelfReplyDeadlineScenarios) {
+test(`a validated self-reply keeps source context through its deadline and completion (${scenario.name})`, async () => {
   const fixture = {
     ...deadlineReplyFixture,
     reply: {
       ...deadlineReplyFixture.reply,
-      createdAt: "2026-10-22T08:30:00.000Z",
-      text: "Lands today before 2am PST.",
+      createdAt: scenario.createdAt,
+      text: scenario.text,
     },
   };
   const previous = Object.fromEntries(
@@ -1959,11 +1993,11 @@ test("a validated self-reply supplies its own deadline and retains the actual Ti
     noticeTimingStatus: "known",
     contextualResetAssessment: "same_global_reset",
     contextualResetTweetId: fixture.parent.tweetId,
-    temporalExpression: "today before 2am PST",
+    temporalExpression: scenario.temporalExpression,
     temporalKind: "relative_day",
     temporalPrecision: "range",
-    relativeDayOffset: 0,
-    explicitTimeParts: { hour: 2, minute: 0 },
+    relativeDayOffset: scenario.relativeDayOffset,
+    explicitTimeParts: { hour: scenario.hour, minute: 0 },
     explicitTimezone: "PST",
     temporalConfidence: 0.95,
   };
@@ -1976,7 +2010,7 @@ test("a validated self-reply supplies its own deadline and retains the actual Ti
       text: fixture.reply.text,
       tweetUrl: fixture.reply.tweetUrl,
       tweetCreatedAt: fixture.reply.createdAt,
-      detectedAt: "2026-10-22T08:30:30.000Z",
+      detectedAt: scenario.detectedAt,
       isReply: true,
       replyToHandles: fixture.reply.replyToHandles,
       replyParentTweetId: fixture.parent.tweetId,
@@ -1993,11 +2027,11 @@ test("a validated self-reply supplies its own deadline and retains the actual Ti
     assert.equal(persisted.signal_type, "official_notice");
     assert.equal(persisted.verification_status, "auto_unverified");
     assert.equal(persisted.classification_source, "gemini");
-    assert.equal(persisted.ai_temporal_expression, "today before 2am PST");
+    assert.equal(persisted.ai_temporal_expression, scenario.temporalExpression);
     assert.equal(persisted.ai_temporal_timezone, "PST");
-    assert.equal(persisted.temporal_expression, "today before 2am PST");
-    assert.equal(persisted.expected_start_at, "2026-10-22T08:30:00.000Z");
-    assert.equal(persisted.expected_end_at, "2026-10-22T10:00:00.000Z");
+    assert.equal(persisted.temporal_expression, scenario.temporalExpression);
+    assert.equal(persisted.expected_start_at, scenario.expectedStartAt);
+    assert.equal(persisted.expected_end_at, scenario.expectedEndAt);
     assert.equal(persisted.temporal_resolution_version, "tibo-temporal-v9-deadline-start-estimate");
     assert.equal(persisted.formal_reply_admission_proof, null);
     assert.equal(persisted.ai_contextual_reset_assessment, "same_global_reset");
@@ -2021,28 +2055,28 @@ test("a validated self-reply supplies its own deadline and retains the actual Ti
     const noticeSource = fixture.reply.tweetUrl;
     const publicBeforeReset = toPublicRadarSnapshot(
       getLocalRadarData({
-        calculationNow: new Date("2026-10-22T08:40:00.000Z"),
+        calculationNow: new Date(scenario.calculationNow),
         activeTiboSignals: [savedSignal],
         recentTiboSignals: [savedSignal],
       }),
       "en",
-      { calculationNow: new Date("2026-10-22T08:40:00.000Z") },
+      { calculationNow: new Date(scenario.calculationNow) },
     );
     assert.equal(publicBeforeReset.viewModel.activeWindow.kind, "official");
-    assert.equal(publicBeforeReset.viewModel.activeWindow.expectedAt, "2026-10-22T08:30:00.000Z");
-    assert.equal(publicBeforeReset.viewModel.activeWindow.expectedEndAt, "2026-10-22T10:00:00.000Z");
+    assert.equal(publicBeforeReset.viewModel.activeWindow.expectedAt, scenario.expectedStartAt);
+    assert.equal(publicBeforeReset.viewModel.activeWindow.expectedEndAt, scenario.expectedEndAt);
     assert.equal(publicBeforeReset.viewModel.activeWindow.source, noticeSource);
 
     const publicAfterReset = toPublicRadarSnapshot(
       getLocalRadarData({
-        calculationNow: new Date("2026-10-22T09:05:00.000Z"),
+        calculationNow: new Date(scenario.completionNow),
         activeTiboSignals: [savedSignal],
         recentTiboSignals: [savedSignal],
         formalTiboResets: [{
           tweet_id: "2113163000000000000",
           text: "We reset usage limits for all Codex users.",
           tweet_url: "https://x.com/thsottiaux/status/2113163000000000000",
-          tweet_created_at: "2026-10-22T09:00:00.000Z",
+          tweet_created_at: scenario.resetAt,
           signal_type: "reset_executed",
           confidence: 0.99,
           verification_status: "confirmed",
@@ -2053,7 +2087,7 @@ test("a validated self-reply supplies its own deadline and retains the actual Ti
         }],
       }),
       "en",
-      { calculationNow: new Date("2026-10-22T09:05:00.000Z") },
+      { calculationNow: new Date(scenario.completionNow) },
     );
     assert.notEqual(publicAfterReset.viewModel.activeWindow.source, noticeSource);
     const completion = publicAfterReset.viewModel.recentHistory.find((item) =>
@@ -2062,19 +2096,20 @@ test("a validated self-reply supplies its own deadline and retains the actual Ti
     assert.ok(completion);
     assert.equal(completion.source, noticeSource);
     assert.equal(completion.details?.noticeType, "Announcement");
-    assert.equal(completion.details?.noticeToExecution, "30 minutes");
+    assert.equal(completion.details?.noticeToExecution, scenario.noticeToExecution);
 
     const geminiRequest = geminiPayloads[0] as { contents?: Array<{ parts?: Array<{ text?: string }> }> };
     const promptText = geminiRequest.contents?.flatMap((content) => content.parts ?? [])
       .map((part) => part.text ?? "").join("\n") ?? "";
     assert.match(promptText, /Day 17\/ Bet you thought we forgot/);
-    assert.match(promptText, /Lands today before 2am PST\./);
+    assert.ok(promptText.includes(fixture.reply.text));
   } finally {
     globalThis.fetch = originalFetch;
     restoreGemini();
     restoreEnvironment(previous);
   }
 });
+}
 
 test("an AI-confirmed direct reset deadline is estimated even when the rule classifier is irrelevant", async () => {
   const cases = [
