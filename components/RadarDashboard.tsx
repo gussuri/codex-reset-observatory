@@ -1064,7 +1064,12 @@ export function RadarDashboard({
                     ) : null}
                     {showTiboLocalTimeNote ? (
                       <p className="mt-2 text-base font-normal leading-6 text-slate-600">
-                        {translateUI("tiboNoticeLocalTime", locale)}
+                        {translateUI(
+                          viewModel.activeWindow.isDeadlineStartEstimated
+                            ? "tiboDeadlineEstimateLocalTime"
+                            : "tiboNoticeLocalTime",
+                          locale,
+                        )}
                       </p>
                     ) : null}
                     {viewModel.activeWindow.isOverduePending && viewModel.activeWindow.overdueText ? (

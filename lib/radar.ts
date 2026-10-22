@@ -1574,6 +1574,7 @@ function getActiveWindow(
     expectedEndAt: officialNotice.expectedEndAt,
     isDeadline: officialNotice.isDeadline,
     temporalExpression: officialNotice.text,
+    sourceStartAt: officialNotice.observedAt,
   } : null;
 
   const isOverduePending = isOverdueNoticePending(noticeResolution, latestResetAt, now);
@@ -1596,6 +1597,7 @@ function getActiveWindow(
       expectedEndAt: displayExpectedEndAt,
       expectedPrecision: displayExpectedPrecision,
       expectedTimeZone: displayExpectedTimeZone,
+      isDeadlineStartEstimated: officialNotice?.isDeadlineStartEstimated === true,
       source,
       sourceLabel: translateDynamic(officialNotice?.sourceLabel ?? "Codexに表示あり", locale),
       isOverduePending,
@@ -1617,6 +1619,7 @@ function getActiveWindow(
     expectedEndAt,
     expectedPrecision: null,
     expectedTimeZone: null,
+    isDeadlineStartEstimated: false,
     source,
     sourceLabel: null,
     isOverduePending: false,

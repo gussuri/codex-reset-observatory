@@ -10,6 +10,7 @@ import {
 import {
   getEffectiveTemporalPrecision,
   getTemporalExecutionWindowRelation,
+  hasDeadlineSemantics,
   isTemporalNoticeConsumedAtReset,
   type ResetExecutionWindow,
 } from "./tiboTemporal";
@@ -182,6 +183,14 @@ function isCurrentOfficialNotice(
         status: signal.temporal_resolution_status,
         expectedStartAt: signal.expected_start_at ?? null,
         expectedEndAt: signal.expected_end_at ?? null,
+        temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression ?? null,
+        sourceStartAt: signal.tweet_created_at,
+        isDeadline: hasDeadlineSemantics({
+          isDeadline: signal.is_deadline ?? undefined,
+          temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression,
+          expectedStartAt: signal.expected_start_at,
+          expectedEndAt: signal.expected_end_at,
+        }, signal.text),
       }
     : null;
   const temporalRelation = getTemporalExecutionWindowRelation(
@@ -210,6 +219,14 @@ function isCurrentOfficialNotice(
               }) ?? "unknown",
               expectedStartAt: signal.expected_start_at ?? null,
               expectedEndAt: signal.expected_end_at ?? null,
+              temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression ?? null,
+              sourceStartAt: signal.tweet_created_at,
+              isDeadline: hasDeadlineSemantics({
+                isDeadline: signal.is_deadline ?? undefined,
+                temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression,
+                expectedStartAt: signal.expected_start_at,
+                expectedEndAt: signal.expected_end_at,
+              }, signal.text),
             }
           : null,
         latestResetAt,
@@ -415,6 +432,7 @@ function toPublicViewModel(viewModel: ReturnType<typeof getRadarViewModel>): Pub
       expectedEndAt: viewModel.activeWindow.expectedEndAt ?? null,
       expectedPrecision: viewModel.activeWindow.expectedPrecision ?? null,
       expectedTimeZone: viewModel.activeWindow.expectedTimeZone ?? null,
+      isDeadlineStartEstimated: viewModel.activeWindow.isDeadlineStartEstimated ?? false,
       source: safeHttpUrl(viewModel.activeWindow.source),
       sourceLabel: viewModel.activeWindow.sourceLabel ?? null,
       forecastDate: viewModel.activeWindow.forecastDate,

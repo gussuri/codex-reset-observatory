@@ -293,6 +293,29 @@ test("forced recovery notice clusters exclude BANKED claims and reject a BANKED 
   );
 });
 
+test("associates an early reset with the source deadline notice before its estimated start", () => {
+  const noticeId = "2113162413008884099";
+  const notice = noticeSignal({
+    tweet_id: noticeId,
+    text: "Lands tomorrow before 10am PST.",
+    tweet_url: `https://x.com/thsottiaux/status/${noticeId}`,
+    tweet_created_at: "2026-10-22T06:55:54.000Z",
+    temporal_expression: "tomorrow before 10am PST",
+    ai_temporal_precision: "range",
+    temporal_precision: "range",
+    temporal_resolution_status: "resolved",
+    expected_start_at: "2026-10-22T15:00:00.000Z",
+    expected_end_at: "2026-10-22T18:00:00.000Z",
+  });
+  const reset = resetSignal({
+    tweet_id: "2113163000000000000",
+    tweet_created_at: "2026-10-22T10:00:00.000Z",
+  });
+
+  const related = findRelatedTiboNotices(reset, [notice]);
+  assert.deepEqual(related.map((signal) => signal.tweet_id), [noticeId]);
+});
+
 test("a confirmed Tibo teaser up to 72 hours old links while rejected, weak, stale-boundary, and older teasers do not", () => {
   const reset = resetSignal({
     tweet_id: "2107676072871600470",

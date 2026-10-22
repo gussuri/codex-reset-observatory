@@ -457,6 +457,7 @@ export type RadarViewModel = {
     expectedEndAt?: string | null;
     expectedPrecision?: TemporalPrecision | null;
     expectedTimeZone?: string | null;
+    isDeadlineStartEstimated?: boolean;
     source?: string | null;
     sourceLabel?: string | null;
     forecastDate?: string;

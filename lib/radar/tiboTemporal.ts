@@ -5,10 +5,12 @@
  * and an IANA timezone in this module.
  */
 
-export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v8";
+export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v9";
+export const TIBO_TEMPORAL_DEADLINE_ESTIMATE_VERSION = "tibo-temporal-v9-deadline-start-estimate";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
 export const TIBO_NOTICE_GRACE_MS = 8 * 60 * 60 * 1000;
 export const TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS = 3 * 60 * 60 * 1000;
+export const TIBO_RESET_DEADLINE_LEAD_WINDOW_MS = 3 * 60 * 60 * 1000;
 
 const MINUTE_MS = 60 * 1000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -88,6 +90,11 @@ export type TiboTemporalResolution = {
   isDeadline?: boolean;
 };
 
+export type TiboTemporalResolveOptions = {
+  /** Apply the Observatory's estimated lower bound to an official reset deadline. */
+  applyThreeHourDeadlineEstimate?: boolean;
+};
+
 export type ResetExecutionWindow = {
   executionWindowStartAt?: string | null;
   executionWindowEndAt?: string | null;
@@ -103,7 +110,11 @@ export function getTemporalExecutionWindowRelation(
   resolution: Pick<
     TiboTemporalResolution,
     "status" | "expectedStartAt" | "expectedEndAt"
-  > | null | undefined,
+  > & {
+    isDeadline?: boolean;
+    temporalExpression?: string | null;
+    sourceStartAt?: string | null;
+  } | null | undefined,
   executionWindow: ResetExecutionWindow | null | undefined,
   options?: {
     graceMs?: number;
@@ -114,9 +125,13 @@ export function getTemporalExecutionWindowRelation(
     return "unknown";
   }
 
-  const expectedStart = resolution.expectedStartAt
+  const displayExpectedStart = resolution.expectedStartAt
     ? Date.parse(resolution.expectedStartAt)
     : Number.NaN;
+  const sourceStart = resolution.sourceStartAt ? Date.parse(resolution.sourceStartAt) : Number.NaN;
+  const expectedStart = hasDeadlineSemantics(resolution) && Number.isFinite(sourceStart)
+    ? sourceStart
+    : displayExpectedStart;
   const expectedEnd = resolution.expectedEndAt
     ? Date.parse(resolution.expectedEndAt)
     : expectedStart;
@@ -128,6 +143,7 @@ export function getTemporalExecutionWindowRelation(
     : executionEnd;
 
   if (
+    !Number.isFinite(displayExpectedStart) ||
     !Number.isFinite(expectedStart) ||
     !Number.isFinite(expectedEnd) ||
     expectedEnd < expectedStart ||
@@ -1017,6 +1033,18 @@ export function isDeadlineTimeExpression(value: string) {
   );
 }
 
+export function isExplicitClockDeadlineExpression(value: string | null | undefined) {
+  if (!value) return false;
+  return (
+    /\b(?:by|before|until)\b[^.!?;]{0,80}?\b(?:(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:a\.?m\.?|p\.?m\.?)?|noon|midnight)\b/i.test(value) ||
+    /(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:a\.?m\.?|p\.?m\.?|時)(?:\s*\d{1,2}分)?\s*(?:までに|まで)/i.test(value)
+  );
+}
+
+function hasConflictingClockDeadlineAlternative(value: string) {
+  return /\b(?:by|before|until)\b[^.!?;]{0,80}\b(?:or|and)\b[^.!?;]{0,45}\b(?:(?:by|before|until)\s+)?(?:(?:at\s+)?(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:a\.?m\.?|p\.?m\.?)?|noon|midnight)\b/i.test(value);
+}
+
 function isDeadlineMidnightExpression(value: string) {
   return isDeadlineTimeExpression(value) && /\bmidnight\b/i.test(value);
 }
@@ -1323,6 +1351,11 @@ function isDayCountOnlyTemporalClaim(semantics: TiboTemporalSemantics, sourceTex
 }
 
 export function parseTiboTemporalSemantics(value: unknown, sourceText: string): TiboTemporalSemantics | null {
+  if (RESET_CUE_PATTERN.test(sourceText) &&
+    !NON_EXECUTION_CLOCK_CONTEXT_PATTERN.test(sourceText) &&
+    hasConflictingClockDeadlineAlternative(sourceText)) {
+    return null;
+  }
   const sourceExtraction = parseDeterministicTemporalSemantics(sourceText);
   if (sourceExtraction.rejected) return null;
 
@@ -1799,6 +1832,7 @@ export function resolveTiboTemporalSchedule(
   semantics: TiboTemporalSemantics | null,
   tweetCreatedAt: string,
   sourceTimeZone = TIBO_SOURCE_TIME_ZONE,
+  options: TiboTemporalResolveOptions = {},
 ): TiboTemporalResolution {
   if (!semantics || semantics.temporalKind === "none" || semantics.temporalKind === "vague") {
     return unresolvedTemporal(semantics);
@@ -1963,9 +1997,22 @@ export function resolveTiboTemporalSchedule(
   if (!expectedStart || !expectedEnd) {
     return unresolvedInterpretation ? unresolvedTemporal(semantics) : rejected(semantics);
   }
+  const appliesThreeHourDeadlineEstimate =
+    options.applyThreeHourDeadlineEstimate === true &&
+    resolvedIsDeadline &&
+    semantics.explicitTimeParts !== null &&
+    isExplicitClockDeadlineExpression(semantics.temporalExpression);
+  if (appliesThreeHourDeadlineEstimate) {
+    expectedStart = new Date(Math.max(
+      created.getTime(),
+      expectedEnd.getTime() - TIBO_RESET_DEADLINE_LEAD_WINDOW_MS,
+    ));
+  }
   return {
     status: "resolved",
-    version: TIBO_TEMPORAL_RESOLUTION_VERSION,
+    version: appliesThreeHourDeadlineEstimate
+      ? TIBO_TEMPORAL_DEADLINE_ESTIMATE_VERSION
+      : TIBO_TEMPORAL_RESOLUTION_VERSION,
     temporalExpression: semantics.temporalExpression,
     temporalKind: semantics.temporalKind,
     temporalPrecision: precision,
@@ -2166,6 +2213,7 @@ export function isTemporalNoticeConsumedAtReset(
   > & {
     isDeadline?: boolean;
     temporalExpression?: string | null;
+    sourceStartAt?: string | null;
   }) | null | undefined,
   resetAt: string | Date | null | undefined,
 ) {
@@ -2181,11 +2229,15 @@ export function isTemporalNoticeConsumedAtReset(
     return true;
   }
 
-  const expectedStart = Date.parse(resolution.expectedStartAt);
-  const expectedEnd = resolution.expectedEndAt ? Date.parse(resolution.expectedEndAt) : expectedStart;
-  if (!Number.isFinite(expectedEnd)) return false;
+  const displayExpectedStart = Date.parse(resolution.expectedStartAt);
+  const expectedEnd = resolution.expectedEndAt ? Date.parse(resolution.expectedEndAt) : displayExpectedStart;
+  if (!Number.isFinite(displayExpectedStart) || !Number.isFinite(expectedEnd)) return false;
 
   const isDeadline = hasDeadlineSemantics(resolution);
+  const sourceStart = resolution.sourceStartAt ? Date.parse(resolution.sourceStartAt) : Number.NaN;
+  const expectedStart = isDeadline && Number.isFinite(sourceStart)
+    ? sourceStart
+    : displayExpectedStart;
 
   if (isDeadline) {
     if (resetTime < expectedStart) return false;

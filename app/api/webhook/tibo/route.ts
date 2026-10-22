@@ -936,11 +936,50 @@ async function handleTiboWebhookPost(
     const temporalSemantics = hasForwardTimingSignal
       ? parseTiboTemporalSemantics(aiResult, text)
       : null;
+    const evidenceTarget = tiboEvidenceContext?.target;
+    const evidenceReplyParent = replyMetadata.replyParentTweetId
+      ? tiboEvidenceContext?.relatedPosts.find((post) => post.tweetId === replyMetadata.replyParentTweetId)
+      : undefined;
+    const hasVerifiedSameResetReplyContext = Boolean(
+      effectiveClassification.signalType === "official_notice" &&
+      contextSafetyDecision === null &&
+      replyMetadata.isReply === true &&
+      replyMetadata.isQuote !== true &&
+      aiResult?.signalType === "official_notice" &&
+      aiResult.temporalDirection === "future" &&
+      aiResult.contextualResetAssessment === "same_global_reset" &&
+      typeof aiResult.contextualResetTweetId === "string" &&
+      aiResult.contextualResetTweetId === replyMetadata.replyParentTweetId &&
+      typeof aiResult.evidenceQuote === "string" &&
+      aiResult.evidenceQuote.length > 0 &&
+      text.includes(aiResult.evidenceQuote) &&
+      replyMetadata.replyToHandles?.some((handle) => handle.toLowerCase() === "@thsottiaux") &&
+      tiboEvidenceContext?.status === "complete" &&
+      tiboEvidenceContext.omissions.length === 0 &&
+      evidenceTarget?.tweetId === tweetId &&
+      evidenceTarget.authorHandle.toLowerCase() === "@thsottiaux" &&
+      evidenceTarget.text.trim() === text.trim() &&
+      Date.parse(evidenceTarget.createdAt) === createdDate.getTime() &&
+      evidenceReplyParent?.authorHandle.toLowerCase() === "@thsottiaux" &&
+      evidenceReplyParent.text === replyMetadata.replyContextText &&
+      Date.parse(evidenceReplyParent.createdAt) <= createdDate.getTime() &&
+      tiboEvidenceContext.edges.filter((edge) =>
+        edge.fromTweetId === tweetId &&
+        edge.toTweetId === replyMetadata.replyParentTweetId &&
+        edge.relation === "reply",
+      ).length === 1
+    );
+    const hasSourceGroundedResetContext =
+      ruleResult.signalType === "official_notice" || hasVerifiedSameResetReplyContext;
     const temporalResolution = hasForwardTimingSignal
       ? resolveTiboTemporalSchedule(
           temporalSemantics,
           createdDate.toISOString(),
           TIBO_SOURCE_TIME_ZONE,
+          {
+            applyThreeHourDeadlineEstimate:
+              effectiveClassification.signalType === "official_notice" && hasSourceGroundedResetContext,
+          },
         )
       : null;
 

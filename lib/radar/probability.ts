@@ -61,7 +61,9 @@ import {
   getEffectiveTemporalPrecision,
   getTemporalExecutionWindowRelation,
   hasDeadlineSemantics,
+  isExplicitClockDeadlineExpression,
   isTemporalNoticeConsumedAtReset,
+  TIBO_TEMPORAL_DEADLINE_ESTIMATE_VERSION,
   TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS,
   TIBO_NOTICE_GRACE_MS,
   type ResetExecutionWindow,
@@ -109,6 +111,7 @@ export type ActiveOfficialNotice = {
   temporalResolutionStatus?: TemporalResolutionStatus | null;
   temporalTimezone?: string | null;
   isDeadline?: boolean;
+  isDeadlineStartEstimated?: boolean;
 };
 
 export function getProbabilityEligibleOfficialNotice(
@@ -202,12 +205,25 @@ function getSignalTemporalWindow(signal: {
   temporal_resolution_status?: string | null;
   expected_start_at?: string | null;
   expected_end_at?: string | null;
+  tweet_created_at?: string | null;
+  temporal_expression?: string | null;
+  ai_temporal_expression?: string | null;
+  text?: string | null;
+  is_deadline?: boolean | null;
 }) {
   return signal.temporal_resolution_status === "resolved"
     ? {
         status: "resolved" as const,
         expectedStartAt: signal.expected_start_at ?? null,
         expectedEndAt: signal.expected_end_at ?? null,
+        temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression ?? null,
+        sourceStartAt: signal.tweet_created_at ?? null,
+        isDeadline: hasDeadlineSemantics({
+          isDeadline: signal.is_deadline ?? undefined,
+          temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression,
+          expectedStartAt: signal.expected_start_at,
+          expectedEndAt: signal.expected_end_at,
+        }, signal.text),
       }
     : null;
 }
@@ -261,6 +277,12 @@ function toDynamicOfficialNotice(
     isBankedDistribution: isBankedDistributionNotice(signal.text),
     consumption,
     isDeadline,
+    isDeadlineStartEstimated: !hideInitialSchedule &&
+      signal.temporal_resolution_version === TIBO_TEMPORAL_DEADLINE_ESTIMATE_VERSION &&
+      isDeadline &&
+      isExplicitClockDeadlineExpression(
+        signal.temporal_expression ?? signal.ai_temporal_expression ?? signal.text,
+      ),
     ...(isOngoingBankedDistribution ? {
       isOngoingBankedDistribution: true,
       temporalPrecision: "unknown" as const,
@@ -1271,15 +1293,14 @@ export function getActiveOfficialNotice(
                       }) ?? "unknown",
                       expectedStartAt: signal.expected_start_at ?? null,
                       expectedEndAt: signal.expected_end_at ?? null,
-                      isDeadline: hasDeadlineSemantics(
-                        {
-                          isDeadline: signal.is_deadline ?? undefined,
-                          temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression,
-                          expectedStartAt: signal.expected_start_at,
-                          expectedEndAt: signal.expected_end_at,
-                        },
-                        signal.text,
-                      ),
+                      temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression ?? null,
+                      sourceStartAt: signal.tweet_created_at,
+                      isDeadline: hasDeadlineSemantics({
+                        isDeadline: signal.is_deadline ?? undefined,
+                        temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression,
+                        expectedStartAt: signal.expected_start_at,
+                        expectedEndAt: signal.expected_end_at,
+                      }, signal.text),
                     }
                   : null,
                 latestBoundaryTime === null ? null : new Date(latestBoundaryTime),

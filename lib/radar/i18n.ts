@@ -437,6 +437,11 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Tibo's notice date and time are shown in your local time.",
     zh: "Tibo 的预告日期和时间会转换为您所在地区的本地时间显示。",
   },
+  tiboDeadlineEstimateLocalTime: {
+    ja: "範囲の開始時刻は、投稿時刻を下限に期限の最大3時間前までを当サイトが推定したものです。投稿が示すのは期限です。時刻はお使いの地域の時間で表示しています。",
+    en: "The range start is our estimate, up to 3 hours before the deadline and anchored at the post time. Tibo's post confirms the deadline. Times are shown in your local time.",
+    zh: "范围开始时间是本站的估算，最多提前至截止时间前3小时，并以帖子发布时间为下限。Tibo 的帖子确认的是截止时间。时刻按您所在地区的本地时间显示。",
+  },
   source: {
     ja: "ソース",
     en: "Source",

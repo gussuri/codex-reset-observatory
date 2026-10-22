@@ -25,7 +25,11 @@ import {
   isExcludedResetEventKey,
   isExcludedRecoveryObservationId,
 } from "@/data/resetHistory";
-import { getEffectiveTemporalPrecision, isTemporalNoticeConsumedAtReset } from "./tiboTemporal";
+import {
+  getEffectiveTemporalPrecision,
+  hasDeadlineSemantics,
+  isTemporalNoticeConsumedAtReset,
+} from "./tiboTemporal";
 import {
   inferResetCycleType,
   hasExplicitResetReasonEvidence,
@@ -710,6 +714,13 @@ export function findRelatedTiboNotices(
             }) ?? "unknown",
             expectedStartAt: signal.expected_start_at ?? null,
             expectedEndAt: signal.expected_end_at ?? null,
+            temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression ?? null,
+            sourceStartAt: signal.tweet_created_at,
+            isDeadline: hasDeadlineSemantics({
+              temporalExpression: signal.temporal_expression ?? signal.ai_temporal_expression,
+              expectedStartAt: signal.expected_start_at,
+              expectedEndAt: signal.expected_end_at,
+            }, signal.text),
           },
           resetSignal.tweet_created_at,
         )

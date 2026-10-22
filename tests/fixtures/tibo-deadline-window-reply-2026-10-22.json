@@ -1,0 +1,17 @@
+{
+  "fixtureId": "tibo-deadline-window-reply-2026-10-22",
+  "sourceTimeZone": "America/Los_Angeles",
+  "parent": {
+    "tweetId": "2113162277688070445",
+    "tweetUrl": "https://x.com/thsottiaux/status/2113162277688070445",
+    "createdAt": "2026-10-22T06:55:22.000Z",
+    "text": "Day 17/ Bet you thought we forgot, but no, it’s reset day today.\n\nAlso good time to remind you to get Daybreak Blue access, it only takes 15 mins and you don’t want to have to do it in the middle of an incident."
+  },
+  "reply": {
+    "tweetId": "2113162413008884099",
+    "tweetUrl": "https://x.com/thsottiaux/status/2113162413008884099",
+    "createdAt": "2026-10-22T06:55:54.000Z",
+    "text": "Lands tomorrow before 10am PST.",
+    "replyToHandles": ["@thsottiaux"]
+  }
+}
