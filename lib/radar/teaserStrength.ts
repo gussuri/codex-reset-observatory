@@ -7,6 +7,7 @@ import {
 import { isTiboForecastSignalTerminatedAt } from "./officialNoticePolicy";
 import { isTiboHandle } from "./tiboHandle";
 import { isTiboUnscheduledOfficialNoticeEligible } from "./tiboNoticeEligibility";
+import { isVerifiedTiboFutureReplyNotice } from "./tiboFutureReplyNotice";
 
 export const TIBO_TEASER_STRENGTHS = ["strong", "weak", "none"] as const;
 
@@ -53,11 +54,14 @@ export type ResetTeaserSignal = {
   ai_teaser_strength?: TeaserStrength | null;
   signal_type?: string | null;
   confidence?: number | null;
+  ai_confidence?: number | null;
   classification_source?: string | null;
   ai_signal_type?: string | null;
   ai_classification_status?: string | null;
   ai_temporal_direction?: string | null;
   ai_notice_timing_status?: string | null;
+  ai_contextual_reset_assessment?: string | null;
+  ai_contextual_reset_tweet_id?: string | null;
   ai_evidence_quote?: string | null;
   ai_notice_to_execution?: string | null;
   ai_temporal_expression?: string | null;
@@ -69,6 +73,11 @@ export type ResetTeaserSignal = {
   verification_status?: string | null;
   is_reply?: boolean | null;
   reply_context_text?: string | null;
+  reply_to_handles?: string[] | null;
+  source_context_snapshot?: unknown;
+  source_context_revision_hashes?: string[] | null;
+  source_context_classified_revision_hashes?: string[] | null;
+  source_context_generation?: number | null;
   is_quote?: boolean | null;
   quote_context_text?: string | null;
   quote_author_handle?: string | null;
@@ -79,6 +88,7 @@ export type ResetTeaserSignal = {
   expected_start_at?: string | null;
   expected_end_at?: string | null;
   temporal_resolution_status?: "resolved" | "unresolved" | "rejected" | null;
+  temporal_resolution_version?: string | null;
   secondary_signal?: TiboSecondarySignal | null;
   is_secondary_future_signal?: boolean;
   primary_event_at?: string;
@@ -250,7 +260,9 @@ function isOfficialNoticeEligible(signal: ResetTeaserSignal) {
 
   const manuallyVerifiedReply = signal.verification_status === "confirmed" &&
     signal.classification_source === "manual";
-  return manuallyVerifiedReply || hasExplicitAutomaticOfficialReplyEvidence(signal);
+  return manuallyVerifiedReply ||
+    hasExplicitAutomaticOfficialReplyEvidence(signal) ||
+    isVerifiedTiboFutureReplyNotice(signal);
 }
 
 function hasResetContext(signal: ResetTeaserSignal) {

@@ -18,6 +18,7 @@ import {
 import {
   combineResetHistory,
   convertTiboResetSignalToHistoryEvent,
+  collectOfficialTiboNoticeSignals,
   findRelatedTiboNoticeCluster,
   findRelatedTiboNotices,
   findRelatedTiboNotice,
@@ -106,6 +107,58 @@ function noticeSignal(overrides: Partial<TiboNoticeSignal> = {}): TiboNoticeSign
     verification_status: "auto_unverified",
     ...overrides,
   };
+}
+
+function verifiedDeadlineReplyNotice(overrides: Partial<TiboNoticeSignal> = {}): TiboNoticeSignal {
+  const parentId = "2113162277688070445";
+  const tweetId = "2113162413008884099";
+  const revision = "a".repeat(64);
+  const parentText = "Day 17/ Bet you thought we forgot, but no, it’s reset day today.";
+  const text = "Lands tomorrow before 10am PST.";
+  return noticeSignal({
+    tweet_id: tweetId,
+    text,
+    tweet_url: `https://x.com/thsottiaux/status/${tweetId}`,
+    tweet_created_at: "2026-10-22T06:55:54.000Z",
+    signal_type: "official_notice",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    ai_signal_type: "official_notice",
+    ai_confidence: 0.98,
+    ai_classification_status: "success",
+    ai_temporal_direction: "future",
+    ai_notice_timing_status: "known",
+    ai_evidence_quote: text,
+    ai_temporal_expression: "tomorrow before 10am PST",
+    ai_temporal_precision: "range",
+    ai_temporal_timezone: "PST",
+    ai_contextual_reset_assessment: "same_global_reset",
+    ai_contextual_reset_tweet_id: parentId,
+    is_reply: true,
+    is_quote: false,
+    reply_to_handles: ["@thsottiaux"],
+    reply_context_text: parentText,
+    source_context_snapshot: {
+      parent: {
+        tweetId: parentId,
+        tweetUrl: `https://x.com/thsottiaux/status/${parentId}`,
+        authorHandle: "@thsottiaux",
+        text: parentText,
+      },
+    },
+    source_context_revision_hashes: [revision],
+    source_context_classified_revision_hashes: [revision],
+    source_context_generation: 1,
+    temporal_expression: "tomorrow before 10am PST",
+    temporal_precision: "range",
+    temporal_timezone: "PST",
+    temporal_resolution_status: "resolved",
+    temporal_resolution_version: "tibo-temporal-v9-deadline-start-estimate",
+    expected_start_at: "2026-10-22T15:00:00.000Z",
+    expected_end_at: "2026-10-22T18:00:00.000Z",
+    ...overrides,
+  });
 }
 
 test("Gemini reset_executed is eligible for formal history", () => {
@@ -294,26 +347,69 @@ test("forced recovery notice clusters exclude BANKED claims and reject a BANKED 
 });
 
 test("associates an early reset with the source deadline notice before its estimated start", () => {
-  const noticeId = "2113162413008884099";
-  const notice = noticeSignal({
-    tweet_id: noticeId,
-    text: "Lands tomorrow before 10am PST.",
-    tweet_url: `https://x.com/thsottiaux/status/${noticeId}`,
-    tweet_created_at: "2026-10-22T06:55:54.000Z",
-    temporal_expression: "tomorrow before 10am PST",
-    ai_temporal_precision: "range",
-    temporal_precision: "range",
-    temporal_resolution_status: "resolved",
-    expected_start_at: "2026-10-22T15:00:00.000Z",
-    expected_end_at: "2026-10-22T18:00:00.000Z",
-  });
+  const notice = verifiedDeadlineReplyNotice();
+  const noticeId = notice.tweet_id;
   const reset = resetSignal({
     tweet_id: "2113163000000000000",
     tweet_created_at: "2026-10-22T10:00:00.000Z",
   });
 
-  const related = findRelatedTiboNotices(reset, [notice]);
+  const collected = collectOfficialTiboNoticeSignals([notice]);
+  assert.deepEqual(collected.map((signal) => signal.tweet_id), [noticeId]);
+  const related = findRelatedTiboNotices(reset, collected);
   assert.deepEqual(related.map((signal) => signal.tweet_id), [noticeId]);
+
+  const event = convertTiboResetSignalToHistoryEvent(reset, related[0], undefined, related);
+  assert.equal(event.id, `tibo-reset-${reset.tweet_id}`);
+  assert.equal(event.officialNoticeTweetId, noticeId);
+  assert.deepEqual(event.sourceTweetIds, [noticeId, reset.tweet_id]);
+});
+
+test("history notice collection rejects future replies with stale or foreign source context", () => {
+  const trusted = verifiedDeadlineReplyNotice();
+  const staleRevision = verifiedDeadlineReplyNotice({
+    tweet_id: "2113162413008884100",
+    tweet_url: "https://x.com/thsottiaux/status/2113162413008884100",
+    source_context_classified_revision_hashes: ["b".repeat(64)],
+  });
+  const thirdPartyParent = verifiedDeadlineReplyNotice({
+    tweet_id: "2113162413008884101",
+    tweet_url: "https://x.com/thsottiaux/status/2113162413008884101",
+    reply_to_handles: ["@thirdparty"],
+    reply_context_text: "A third party's unrelated post.",
+    ai_contextual_reset_tweet_id: "2113162277688070411",
+    source_context_snapshot: {
+      parent: {
+        tweetId: "2113162277688070411",
+        tweetUrl: "https://x.com/thirdparty/status/2113162277688070411",
+        authorHandle: "@thirdparty",
+        text: "A third party's unrelated post.",
+      },
+    },
+  });
+
+  assert.deepEqual(
+    collectOfficialTiboNoticeSignals([trusted, staleRevision, thirdPartyParent]).map((signal) => signal.tweet_id),
+    [trusted.tweet_id],
+  );
+
+  const reset = resetSignal({
+    tweet_id: "2113163000000000000",
+    tweet_created_at: "2026-10-22T10:00:00.000Z",
+  });
+  assert.deepEqual(findRelatedTiboNotices(reset, [staleRevision]), []);
+  assert.deepEqual(
+    findRelatedTiboNoticeCluster([thirdPartyParent], thirdPartyParent.tweet_id, reset.tweet_created_at),
+    [],
+  );
+  const untrustedDirectEvent = convertTiboResetSignalToHistoryEvent(
+    reset,
+    thirdPartyParent,
+    undefined,
+    [thirdPartyParent],
+  );
+  assert.equal(untrustedDirectEvent.officialNoticeTweetId, undefined);
+  assert.deepEqual(untrustedDirectEvent.sourceTweetIds, [reset.tweet_id]);
 });
 
 test("a confirmed Tibo teaser up to 72 hours old links while rejected, weak, stale-boundary, and older teasers do not", () => {
