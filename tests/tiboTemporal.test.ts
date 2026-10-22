@@ -37,7 +37,7 @@ function semantics(overrides: Record<string, unknown> = {}) {
 }
 
 test("uses the current temporal resolver version for new resolutions", () => {
-  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v8");
+  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v9");
 });
 
 test("resolves the Monday sample in Pacific Time without assuming Monday midnight UTC", () => {
@@ -135,6 +135,165 @@ test("resolves a same-day absolute deadline from the tweet instant without infer
   assert.equal(pastDeadline.status, "unresolved");
   assert.equal(pastDeadline.expectedStartAt, null);
   assert.equal(pastDeadline.expectedEndAt, null);
+});
+
+test("uses a three-hour site estimate for explicit clock deadlines when enabled and clamps to the post time", () => {
+  const replyDeadline = semantics({
+    temporalExpression: "tomorrow before 10am PST",
+    temporalKind: "relative_day",
+    temporalPrecision: "range",
+    weekday: null,
+    relativeDayOffset: 1,
+    explicitTimeParts: { hour: 10, minute: 0 },
+    explicitTimezone: "PST",
+  }) as never;
+  const createdAt = "2026-10-22T06:55:54.000Z";
+  const sourceOnly = resolveTiboTemporalSchedule(replyDeadline, createdAt, TIBO_SOURCE_TIME_ZONE);
+  const estimated = resolveTiboTemporalSchedule(replyDeadline, createdAt, TIBO_SOURCE_TIME_ZONE, {
+    applyThreeHourDeadlineEstimate: true,
+  });
+
+  assert.equal(sourceOnly.expectedStartAt, createdAt);
+  assert.equal(estimated.expectedStartAt, "2026-10-22T15:00:00.000Z");
+  assert.equal(estimated.expectedEndAt, "2026-10-22T18:00:00.000Z");
+  assert.equal(estimated.isDeadline, true);
+
+  const shortNotice = resolveTiboTemporalSchedule(
+    semantics({
+      temporalExpression: "by 10am PST today",
+      temporalKind: "relative_day",
+      temporalPrecision: "range",
+      weekday: null,
+      relativeDayOffset: 0,
+      explicitTimeParts: { hour: 10, minute: 0 },
+      explicitTimezone: "PST",
+    }) as never,
+    "2026-10-22T16:30:00.000Z",
+    TIBO_SOURCE_TIME_ZONE,
+    { applyThreeHourDeadlineEstimate: true },
+  );
+  assert.equal(shortNotice.expectedStartAt, "2026-10-22T16:30:00.000Z");
+  assert.equal(shortNotice.expectedEndAt, "2026-10-22T18:00:00.000Z");
+});
+
+test("keeps deadline estimates anchored to source dates across timezone aliases and offsets", () => {
+  const cases = [
+    {
+      timezone: "PST",
+      createdAt: "2026-10-22T06:55:54.000Z",
+      deadlineAt: "2026-10-22T18:00:00.000Z",
+      startAt: "2026-10-22T15:00:00.000Z",
+    },
+    {
+      timezone: "PDT",
+      createdAt: "2026-10-22T06:55:54.000Z",
+      deadlineAt: "2026-10-22T17:00:00.000Z",
+      startAt: "2026-10-22T14:00:00.000Z",
+    },
+    {
+      timezone: "PT",
+      createdAt: "2026-10-22T06:55:54.000Z",
+      deadlineAt: "2026-10-22T17:00:00.000Z",
+      startAt: "2026-10-22T14:00:00.000Z",
+    },
+    {
+      timezone: "UTC+05:45",
+      createdAt: "2026-10-22T08:55:54.000Z",
+      deadlineAt: "2026-10-23T04:15:00.000Z",
+      startAt: "2026-10-23T01:15:00.000Z",
+    },
+  ];
+
+  for (const fixture of cases) {
+    const result = resolveTiboTemporalSchedule(
+      semantics({
+        temporalExpression: `tomorrow before 10am ${fixture.timezone}`,
+        temporalKind: "relative_day",
+        temporalPrecision: "range",
+        weekday: null,
+        relativeDayOffset: 1,
+        explicitTimeParts: { hour: 10, minute: 0 },
+        explicitTimezone: fixture.timezone,
+      }) as never,
+      fixture.createdAt,
+      TIBO_SOURCE_TIME_ZONE,
+      { applyThreeHourDeadlineEstimate: true },
+    );
+
+    assert.equal(result.status, "resolved", fixture.timezone);
+    assert.equal(result.expectedStartAt, fixture.startAt, fixture.timezone);
+    assert.equal(result.expectedEndAt, fixture.deadlineAt, fixture.timezone);
+  }
+});
+
+test("leaves exact times, explicit ranges, within windows, and non-clock deadlines unchanged", () => {
+  const resolveWithEstimate = (value: Record<string, unknown>) => resolveTiboTemporalSchedule(
+    semantics(value) as never,
+    "2026-10-22T06:55:54.000Z",
+    TIBO_SOURCE_TIME_ZONE,
+    { applyThreeHourDeadlineEstimate: true },
+  );
+  const resolveWithoutEstimate = (value: Record<string, unknown>) => resolveTiboTemporalSchedule(
+    semantics(value) as never,
+    "2026-10-22T06:55:54.000Z",
+  );
+
+  const exactTime = {
+    temporalExpression: "tomorrow at 10am PST",
+    temporalKind: "relative_day",
+    temporalPrecision: "exact_time",
+    weekday: null,
+    relativeDayOffset: 1,
+    explicitTimeParts: { hour: 10, minute: 0 },
+    explicitTimezone: "PST",
+  };
+  assert.deepEqual(resolveWithEstimate(exactTime), resolveWithoutEstimate(exactTime));
+
+  const explicitRange = {
+    temporalExpression: "between 8am and 10am PST tomorrow",
+    temporalKind: "relative_day",
+    temporalPrecision: "range",
+    weekday: null,
+    relativeDayOffset: 1,
+    explicitTimeParts: { hour: 10, minute: 0 },
+    explicitTimezone: "PST",
+  };
+  assert.deepEqual(resolveWithEstimate(explicitRange), resolveWithoutEstimate(explicitRange));
+
+  const within = {
+    temporalExpression: "within the next 3 hours",
+    temporalKind: "relative_duration",
+    temporalPrecision: "window",
+    weekday: null,
+    relativeAmount: 3,
+    relativeUnit: "hours",
+    explicitTimeParts: null,
+  };
+  assert.deepEqual(resolveWithEstimate(within), resolveWithoutEstimate(within));
+
+  const endOfDay = parseTiboTemporalSemantics(null, "Global reset by EOD.");
+  assert.ok(endOfDay);
+  assert.deepEqual(
+    resolveTiboTemporalSchedule(endOfDay, "2026-10-22T06:55:54.000Z", TIBO_SOURCE_TIME_ZONE, {
+      applyThreeHourDeadlineEstimate: true,
+    }),
+    resolveTiboTemporalSchedule(endOfDay, "2026-10-22T06:55:54.000Z", TIBO_SOURCE_TIME_ZONE),
+  );
+
+  const conflict = parseTiboTemporalSemantics(null, "A reset lands by 10am or by noon tomorrow.");
+  assert.equal(conflict, null);
+  const invalidZone = resolveWithEstimate({
+    temporalExpression: "tomorrow before 10am Mars/Olympus",
+    temporalKind: "relative_day",
+    temporalPrecision: "range",
+    weekday: null,
+    relativeDayOffset: 1,
+    explicitTimeParts: { hour: 10, minute: 0 },
+    explicitTimezone: "Mars/Olympus",
+  });
+  assert.equal(invalidZone.status, "unresolved");
+  assert.equal(invalidZone.expectedStartAt, null);
+  assert.equal(invalidZone.expectedEndAt, null);
 });
 
 test("resolves named noon and midnight clocks with deadline semantics", () => {
@@ -1358,6 +1517,41 @@ test("classifies reset and forecast windows by semantic relation", () => {
   assert.equal(
     getTemporalExecutionWindowRelation(resolution, null),
     "unknown",
+  );
+});
+
+test("matches a deadline execution from the post time even when it precedes the estimated display start", () => {
+  const deadlineResolution = {
+    status: "resolved" as const,
+    temporalPrecision: "range" as const,
+    temporalExpression: "tomorrow before 10am PST",
+    isDeadline: true,
+    sourceStartAt: "2026-10-22T06:55:54.000Z",
+    expectedStartAt: "2026-10-22T15:00:00.000Z",
+    expectedEndAt: "2026-10-22T18:00:00.000Z",
+  };
+
+  assert.equal(
+    getTemporalExecutionWindowRelation(deadlineResolution, {
+      executionWindowStartAt: "2026-10-22T12:00:00.000Z",
+      executionWindowEndAt: "2026-10-22T12:20:00.000Z",
+    }),
+    "overlap",
+  );
+  assert.equal(
+    getTemporalExecutionWindowRelation(deadlineResolution, {
+      executionWindowStartAt: "2026-10-22T18:30:00.000Z",
+      executionWindowEndAt: "2026-10-22T18:40:00.000Z",
+    }),
+    "after",
+  );
+  assert.equal(
+    isTemporalNoticeConsumedAtReset(deadlineResolution, "2026-10-22T12:00:00.000Z"),
+    true,
+  );
+  assert.equal(
+    isTemporalNoticeConsumedAtReset(deadlineResolution, "2026-10-22T06:00:00.000Z"),
+    false,
   );
 });
 

@@ -835,6 +835,52 @@ test("shows a resolved notice window with only the viewer-local schedule and sou
   assert.doesNotMatch(zhHtml, /太平洋时间|按查看者当地时间换算/);
 });
 
+test("labels a clock-deadline start as an Observatory estimate in Japanese, English, and Chinese", () => {
+  const openedAt = "2026-10-22T06:55:54.000Z";
+  const data = getLocalRadarData({
+    calculationNow: new Date("2026-10-22T10:00:00.000Z"),
+    activeTiboSignals: [{
+      tweet_id: "2113162413008884099",
+      signal_type: "official_notice",
+      text: "Lands tomorrow before 10am PST.",
+      tweet_url: "https://x.com/thsottiaux/status/2113162413008884099",
+      tweet_created_at: openedAt,
+      expires_at: "2026-10-23T02:00:00.000Z",
+      confidence: 0.95,
+      verification_status: "auto_unverified",
+      temporal_expression: "tomorrow before 10am PST",
+      temporal_kind: "relative_day",
+      temporal_precision: "range",
+      temporal_timezone: "PST",
+      temporal_confidence: 0.95,
+      expected_start_at: "2026-10-22T15:00:00.000Z",
+      expected_end_at: "2026-10-22T18:00:00.000Z",
+      temporal_resolution_status: "resolved",
+      temporal_resolution_version: "tibo-temporal-v9-deadline-start-estimate",
+    }],
+  });
+  const estimateCopy = {
+    ja: "範囲の開始時刻は、投稿時刻を下限に期限の最大3時間前までを当サイトが推定したものです。投稿が示すのは期限です。時刻はお使いの地域の時間で表示しています。",
+    en: "The range start is our estimate, up to 3 hours before the deadline and anchored at the post time. Tibo's post confirms the deadline. Times are shown in your local time.",
+    zh: "范围开始时间是本站的估算，最多提前至截止时间前3小时，并以帖子发布时间为下限。Tibo 的帖子确认的是截止时间。时刻按您所在地区的本地时间显示。",
+  } as const;
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const snapshot = toPublicRadarSnapshot(data, locale, {
+      calculationNow: new Date("2026-10-22T10:00:00.000Z"),
+    });
+    assert.equal(snapshot.viewModel.activeWindow.isDeadlineStartEstimated, true);
+    const html = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: snapshot, locale }),
+    );
+    const visibleText = html.replace(/<[^>]*>/g, "").replace(/&#x27;/g, "'");
+    assert.equal(snapshot.viewModel.activeWindow.expectedAt, "2026-10-22T15:00:00.000Z");
+    assert.equal(snapshot.viewModel.activeWindow.expectedEndAt, "2026-10-22T18:00:00.000Z");
+    assert.ok(visibleText.includes(estimateCopy[locale]), locale);
+    assert.doesNotMatch(visibleText, /Tibo's notice date and time are shown in your local time\./);
+  }
+});
+
 test("publishes an EOD notice window in three locales and consumes it after the related completed reset", () => {
   const noticeId = "2109045392684032299";
   const source = `https://x.com/thsottiaux/status/${noticeId}`;

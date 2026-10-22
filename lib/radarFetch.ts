@@ -100,9 +100,8 @@ export const ACTIVE_TIBO_SIGNAL_TYPES: ActiveTiboSignal["signal_type"][] = [
 ];
 const TIBO_CACHE_BUCKET_MS = 60 * 1000;
 
-// Keep the active query explicit. These are the persisted columns consumed by
-// the read-side projection and public/probability paths; database-only audit
-// columns are intentionally not transferred on every radar fetch.
+// Keep the active query explicit. It includes the bounded source-context
+// audit needed to validate future reply notices on the read side.
 export const ACTIVE_TIBO_SIGNAL_SELECT_FIELDS = [
   "tweet_id",
   "signal_type",
@@ -113,6 +112,7 @@ export const ACTIVE_TIBO_SIGNAL_SELECT_FIELDS = [
   "expires_at",
   "verification_status",
   "confidence",
+  "ai_confidence",
   "classification_reason",
   "classification_source",
   "is_reply",
@@ -121,6 +121,8 @@ export const ACTIVE_TIBO_SIGNAL_SELECT_FIELDS = [
   "ai_signal_type",
   "ai_temporal_direction",
   "ai_notice_timing_status",
+  "ai_contextual_reset_assessment",
+  "ai_contextual_reset_tweet_id",
   "ai_evidence_quote",
   "ai_reason_ja",
   "ai_reset_type_ja",
@@ -145,6 +147,10 @@ export const ACTIVE_TIBO_SIGNAL_SELECT_FIELDS = [
   "expected_end_at",
   "temporal_resolution_status",
   "temporal_resolution_version",
+  "source_context_snapshot",
+  "source_context_revision_hashes",
+  "source_context_classified_revision_hashes",
+  "source_context_generation",
   "quote_context_text",
   "quote_tweet_url",
   "quote_author_handle",
@@ -249,11 +255,6 @@ export const TIBO_HISTORY_PAGE_SIZE = 1000;
 export const TIBO_RECENT_MAX_ROWS = 20;
 export const TIBO_RECENT_SELECT_FIELDS = [
   ...ACTIVE_TIBO_SIGNAL_SELECT_FIELDS.split(","),
-  "ai_confidence",
-  "ai_evidence_quote",
-  "source_context_revision_hashes",
-  "source_context_classified_revision_hashes",
-  "source_context_generation",
   "formal_reply_admission_proof",
 ].join(",");
 export const TIMED_TIBO_SIGNAL_MAX_ROWS = 40;

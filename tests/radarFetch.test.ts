@@ -625,6 +625,14 @@ test("Tibo radar queries use explicit field lists instead of wildcard reads", ()
     "codex_operational_evidence_quote",
     "codex_operational_reason_ja",
     "codex_operational_expires_at",
+    "ai_confidence",
+    "ai_contextual_reset_assessment",
+    "ai_contextual_reset_tweet_id",
+    "source_context_snapshot",
+    "source_context_revision_hashes",
+    "source_context_classified_revision_hashes",
+    "source_context_generation",
+    "temporal_resolution_version",
   ]) {
     assert.match(ACTIVE_TIBO_SIGNAL_SELECT_FIELDS, new RegExp(`(^|,)${column}(,|$)`));
     assert.match(TIBO_RECENT_SELECT_FIELDS, new RegExp(`(^|,)${column}(,|$)`));

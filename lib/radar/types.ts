@@ -203,6 +203,7 @@ export type ActiveTiboSignal = TiboEditIdentityFields & {
   expires_at?: string;
   verification_status?: "auto_unverified" | "confirmed" | "rejected";
   confidence?: number;
+  ai_confidence?: number | null;
   classification_reason?: string;
   classification_source?: string | null;
   teaser_strength?: TeaserStrength | null;
@@ -217,6 +218,8 @@ export type ActiveTiboSignal = TiboEditIdentityFields & {
   ai_temporal_kind?: TemporalKind | null;
   ai_temporal_direction?: string | null;
   ai_notice_timing_status?: string | null;
+  ai_contextual_reset_assessment?: string | null;
+  ai_contextual_reset_tweet_id?: string | null;
   ai_evidence_quote?: string | null;
   ai_notice_to_execution?: string | null;
   ai_signal_type?: string | null;
@@ -242,6 +245,10 @@ export type ActiveTiboSignal = TiboEditIdentityFields & {
   quote_author_handle?: string | null;
   reply_to_handles?: string[] | null;
   reply_context_text?: string | null;
+  source_context_snapshot?: unknown;
+  source_context_revision_hashes?: string[] | null;
+  source_context_classified_revision_hashes?: string[] | null;
+  source_context_generation?: number | null;
   codex_operational_status?: "none" | "investigating" | "active" | "recovered" | null;
   codex_operational_confidence?: number | null;
   codex_operational_evidence_quote?: string | null;
@@ -457,6 +464,7 @@ export type RadarViewModel = {
     expectedEndAt?: string | null;
     expectedPrecision?: TemporalPrecision | null;
     expectedTimeZone?: string | null;
+    isDeadlineStartEstimated?: boolean;
     source?: string | null;
     sourceLabel?: string | null;
     forecastDate?: string;

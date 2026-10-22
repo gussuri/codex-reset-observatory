@@ -6,9 +6,12 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 
 import { POST } from "../app/api/webhook/tibo/route";
+import { getLocalRadarData } from "../lib/radar";
+import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { TARGET_TIBO_TWEET_CREATED_AT, TARGET_TIBO_TWEET_ID, TARGET_TIBO_TWEET_TEXT, TARGET_TIBO_TWEET_URL } from "./fixtures/tiboLongFormReset";
 import { TIBO_APOLOGY_RESET_NOTICE } from "./fixtures/tiboApologyResetNotice";
 import { TIBO_RESET_PROPAGATION_COMPLETION } from "./fixtures/tiboResetPropagationCompletion";
+import deadlineReplyFixture from "./fixtures/tibo-deadline-window-reply-2026-10-22.json";
 
 const ENV_KEYS = [
   "TIBO_WEBHOOK_SECRET",
@@ -51,7 +54,7 @@ function buildRequest(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function installGeminiClassificationMock(result: Record<string, unknown>) {
+function installGeminiClassificationMock(result: Record<string, unknown>, capturedPayloads?: unknown[]) {
   const originalHttpsRequest = https.request;
   https.request = ((...args: any[]) => {
     const callback = args[2] as (response: EventEmitter & { statusCode?: number }) => void;
@@ -59,7 +62,10 @@ function installGeminiClassificationMock(result: Record<string, unknown>) {
       write: (body: string) => boolean;
       end: () => void;
     };
-    request.write = () => true;
+    request.write = (body: string) => {
+      if (capturedPayloads) capturedPayloads.push(JSON.parse(body));
+      return true;
+    };
     request.end = () => {
       const response = new EventEmitter() as EventEmitter & { statusCode?: number };
       response.statusCode = 200;
@@ -1628,7 +1634,7 @@ test("source clock fallback resolves an official 14pm PST tomorrow notice when G
     assert.equal(upsertBody.expected_start_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v8");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v9");
   } finally {
     restoreGemini();
     restoreFetch();
@@ -1674,7 +1680,7 @@ test("persists a source-grounded EOD deadline while retaining Gemini temporal au
     assert.equal(body.expected_start_at, "2026-10-10T22:16:20.000Z");
     assert.equal(body.expected_end_at, "2026-10-11T07:00:00.000Z");
     assert.equal(body.temporal_resolution_status, "resolved");
-    assert.equal(body.temporal_resolution_version, "tibo-temporal-v8");
+    assert.equal(body.temporal_resolution_version, "tibo-temporal-v9");
     assert.equal(body.expires_at, "2026-10-11T15:00:00.000Z");
   } finally {
     restoreGemini();
@@ -1789,7 +1795,7 @@ test("accepted concealed teaser persists its own today window without becoming a
     assert.equal(upsertBody.expected_start_at, "2026-09-29T07:00:00.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-09-30T07:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v8");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v9");
     assert.equal(upsertBody.codex_operational_status, null);
   } finally {
     restoreGemini();
@@ -1838,6 +1844,392 @@ test("official notice deadline resolves source midnight and expires after the de
     assert.equal(upsertBody.expected_end_at, "2026-09-12T07:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
     assert.equal(upsertBody.expires_at, "2026-09-12T15:00:00.000Z");
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
+const validatedSelfReplyDeadlineScenarios = [
+  {
+    name: "original three-hour estimate",
+    createdAt: deadlineReplyFixture.reply.createdAt,
+    detectedAt: "2026-10-22T06:56:00.000Z",
+    text: deadlineReplyFixture.reply.text,
+    temporalExpression: "tomorrow before 10am PST",
+    relativeDayOffset: 1,
+    hour: 10,
+    expectedStartAt: "2026-10-22T15:00:00.000Z",
+    expectedEndAt: "2026-10-22T18:00:00.000Z",
+    calculationNow: "2026-10-22T10:00:00.000Z",
+    resetAt: "2026-10-22T10:00:00.000Z",
+    completionNow: "2026-10-22T10:05:00.000Z",
+    noticeToExecution: "3 hours 4 minutes",
+  },
+  {
+    name: "short deadline clamps to reply creation",
+    createdAt: "2026-10-22T08:30:00.000Z",
+    detectedAt: "2026-10-22T08:30:30.000Z",
+    text: "Lands today before 2am PST.",
+    temporalExpression: "today before 2am PST",
+    relativeDayOffset: 0,
+    hour: 2,
+    expectedStartAt: "2026-10-22T08:30:00.000Z",
+    expectedEndAt: "2026-10-22T10:00:00.000Z",
+    calculationNow: "2026-10-22T08:40:00.000Z",
+    resetAt: "2026-10-22T09:00:00.000Z",
+    completionNow: "2026-10-22T09:05:00.000Z",
+    noticeToExecution: "30 minutes",
+  },
+] as const;
+
+for (const scenario of validatedSelfReplyDeadlineScenarios) {
+test(`a validated self-reply keeps source context through its deadline and completion (${scenario.name})`, async () => {
+  const fixture = {
+    ...deadlineReplyFixture,
+    reply: {
+      ...deadlineReplyFixture.reply,
+      createdAt: scenario.createdAt,
+      text: scenario.text,
+    },
+  };
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const originalFetch = globalThis.fetch;
+  const requestBodies: unknown[] = [];
+  const geminiPayloads: unknown[] = [];
+  const mutatedTweetIds: string[] = [];
+  let storedSnapshot: Record<string, unknown> | null = null;
+  let revisionHash: string | null = null;
+  const manualParentStartAt = "2026-10-22T09:30:00.000Z";
+
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    if (body !== null) requestBodies.push(body);
+    if (method === "PATCH" && url.includes("/rest/v1/tibo_signals")) {
+      const targetTweetId = new URL(url).searchParams.get("tweet_id")?.replace(/^eq\./, "");
+      if (targetTweetId) mutatedTweetIds.push(targetTweetId);
+    }
+
+    if (url.includes("/rpc/merge_tibo_source_context_enrichment")) {
+      const rpcBody = body as { p_snapshot?: Record<string, unknown>; p_revision_hash?: string };
+      storedSnapshot = rpcBody.p_snapshot ?? null;
+      revisionHash = rpcBody.p_revision_hash ?? null;
+      return new Response(JSON.stringify({ status: "applied" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    if (url.includes("/rest/v1/tibo_signals")) {
+      if (method === "GET") {
+        const query = new URL(url).searchParams.get("tweet_id")?.replace(/^eq\./, "");
+        if (query === fixture.reply.tweetId) {
+          return new Response(JSON.stringify([{
+            tweet_id: fixture.reply.tweetId,
+            text: fixture.reply.text,
+            tweet_url: fixture.reply.tweetUrl,
+            tweet_created_at: fixture.reply.createdAt,
+            verification_status: "auto_unverified",
+            is_reply: true,
+            reply_context_text: fixture.parent.text,
+            source_context_snapshot: storedSnapshot,
+            source_context_revision_hashes: revisionHash ? [revisionHash] : [],
+            source_context_classified_revision_hashes: [],
+            source_context_generation: 1,
+          }]), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        if (query === fixture.parent.tweetId) {
+          return new Response(JSON.stringify([{
+            tweet_id: fixture.parent.tweetId,
+            text: fixture.parent.text,
+            tweet_url: fixture.parent.tweetUrl,
+            tweet_created_at: fixture.parent.createdAt,
+            verification_status: "confirmed",
+            classification_source: "manual",
+            is_reply: false,
+            expected_start_at: manualParentStartAt,
+            expected_end_at: "2026-10-22T12:30:00.000Z",
+            source_context_snapshot: null,
+            source_context_revision_hashes: [],
+            source_context_classified_revision_hashes: [],
+            source_context_generation: 0,
+          }]), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(JSON.stringify([]), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if (method === "PATCH") {
+        return new Response(JSON.stringify([{ tweet_id: fixture.reply.tweetId }]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify([]), { status: 201, headers: { "content-type": "application/json" } });
+    }
+
+    return new Response(JSON.stringify(method === "GET" ? [] : { data: [], error: null }), {
+      status: method === "GET" ? 200 : 201,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  const aiResult = {
+    signalType: "official_notice",
+    confidence: 0.95,
+    temporalDirection: "future",
+    evidenceQuote: fixture.reply.text,
+    reasonJa: "検証済みの親投稿に続くリセット期限の返信です。",
+    noticeTimingStatus: "known",
+    contextualResetAssessment: "same_global_reset",
+    contextualResetTweetId: fixture.parent.tweetId,
+    temporalExpression: scenario.temporalExpression,
+    temporalKind: "relative_day",
+    temporalPrecision: "range",
+    relativeDayOffset: scenario.relativeDayOffset,
+    explicitTimeParts: { hour: scenario.hour, minute: 0 },
+    explicitTimezone: "PST",
+    temporalConfidence: 0.95,
+  };
+  const restoreGemini = installGeminiClassificationMock(aiResult, geminiPayloads);
+
+  try {
+    const response = await POST(buildRequest({
+      kind: "source_context_enrichment",
+      tweetId: fixture.reply.tweetId,
+      text: fixture.reply.text,
+      tweetUrl: fixture.reply.tweetUrl,
+      tweetCreatedAt: fixture.reply.createdAt,
+      detectedAt: scenario.detectedAt,
+      isReply: true,
+      replyToHandles: fixture.reply.replyToHandles,
+      replyParentTweetId: fixture.parent.tweetId,
+      replyParentTweetUrl: fixture.parent.tweetUrl,
+      replyContextText: fixture.parent.text,
+      sourceTimeline: "with_replies",
+    }));
+
+    assert.equal(response.status, 200);
+    const persisted = requestBodies.find((body) =>
+      Boolean(body && typeof body === "object" && "expected_start_at" in body),
+    ) as Record<string, unknown> | undefined;
+    assert.ok(persisted);
+    assert.equal(persisted.signal_type, "official_notice");
+    assert.equal(persisted.verification_status, "auto_unverified");
+    assert.equal(persisted.classification_source, "gemini");
+    assert.equal(persisted.ai_temporal_expression, scenario.temporalExpression);
+    assert.equal(persisted.ai_temporal_timezone, "PST");
+    assert.equal(persisted.temporal_expression, scenario.temporalExpression);
+    assert.equal(persisted.expected_start_at, scenario.expectedStartAt);
+    assert.equal(persisted.expected_end_at, scenario.expectedEndAt);
+    assert.equal(persisted.temporal_resolution_version, "tibo-temporal-v9-deadline-start-estimate");
+    assert.equal(persisted.formal_reply_admission_proof, null);
+    assert.equal(persisted.ai_contextual_reset_assessment, "same_global_reset");
+    assert.equal(persisted.ai_contextual_reset_tweet_id, fixture.parent.tweetId);
+    assert.equal(persisted.is_reply, true);
+    assert.deepEqual(persisted.source_context_revision_hashes, [revisionHash]);
+    assert.ok(mutatedTweetIds.length > 0);
+    assert.ok(mutatedTweetIds.every((tweetId) => tweetId === fixture.reply.tweetId));
+
+    const savedSignal = {
+      ...persisted,
+      tweet_id: fixture.reply.tweetId,
+      tweet_url: fixture.reply.tweetUrl,
+      tweet_created_at: fixture.reply.createdAt,
+      verification_status: "auto_unverified",
+      source_context_snapshot: storedSnapshot,
+      source_context_revision_hashes: [revisionHash],
+      source_context_classified_revision_hashes: [revisionHash],
+      source_context_generation: 1,
+    } as never;
+    const noticeSource = fixture.reply.tweetUrl;
+    const publicBeforeReset = toPublicRadarSnapshot(
+      getLocalRadarData({
+        calculationNow: new Date(scenario.calculationNow),
+        activeTiboSignals: [savedSignal],
+        recentTiboSignals: [savedSignal],
+      }),
+      "en",
+      { calculationNow: new Date(scenario.calculationNow) },
+    );
+    assert.equal(publicBeforeReset.viewModel.activeWindow.kind, "official");
+    assert.equal(publicBeforeReset.viewModel.activeWindow.expectedAt, scenario.expectedStartAt);
+    assert.equal(publicBeforeReset.viewModel.activeWindow.expectedEndAt, scenario.expectedEndAt);
+    assert.equal(publicBeforeReset.viewModel.activeWindow.source, noticeSource);
+
+    const publicAfterReset = toPublicRadarSnapshot(
+      getLocalRadarData({
+        calculationNow: new Date(scenario.completionNow),
+        activeTiboSignals: [savedSignal],
+        recentTiboSignals: [savedSignal],
+        formalTiboResets: [{
+          tweet_id: "2113163000000000000",
+          text: "We reset usage limits for all Codex users.",
+          tweet_url: "https://x.com/thsottiaux/status/2113163000000000000",
+          tweet_created_at: scenario.resetAt,
+          signal_type: "reset_executed",
+          confidence: 0.99,
+          verification_status: "confirmed",
+          classification_source: "gemini",
+          ai_signal_type: "reset_executed",
+          ai_classification_status: "success",
+          ai_evidence_quote: "We reset usage limits for all Codex users.",
+        }],
+      }),
+      "en",
+      { calculationNow: new Date(scenario.completionNow) },
+    );
+    assert.notEqual(publicAfterReset.viewModel.activeWindow.source, noticeSource);
+    const completion = publicAfterReset.viewModel.recentHistory.find((item) =>
+      item.key.includes("2113163000000000000"),
+    );
+    assert.ok(completion);
+    assert.equal(completion.source, noticeSource);
+    assert.equal(completion.details?.noticeType, "Announcement");
+    assert.equal(completion.details?.noticeToExecution, scenario.noticeToExecution);
+
+    const geminiRequest = geminiPayloads[0] as { contents?: Array<{ parts?: Array<{ text?: string }> }> };
+    const promptText = geminiRequest.contents?.flatMap((content) => content.parts ?? [])
+      .map((part) => part.text ?? "").join("\n") ?? "";
+    assert.match(promptText, /Day 17\/ Bet you thought we forgot/);
+    assert.ok(promptText.includes(fixture.reply.text));
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreGemini();
+    restoreEnvironment(previous);
+  }
+});
+}
+
+test("an AI-confirmed direct reset deadline is estimated even when the rule classifier is irrelevant", async () => {
+  const cases = [
+    {
+      tweetId: "2114000000000000032",
+      text: "A reset will land before 10am PST tomorrow.",
+      quote: "A reset will land before 10am PST tomorrow.",
+      expression: "before 10am PST tomorrow",
+    },
+    {
+      tweetId: "2114000000000000033",
+      text: "Expect a Codex reset by 10am PST tomorrow.",
+      quote: "Expect a Codex reset by 10am PST tomorrow.",
+      expression: "by 10am PST tomorrow",
+    },
+  ];
+
+  for (const scenario of cases) {
+    const previous = Object.fromEntries(
+      ENV_KEYS.map((key) => [key, process.env[key]]),
+    ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+    const requestBodies: unknown[] = [];
+    process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+    process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+    process.env.GEMINI_API_KEY = "test-gemini-key";
+    process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+    process.env.GEMINI_TRANSLATION_MODE = "off";
+
+    const restoreFetch = installSupabaseWebhookMock(requestBodies);
+    const restoreGemini = installGeminiClassificationMock({
+      signalType: "official_notice",
+      confidence: 0.98,
+      temporalDirection: "future",
+      evidenceQuote: scenario.quote,
+      reasonJa: "利用上限リセットの期限を明示しています。",
+      noticeTimingStatus: "known",
+      temporalExpression: scenario.expression,
+      temporalKind: "relative_day",
+      temporalPrecision: "range",
+      relativeDayOffset: 1,
+      explicitTimeParts: { hour: 10, minute: 0 },
+      explicitTimezone: "PST",
+      temporalConfidence: 0.95,
+    });
+
+    try {
+      const response = await POST(buildRequest({
+        tweetId: scenario.tweetId,
+        text: scenario.text,
+        tweetUrl: `https://x.com/thsottiaux/status/${scenario.tweetId}`,
+        tweetCreatedAt: "2026-10-22T06:00:00.000Z",
+      }));
+      assert.equal(response.status, 200);
+      const persisted = requestBodies.find((body) =>
+        Boolean(body && typeof body === "object" && (body as Record<string, unknown>).tweet_id === scenario.tweetId),
+      ) as Record<string, unknown> | undefined;
+      assert.ok(persisted);
+      assert.equal(persisted.rule_signal_type, "irrelevant");
+      assert.equal(persisted.ai_signal_type, "official_notice");
+      assert.equal(persisted.expected_start_at, "2026-10-22T15:00:00.000Z");
+      assert.equal(persisted.expected_end_at, "2026-10-22T18:00:00.000Z");
+      assert.equal(persisted.temporal_resolution_version, "tibo-temporal-v9-deadline-start-estimate");
+    } finally {
+      restoreGemini();
+      restoreFetch();
+      restoreEnvironment(previous);
+    }
+  }
+});
+
+test("does not estimate a deadline window for an unrelated account deadline", async () => {
+  const previous = Object.fromEntries(
+    ENV_KEYS.map((key) => [key, process.env[key]]),
+  ) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "official_notice",
+    confidence: 0.98,
+    temporalDirection: "future",
+    evidenceQuote: "Account sign-up closes by 10am tomorrow.",
+    reasonJa: "アカウント登録の期限を告知しています。",
+    noticeTimingStatus: "known",
+    temporalExpression: "by 10am tomorrow",
+    temporalKind: "relative_day",
+    temporalPrecision: "range",
+    relativeDayOffset: 1,
+    explicitTimeParts: { hour: 10, minute: 0 },
+    explicitTimezone: "PST",
+    temporalConfidence: 0.95,
+  });
+
+  try {
+    const tweetId = "2114000000000000001";
+    const createdAt = "2026-10-22T06:00:00.000Z";
+    const response = await POST(buildRequest({
+      tweetId,
+      text: "Account sign-up closes by 10am tomorrow.",
+      tweetUrl: `https://x.com/thsottiaux/status/${tweetId}`,
+      tweetCreatedAt: createdAt,
+    }));
+    assert.equal(response.status, 200);
+    const persisted = requestBodies.find((body) =>
+      Boolean(body && typeof body === "object" && (body as Record<string, unknown>).tweet_id === tweetId),
+    ) as Record<string, unknown> | undefined;
+    assert.ok(persisted);
+    assert.equal(persisted.signal_type, "official_notice");
+    assert.equal(persisted.temporal_resolution_version, "tibo-temporal-v9");
+    assert.equal(persisted.expected_start_at, null);
+    assert.equal(persisted.expected_end_at, null);
   } finally {
     restoreGemini();
     restoreFetch();

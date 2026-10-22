@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
-import { classifyTiboTweet, isCurrentUsageResetAnnouncement } from "@/lib/radar/classification";
+import {
+  classifyTiboTweet,
+  getTiboClassificationSafetyDecision,
+  isCurrentUsageResetAnnouncement,
+} from "@/lib/radar/classification";
 import {
   classifyWithGemini,
   sanitizeGeminiFailureDiagnostics,
@@ -936,11 +940,75 @@ async function handleTiboWebhookPost(
     const temporalSemantics = hasForwardTimingSignal
       ? parseTiboTemporalSemantics(aiResult, text)
       : null;
+    const evidenceTarget = tiboEvidenceContext?.target;
+    const evidenceReplyParent = replyMetadata.replyParentTweetId
+      ? tiboEvidenceContext?.relatedPosts.find((post) => post.tweetId === replyMetadata.replyParentTweetId)
+      : undefined;
+    const hasVerifiedSameResetReplyContext = Boolean(
+      effectiveClassification.signalType === "official_notice" &&
+      contextSafetyDecision === null &&
+      replyMetadata.isReply === true &&
+      replyMetadata.isQuote !== true &&
+      aiResult?.signalType === "official_notice" &&
+      aiResult.temporalDirection === "future" &&
+      aiResult.contextualResetAssessment === "same_global_reset" &&
+      typeof aiResult.contextualResetTweetId === "string" &&
+      aiResult.contextualResetTweetId === replyMetadata.replyParentTweetId &&
+      typeof aiResult.evidenceQuote === "string" &&
+      aiResult.evidenceQuote.length > 0 &&
+      text.includes(aiResult.evidenceQuote) &&
+      replyMetadata.replyToHandles?.some((handle) => handle.toLowerCase() === "@thsottiaux") &&
+      tiboEvidenceContext?.status === "complete" &&
+      tiboEvidenceContext.omissions.length === 0 &&
+      evidenceTarget?.tweetId === tweetId &&
+      evidenceTarget.authorHandle.toLowerCase() === "@thsottiaux" &&
+      evidenceTarget.text.trim() === text.trim() &&
+      Date.parse(evidenceTarget.createdAt) === createdDate.getTime() &&
+      evidenceReplyParent?.authorHandle.toLowerCase() === "@thsottiaux" &&
+      evidenceReplyParent.text === replyMetadata.replyContextText &&
+      Date.parse(evidenceReplyParent.createdAt) <= createdDate.getTime() &&
+      tiboEvidenceContext.edges.filter((edge) =>
+        edge.fromTweetId === tweetId &&
+        edge.toTweetId === replyMetadata.replyParentTweetId &&
+        edge.relation === "reply",
+      ).length === 1
+    );
+    const directNoticeSafetyDecision = getTiboClassificationSafetyDecision(text, "official_notice");
+    const hasVerifiedDirectAiDeadlineContext = Boolean(
+      selectedClassification.classificationSource === "gemini" &&
+      selectedClassification.signalType === "official_notice" &&
+      effectiveClassification.signalType === "official_notice" &&
+      ruleResult.isReply !== true &&
+      replyMetadata.isReply !== true &&
+      ruleResult.isQuote !== true &&
+      replyMetadata.isQuote !== true &&
+      contextSafetyDecision === null &&
+      directNoticeSafetyDecision.signalType === "official_notice" &&
+      aiResult?.status === "success" &&
+      aiResult.signalType === "official_notice" &&
+      aiResult.temporalDirection === "future" &&
+      aiResult.noticeTimingStatus === "known" &&
+      typeof aiResult.confidence === "number" &&
+      Number.isFinite(aiResult.confidence) &&
+      aiResult.confidence >= 0.95 &&
+      typeof aiResult.evidenceQuote === "string" &&
+      aiResult.evidenceQuote.length > 0 &&
+      text.includes(aiResult.evidenceQuote) &&
+      /\b(?:reset(?:s|ting)?|usage\s+limits?|rate\s+limits?|quota(?:s)?)\b/i.test(aiResult.evidenceQuote)
+    );
+    const hasSourceGroundedResetContext =
+      ruleResult.signalType === "official_notice" ||
+      hasVerifiedSameResetReplyContext ||
+      hasVerifiedDirectAiDeadlineContext;
     const temporalResolution = hasForwardTimingSignal
       ? resolveTiboTemporalSchedule(
           temporalSemantics,
           createdDate.toISOString(),
           TIBO_SOURCE_TIME_ZONE,
+          {
+            applyThreeHourDeadlineEstimate:
+              effectiveClassification.signalType === "official_notice" && hasSourceGroundedResetContext,
+          },
         )
       : null;
 
@@ -1015,6 +1083,8 @@ async function handleTiboWebhookPost(
       rule_confidence: ruleResult.confidence,
       ai_signal_type: rawAiAudit ? rawAiAudit.signalType : aiResult?.signalType ?? null,
       ai_confidence: aiResult?.confidence ?? null,
+      ai_contextual_reset_assessment: aiResult?.contextualResetAssessment ?? null,
+      ai_contextual_reset_tweet_id: aiResult?.contextualResetTweetId ?? null,
       ai_temporal_direction: rawAiAudit ? rawAiAudit.temporalDirection : aiResult?.temporalDirection || null,
       ai_notice_timing_status: aiResult?.noticeTimingStatus ?? null,
       ai_evidence_quote: aiResult?.evidenceQuote || null,
@@ -1432,6 +1502,8 @@ async function handleTiboWebhookPost(
         temporal_resolution_status: _temporalResolutionStatus,
         temporal_resolution_version: _temporalResolutionVersion,
         ai_failure_diagnostics: _aiFailureDiagnostics,
+        ai_contextual_reset_assessment: _aiContextualResetAssessment,
+        ai_contextual_reset_tweet_id: _aiContextualResetTweetId,
         codex_operational_status: _codexOperationalStatus,
         codex_operational_confidence: _codexOperationalConfidence,
         codex_operational_evidence_quote: _codexOperationalEvidenceQuote,
