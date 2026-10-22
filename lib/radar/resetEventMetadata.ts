@@ -161,8 +161,8 @@ const PUBLIC_CALENDAR_TIME_PATTERNS: readonly RegExp[] = [
   /\b(?:today|tomorrow|yesterday|tonight|this morning|this afternoon|this evening|next day|following day|previous day|next week|last week|this week|next month|last month|this month|this weekend|next weekend|last weekend|end of day|by end of day|eod|noon|midnight)\b/i,
   /\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日/,
   /\d{1,2}\s*月\s*\d{1,2}\s*日/,
-  /(?:午前|午後|朝|昼|夕方|夜)\s*(?:\d{1,2}|[一二三四五六七八九十百]+)\s*時(?:半|\s*\d{1,2}\s*分)?/,
-  /\d{1,2}\s*時(?:半|\s*\d{1,2}\s*分)?/,
+  /(?:午前|午後|朝|昼|夕方|夜)\s*(?:\d{1,2}|[一二三四五六七八九十百]+)\s*時(?!間)(?:半|\s*\d{1,2}\s*分)?/,
+  /\d{1,2}\s*時(?!間)(?:半|\s*\d{1,2}\s*分)?/,
   /(?:上午|下午|早上|中午|晚上)\s*\d{1,2}\s*(?:[:：]\s*\d{2}\s*)?点(?:\s*\d{1,2}\s*分)?/,
   /\d{1,2}\s*点(?:\s*\d{1,2}\s*分)/,
   /\b(?:UTC|GMT)\s*(?:[+-]\s*)?\d{1,2}(?::?\d{2})?\b/,
@@ -171,7 +171,7 @@ const PUBLIC_CALENDAR_TIME_PATTERNS: readonly RegExp[] = [
   /(?:今日|きょう|明日|あした|あす|昨日|きのう|今夜|昨夜|今朝|明朝|明後日|一昨日|翌日|前日|来週|今週|先週|翌週|前週|来月|今月|先月|週末|日付が変わる前)/,
   /(?:月曜日|火曜日|水曜日|木曜日|金曜日|土曜日|日曜日)/,
   /(?:今天|明天|昨天|今晚|昨晚|今早|明早|后天|前天|本周|这周|下周|上周|本月|下个月|上个月|周末|午夜|中午)/,
-  /(?:星期|周)[一二三四五六日天]/,
+  /(?:星期[一二三四五六日天]|周[一二三四五六日天](?![次个]))/,
 ];
 
 function hasPublicCalendarTimeReference(value: string) {

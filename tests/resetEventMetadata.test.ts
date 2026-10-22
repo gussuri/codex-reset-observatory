@@ -152,6 +152,10 @@ test("rejects calendar and clock details from public summaries and notes", () =>
     ["summaryJa", "金曜日にCodexの週間利用枠がリセットされました。"],
     ["noteJa", "続く返信では午前10時（PST）前と案内されました。"],
     ["noteJa", "続く返信では午後10時までと案内されました。"],
+    ["noteJa", "告知は2時に行われ、Codexの利用枠が回復しました。"],
+    ["noteJa", "午前10時にCodexの利用枠が回復しました。"],
+    ["noteEn", "The usage limit reset at 10:15."],
+    ["noteJa", "Codexの利用枠は10時15分に回復しました。"],
     ["noteEn", "The follow-up said it would happen tomorrow at 10 a.m. PST."],
     ["noteZh", "回复说明下周UTC+9上午10点前完成。"],
   ] as const;
@@ -165,6 +169,36 @@ test("rejects calendar and clock details from public summaries and notes", () =>
     );
     assert.equal(result.status, "invalid_schema", field);
   }
+});
+
+test("allows elapsed-duration wording in public metadata", () => {
+  const allowedExamples = [
+    ["noteJa", "告知から2時間後にCodexの利用枠が回復しました。"],
+    ["noteJa", "24時間が経過してからCodexの利用枠が回復しました。"],
+    ["noteJa", "告知から2時間半後にCodexの利用枠が回復しました。"],
+    ["noteJa", "告知から2時間が経過した後、Codexの利用枠が回復しました。"],
+  ] as const;
+
+  for (const [field, copy] of allowedExamples) {
+    const result = parseResetEventMetadataResponse(
+      { ...validPayload, [field]: copy },
+      "test-model",
+      0,
+      sourceContext,
+    );
+    assert.equal(result.status, "success", copy);
+  }
+});
+
+test("does not interpret ordinary Chinese weekly cadence as a weekday", () => {
+  const result = parseResetEventMetadataResponse(
+    { ...validPayload, noteZh: "每周一次的更新节奏中，Codex使用额度恢复。" },
+    "test-model",
+    0,
+    sourceContext,
+  );
+
+  assert.equal(result.status, "success");
 });
 
 test("allows Day N series references and a deadline mention without repeating its time", () => {
