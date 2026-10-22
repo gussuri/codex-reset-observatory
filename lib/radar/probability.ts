@@ -2269,15 +2269,34 @@ export function getDisplayProbabilityReason(
     return translateUI("outlookNeutral", locale);
   }
 
+  const isLessThanOneHour = elapsedMs !== null && elapsedMs < 60 * 60 * 1000;
   const displayLevel24 = getProbabilityDisplayLevel(probability24h);
   const displayLevel48 = getProbabilityDisplayLevel(probability48h);
   if (displayLevel24 === "unknown" || displayLevel48 === "unknown") {
+    if (isLessThanOneHour) {
+      return translateUI("outlookElapsedNeutralUnderHour", locale);
+    }
     return replaceElapsedPlaceholder(translateUI("outlookElapsedNeutral", locale), elapsed);
   }
 
   const level24 = getProbabilityDisplayLevelText(displayLevel24, locale);
   const level48 = getProbabilityDisplayLevelText(displayLevel48, locale);
-  const key = displayLevel24 === displayLevel48
+  const areExpectationLevelsSame = displayLevel24 === displayLevel48;
+  if (isLessThanOneHour) {
+    return replaceRelativeHazardPlaceholders(
+      translateUI(
+        areExpectationLevelsSame
+          ? "outlookRelativeHazardSameUnderHour"
+          : "outlookRelativeHazardDifferentUnderHour",
+        locale,
+      ),
+      elapsed,
+      level24,
+      level48,
+    );
+  }
+
+  const key = areExpectationLevelsSame
     ? "outlookRelativeHazardSame"
     : "outlookRelativeHazardDifferent";
   return replaceRelativeHazardPlaceholders(

@@ -447,71 +447,84 @@ test("a completed regular boundary consumes an earlier teaser without becoming a
   );
 });
 
-test("uses minute precision immediately after a random reset despite a regular boundary", () => {
-  const randomResetEvents = [randomResetAt("2026-08-03T23:30:00.000Z")];
-  const regularResetEvents = [regularResetAt("2026-08-03T23:30:00.000Z")];
-  assert.match(
-    reasonFor({
-      now: NOW,
-      formalTiboResets: randomResetEvents,
-      regularResetEvents,
-      probability24h: 0.1,
-      probability48h: 0.1,
-    }) ?? "",
-    /前回のランダムリセットから30分が経過しています/,
-  );
-  assert.match(
-    reasonFor({
-      now: new Date("2026-08-03T23:59:30.000Z"),
-      formalTiboResets: [randomResetAt("2026-08-03T23:59:00.000Z")],
-      regularResetEvents: [regularResetAt("2026-08-03T23:59:00.000Z")],
-      probability24h: 0.1,
-      probability48h: 0.1,
-    }) ?? "",
-    /前回のランダムリセットから1分未満が経過しています/,
-  );
-  assert.match(
-    reasonFor({
-      locale: "en",
-      now: new Date("2026-08-03T23:59:30.000Z"),
-      formalTiboResets: [randomResetAt("2026-08-03T23:59:00.000Z")],
-      regularResetEvents: [regularResetAt("2026-08-03T23:59:00.000Z")],
-      probability24h: 0.1,
-      probability48h: 0.1,
-    }) ?? "",
-    /It has been less than 1 minute since the last random reset/,
-  );
-  const oneMinuteReason = reasonFor({
-    locale: "en",
-    now: new Date("2026-08-03T23:31:00.000Z"),
-    formalTiboResets: randomResetEvents,
-    regularResetEvents: [regularResetAt("2026-08-03T23:30:00.000Z")],
-    probability24h: 0.1,
-    probability48h: 0.1,
-  }) ?? "";
-  assert.match(oneMinuteReason, /It has been 1 minute since the last random reset/);
-  assert.doesNotMatch(oneMinuteReason, /1 minute have passed/);
+test("uses natural less-than-one-hour wording without changing the 60-minute boundary", () => {
+  const resetAt = "2026-08-03T23:30:00.000Z";
+  const randomResetEvents = [randomResetAt(resetAt)];
+  const regularResetEvents = [regularResetAt(resetAt)];
+  const expectedSame = {
+    ja: "前回のランダムリセットから1時間未満です。リセット期待度は、24時間以内・48時間以内ともに低めです。",
+    en: "It has been less than an hour since the last random reset. The reset expectation is low within both 24 and 48 hours.",
+    zh: "距离上次随机重置还不到一小时。重置期待度在24小时内和48小时内均为较低。",
+  };
+  const expectedDifferent = {
+    ja: "前回のランダムリセットから1時間未満です。リセット期待度は、24時間以内で低め、48時間以内で高めです。",
+    en: "It has been less than an hour since the last random reset. The reset expectation is low within 24 hours and high within 48 hours.",
+    zh: "距离上次随机重置还不到一小时。重置期待度为24小时内较低、48小时内较高。",
+  };
+  const expectedNeutral = {
+    ja: "前回のランダムリセットから1時間未満です。",
+    en: "It has been less than an hour since the last random reset.",
+    zh: "距离上次随机重置还不到一小时。",
+  };
+  const expectedAtOneHour = {
+    ja: "前回のランダムリセットから1時間が経過しています。リセット期待度は、24時間以内・48時間以内ともに低めです。",
+    en: "It has been 1 hour since the last random reset. The reset expectation is low within both 24 and 48 hours.",
+    zh: "距离上次随机重置已过去1小时。重置期待度在24小时内和48小时内均为较低。",
+  };
 
-  const thirtyMinuteReason = reasonFor({
-    locale: "en",
-    now: new Date("2026-08-04T00:00:00.000Z"),
-    formalTiboResets: randomResetEvents,
-    regularResetEvents: [regularResetAt("2026-08-03T23:30:00.000Z")],
-    probability24h: 0.1,
-    probability48h: 0.1,
-  }) ?? "";
-  assert.match(thirtyMinuteReason, /It has been 30 minutes since the last random reset/);
+  for (const locale of ["ja", "en", "zh"] as const) {
+    for (const elapsedMinutes of [0, 1, 30, 59]) {
+      assert.equal(
+        reasonFor({
+          locale,
+          now: new Date(Date.parse(resetAt) + elapsedMinutes * 60 * 1000),
+          formalTiboResets: randomResetEvents,
+          regularResetEvents,
+          probability24h: 0.1,
+          probability48h: 0.1,
+        }),
+        expectedSame[locale],
+        `${locale} at ${elapsedMinutes} minutes`,
+      );
+    }
 
-  const oneHourReason = reasonFor({
-    locale: "en",
-    now: new Date("2026-08-04T00:30:00.000Z"),
-    formalTiboResets: randomResetEvents,
-    regularResetEvents: [regularResetAt("2026-08-03T23:30:00.000Z")],
-    probability24h: 0.1,
-    probability48h: 0.1,
-  }) ?? "";
-  assert.match(oneHourReason, /It has been 1 hour since the last random reset/);
-  assert.doesNotMatch(oneHourReason, /1 hour have passed/);
+    assert.equal(
+      reasonFor({
+        locale,
+        now: new Date(Date.parse(resetAt) + 59 * 60 * 1000),
+        formalTiboResets: randomResetEvents,
+        regularResetEvents,
+        probability24h: 0.1,
+        probability48h: 0.8,
+      }),
+      expectedDifferent[locale],
+      `${locale} with different 24-hour and 48-hour expectations`,
+    );
+    assert.equal(
+      reasonFor({
+        locale,
+        now: new Date(Date.parse(resetAt) + 59 * 60 * 1000),
+        formalTiboResets: randomResetEvents,
+        regularResetEvents,
+        probability24h: 0.3,
+        probability48h: Number.NaN,
+      }),
+      expectedNeutral[locale],
+      `${locale} with an unknown horizon`,
+    );
+    assert.equal(
+      reasonFor({
+        locale,
+        now: new Date(Date.parse(resetAt) + 60 * 60 * 1000),
+        formalTiboResets: randomResetEvents,
+        regularResetEvents,
+        probability24h: 0.1,
+        probability48h: 0.1,
+      }),
+      expectedAtOneHour[locale],
+      `${locale} at exactly 60 minutes`,
+    );
+  }
 });
 
 test("uses the displayed elapsed duration for neutral explanations", () => {
