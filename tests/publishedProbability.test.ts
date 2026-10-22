@@ -4,7 +4,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { RadarDashboard } from "../components/RadarDashboard";
-import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
+import { createRadarCalculationContext, getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import { buildProbabilityDebugInfo } from "../lib/logProbability";
 import { getLocalProbabilityCalculation } from "../lib/radar/probability";
 import {
@@ -44,11 +44,55 @@ import {
 import { setTiboSecondaryManualOverride } from "../lib/radar/tiboSecondarySignal";
 import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
 import { calculateRecencyWeightedShadowProbability } from "../lib/radar/recencyWeightedProbability";
+import { buildCanonicalResetHistoryContext } from "../lib/radar/tiboHistory";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import type { WindowEventLike } from "../lib/radar/types";
+import { frozenSupportShapeSurvivalStaticHistory } from "./fixtures/survivalConditionedHistory";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
+const PUBLIC_SURVIVAL_ADOPTION_AT = "2026-09-19T06:00:00.000Z";
+
+function randomHistoryEvent(
+  id: string,
+  completedAt: string,
+  overrides: Partial<WindowEventLike> = {},
+): WindowEventLike {
+  return {
+    id,
+    recordKind: "confirmed_global",
+    title: id,
+    kind: "reset_completed",
+    status: "closed",
+    opened_at: completedAt,
+    closed_at: completedAt,
+    completed_at: completedAt,
+    scope: "全有料プラン",
+    details: {
+      cycleType: "ランダムリセット",
+      resetMethod: "強制リセット",
+      scope: "全有料プラン",
+      noticeToExecution: "0分",
+    },
+    ...overrides,
+  };
+}
+
+function calculatePublishedSurvivalAt(now: Date, staticHistory: WindowEventLike[]) {
+  const canonicalHistoryContext = buildCanonicalResetHistoryContext(null, {
+    defaultStaticHistory: staticHistory,
+  });
+  const published = calculatePublishedProbability(null, {
+    now,
+    staticHistory,
+    canonicalHistoryContext,
+    activeOfficialNotice: null,
+    publishedSurvivalConditionedAdoptionAt: PUBLIC_SURVIVAL_ADOPTION_AT,
+  }, { logFallback: false });
+  assert.ok(published.survivalConditioned);
+  return published.survivalConditioned;
+}
 
 test("the current public model adopts Survival-Conditioned v1 with broad-banked v2 as its previous baseline", () => {
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION, "hazard-odds-v4-logit-calibrated-prequential-v3");
@@ -201,6 +245,143 @@ test("calibrated public calculations are stable within a ten-minute display inte
   assert.equal(sameInterval.calibrated?.alpha24h, first.calibrated?.alpha24h);
   assert.equal(sameInterval.calibrated?.alpha48h, first.calibrated?.alpha48h);
   assert.equal(nextInterval.calibrated?.calculatedAt, "2026-08-04T00:10:00.000Z");
+});
+
+test("public model time includes a just-completed reset after the rounded bucket", () => {
+  const calculationNow = new Date("2026-10-22T17:12:49.336Z");
+  const resetAt = "2026-10-22T17:10:09.430Z";
+  const historicalEvents = frozenSupportShapeSurvivalStaticHistory([48, 60, 72]);
+  assert.equal(historicalEvents.length, 40);
+
+  const result = calculatePublishedSurvivalAt(calculationNow, [
+    ...historicalEvents,
+    randomHistoryEvent("current-confirmed-reset", resetAt),
+  ]);
+
+  assert.equal(roundPublicProbabilityTime(calculationNow).toISOString(), "2026-10-22T17:10:00.000Z");
+  assert.equal(result.calculatedAt, resetAt);
+  assert.equal(result.survival.latestRandomResetAt, resetAt);
+});
+
+test("public model keeps ten-minute rounding once the bucket is after the reset", () => {
+  const calculationNow = new Date("2026-10-22T17:20:49.336Z");
+  const resetAt = "2026-10-22T17:10:09.430Z";
+  const result = calculatePublishedSurvivalAt(calculationNow, [
+    ...frozenSupportShapeSurvivalStaticHistory([48, 60, 72]),
+    randomHistoryEvent("current-confirmed-reset", resetAt),
+  ]);
+
+  assert.equal(result.calculatedAt, "2026-10-22T17:20:00.000Z");
+  assert.equal(result.survival.latestRandomResetAt, resetAt);
+});
+
+test("public model clock ignores later rejected, narrow, conditional, and future reset candidates", () => {
+  const calculationNow = new Date("2026-10-22T17:12:49.336Z");
+  const validResetAt = "2026-10-22T17:10:09.430Z";
+  const history = [
+    ...frozenSupportShapeSurvivalStaticHistory([48, 60, 72]),
+    randomHistoryEvent("current-confirmed-reset", validResetAt),
+    randomHistoryEvent("rejected-later-reset", "2026-10-22T17:11:00.000Z", { status: "rejected" }),
+    randomHistoryEvent("narrow-later-reset", "2026-10-22T17:12:00.000Z", { scope: "一部ユーザー" }),
+    randomHistoryEvent("conditional-later-reset", "2026-10-22T17:12:30.000Z", {
+      recordKind: "banked_distribution",
+      randomResetTargetScope: "conditional",
+    }),
+    randomHistoryEvent("future-reset", "2026-10-22T17:13:00.000Z"),
+  ];
+
+  const result = calculatePublishedSurvivalAt(calculationNow, history);
+
+  assert.equal(result.calculatedAt, validResetAt);
+  assert.equal(result.survival.latestRandomResetAt, validResetAt);
+  assert.ok(Date.parse(result.calculatedAt) <= calculationNow.getTime());
+});
+
+test("regular recovery boundary can advance the calculation clock without resetting random age", () => {
+  const calculationNow = new Date("2026-10-22T17:12:49.336Z");
+  const randomAt = "2026-10-22T17:00:00.000Z";
+  const regularAt = "2026-10-22T17:10:09.430Z";
+  const result = calculatePublishedSurvivalAt(calculationNow, [
+    ...frozenSupportShapeSurvivalStaticHistory([48, 60, 72]),
+    randomHistoryEvent("latest-random-reset", randomAt),
+    randomHistoryEvent("regular-recovery-boundary", regularAt, {
+      recordKind: "regular_completed",
+      title: "定期リセット",
+      details: {
+        cycleType: "定期リセット",
+        resetMethod: "強制リセット",
+        scope: "全有料プラン",
+        noticeToExecution: "0分（定期）",
+      },
+    }),
+  ]);
+
+  assert.equal(result.calculatedAt, regularAt);
+  assert.equal(result.survival.latestRandomResetAt, randomAt);
+});
+
+test("public calculation clock and random age honor an eligible banked recovery boundary", () => {
+  const calculationNow = new Date("2026-10-22T17:12:49.336Z");
+  const bankedAt = "2026-10-22T17:10:09.430Z";
+  const result = calculatePublishedSurvivalAt(calculationNow, [
+    ...frozenSupportShapeSurvivalStaticHistory([48, 60, 72]),
+    randomHistoryEvent("banked-random-recovery", bankedAt, {
+      recordKind: "banked_distribution",
+      details: {
+        cycleType: "ランダムリセット",
+        resetMethod: "任意リセット権配布",
+        scope: "全有料プラン",
+        noticeToExecution: "0分",
+      },
+    }),
+  ]);
+
+  assert.equal(result.calculatedAt, bankedAt);
+  assert.equal(result.survival.latestRandomResetAt, bankedAt);
+});
+
+test("view model and public DTO share the actual completed reset boundary", () => {
+  const calculationNow = new Date("2026-10-22T17:12:49.336Z");
+  const resetAt = "2026-10-22T17:10:09.430Z";
+  const formalReset = {
+    tweet_id: "published-current-reset-boundary",
+    text: "All paid users received a reset.",
+    tweet_url: "https://x.com/thsottiaux/status/2100000000000000003",
+    tweet_created_at: resetAt,
+    signal_type: "reset_executed" as const,
+    confidence: 0.98,
+    verification_status: "confirmed" as const,
+    classification_source: "gemini" as const,
+    ai_reset_type_ja: "ランダムリセット",
+    is_reply: false,
+  };
+  const data = getLocalRadarData({ calculationNow, formalTiboResets: [formalReset] });
+  const calculationContext = createRadarCalculationContext(data, calculationNow);
+  const published = calculatePublishedProbability(data, {
+    now: calculationNow,
+    activeOfficialNotice: null,
+    canonicalHistoryContext: calculationContext.canonicalHistoryContext,
+  }, { logFallback: false });
+  const viewModel = getRadarViewModel(
+    data,
+    "ja",
+    false,
+    undefined,
+    calculationNow,
+    calculationContext,
+  );
+  const snapshot = toPublicRadarSnapshot(data, "ja", {
+    calculationNow,
+    limitHistory: false,
+    calculationContext,
+  });
+
+  assert.equal(published.survivalConditioned?.calculatedAt, resetAt);
+  assert.equal(published.survivalConditioned?.survival.latestRandomResetAt, resetAt);
+  assert.equal(viewModel.latestWindow.closedAt, resetAt);
+  assert.equal(snapshot.lastRandomResetAt, resetAt);
+  assert.equal(viewModel.probability24h, published.probability24h);
+  assert.equal(snapshot.viewModel.probability24h, published.probability24h);
 });
 
 test("public DTO and UI expose v2 probabilities without diagnostic-only fields", () => {

@@ -5,6 +5,22 @@ import test from "node:test";
 
 const workflowPath = resolve(".github/workflows/ci.yml");
 const packageJsonPath = resolve("package.json");
+const runtimeWorkflowPaths = [
+  ".github/workflows/ci.yml",
+  ".github/workflows/verify-browser-e2e.yml",
+  ".github/workflows/verify-supabase-migrations.yml",
+];
+
+test("runtime workflows pin Node.js 24.22.1", () => {
+  for (const path of runtimeWorkflowPaths) {
+    const workflow = readFileSync(resolve(path), "utf8").replace(/\r\n/g, "\n");
+    assert.match(
+      workflow,
+      /^          node-version: 24\.22\.1\s*$/m,
+      `${path} must use Node.js 24.22.1`,
+    );
+  }
+});
 
 test("CI workflow enforces the ordered quality gate contract", () => {
   assert.ok(existsSync(workflowPath), `Expected ${workflowPath} to exist`);
@@ -23,7 +39,7 @@ test("CI workflow enforces the ordered quality gate contract", () => {
 
   assert.match(workflow, /^on:\n  push:\n  pull_request:\n/m);
   assert.match(workflow, /^permissions:\n  contents: read\n/m);
-  assert.match(workflow, /^          node-version: 22\.13\.0\s*$/m);
+  assert.match(workflow, /^          node-version: 24\.22\.1\s*$/m);
 
   const compatibleCorepackStep = [
     "      - name: Install compatible Corepack",
@@ -99,7 +115,7 @@ test("browser E2E workflow builds the local app and runs Chromium only", () => {
   assert.match(workflow, /^name: Verify Browser E2E$/m);
   assert.match(workflow, /^  push:\n    branches: \[main\]$/m);
   assert.match(workflow, /^  workflow_dispatch:\s*$/m);
-  assert.match(workflow, /node-version: 22\.13\.0/);
+  assert.match(workflow, /node-version: 24\.22\.1/);
   assert.match(workflow, /corepack pnpm install --frozen-lockfile/);
   assert.match(workflow, /corepack pnpm build/);
   assert.match(workflow, /corepack pnpm exec playwright install --with-deps chromium/);

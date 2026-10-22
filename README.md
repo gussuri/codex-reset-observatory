@@ -112,7 +112,7 @@ Tibo's X profile
 
 ## Local development
 
-Install Node.js and pnpm (`package.json` specifies pnpm 11.18.0 through `packageManager`).
+Use Node.js 24.22.1 LTS and pnpm (`package.json` specifies pnpm 11.18.0 through `packageManager`) to match CI.
 
 ```bash
 pnpm install

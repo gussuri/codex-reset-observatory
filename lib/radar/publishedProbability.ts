@@ -66,6 +66,7 @@ import {
 } from "./survivalConditionedProbability";
 import type { RadarData, WindowEventLike } from "./types";
 import type { CanonicalResetHistoryContext } from "./tiboHistory";
+import { getLastRecoveryResetAt } from "./recoveryBoundary";
 
 export type PublishedProbabilitySource =
   | "calibrated"
@@ -791,9 +792,26 @@ export function calculatePublishedProbability(
     activeOfficialNotice: probabilityOfficialNotice,
   };
   const primary = getLocalProbabilityCalculation(data, calculationOptionsWithNow);
+  const roundedPublicProbabilityTime = roundPublicProbabilityTime(calculationNow);
+  const calculationNowTime = calculationNow.getTime();
+  const latestRecoveryBoundaryTime = Date.parse(
+    getLastRecoveryResetAt(
+      data,
+      calculationNow,
+      calculationOptions.staticHistory,
+      calculationOptions.canonicalHistoryContext,
+    ) ?? "",
+  );
+  const publicProbabilityTime = Number.isFinite(calculationNowTime) &&
+      Number.isFinite(latestRecoveryBoundaryTime)
+    ? new Date(Math.min(
+        calculationNowTime,
+        Math.max(roundedPublicProbabilityTime.getTime(), latestRecoveryBoundaryTime),
+      ))
+    : roundedPublicProbabilityTime;
   const publicModelOptions = {
     ...calculationOptionsWithNow,
-    now: roundPublicProbabilityTime(calculationNow),
+    now: publicProbabilityTime,
   };
   const resolvedPublishedModelAdoptionAt = publishedModelAdoptionAt === undefined
     ? PUBLISHED_PROBABILITY_ADOPTION_AT

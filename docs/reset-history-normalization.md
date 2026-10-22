@@ -53,6 +53,12 @@ notice-to-execution は notice と execution の差を人間向けに表す deri
 
 告知の有無と時刻の確度は別に判定します。Gemini が `official_notice`、時制 `unclear`、時刻 `unknown` と分類し、引用 evidence が本文にあり、利用上限リセットへの明示的な話題で、返信・引用・拒否・相殺・履歴・技術的 reset ではない投稿は、信頼度 `0.80` 以上なら unscheduled notice として表示・履歴連携できます。この例外は notice の存在だけを示します。予定時刻、実行時刻、probability teaser、完了済み reset は作らず、開始/終了時刻も公開しません。予定時刻がある通常 notice の `0.95` 閾値と、reset completion の判定は維持します。
 
+### 公開 summary / note の日時
+
+将来生成する summary と note には、年月日、曜日、時計時刻、timezone、閲覧時点で意味が変わる相対日付（today / tomorrow / yesterday 相当）を書きません。告知・実施時刻と deadline は専用の日時欄に任せ、note では「続く返信で実施期限が案内された」のように日時を繰り返さず説明できます。告知から実施までの所要時間も、イベント理解に必要でない限り補足へ加えません。
+
+日時を省く場合も、source-grounded な原因、修正、方法、結果、言葉遊びや callback は残します。`Day 17` / `第17天` はシリーズ上の識別子であり、日付ではないため、文脈に必要なら保持します。生成時の指示に加えて、runtime validation は公開 summary / note に日時表現がある出力を受け入れません。source evidence や内部監査 rationale は原文の根拠保持のため、この公開文面ルールの対象外です。prompt version を更新して将来の生成へ適用し、既存履歴の一括書き換えはしません。
+
 ### Legacy scope input の扱い
 
 `convertTiboResetSignalToHistoryEvent()` は、Tibo の completion text や related notice に reset applicability の明示 evidence がない場合、product label を scope として作らず、scope を空にします。`Codex / ChatGPT Work` は canonical scopeではありません。旧partial labelは `normalizeResetScope()` で `一部ユーザー` としてread-side互換処理できますが、新しいcanonical/static/persisted rowは旧labelを出力しません。
@@ -249,14 +255,14 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 
 現行コードには、legacy input normalization、unknown record の `reference` fallback、static history の個別 correction など、互換性を守るための個別ルールがあります。random/Tibo scope labelは入力互換のために `全有料プラン`、`一部ユーザー`、または空へ正規化し、regular scopeは `全有料プラン`、`任意リセット未使用アカウント`、または空へ正規化します。これらは一つの理想的な evidence order に置き換えず、各 helper と既存テストを正本として扱います。
 
-今回追加するのは、Day N 見出しを時間根拠にしない Gemini 指示と temporal guard、および上述の versioned proof による reply 完了投稿の正式履歴 admission です。migration は repository に含めますが、適用はしません。
+今回追加するのは、Day N 見出しを時間根拠にしない Gemini 指示と temporal guard、日時を省く将来 summary / note の生成・検証ルール、および上述の versioned proof による reply 完了投稿の正式履歴 admission です。migration は repository に含めますが、適用はしません。
 
 次は変更しません。
 
 - Production data、Supabase の本番 DB、過去履歴の backfill/relabel/rewrite
 - Tibo classification の既存 safety conditions、reason inference、proof のない投稿の採否
 - BANKED/conditional semantics と probability eligibility。BANKED/conditional completion は reply proof でも forced-reset 履歴へ変換しない
-- public UI の既存表示挙動
+- public UI の既存フィールド構成、canonical reason/scope の表示ルール、履歴レイアウト（上記の将来 summary / note の日時表記ルールを除く）
 - probability model、public-v1 DTO、既存の recovery/adoption source semantics
 
 今後この領域を変更する場合は、まずこの文書と列挙した実装・テストを読み、変更が source normalization、canonical identity/chronology、または presentation のどの層に属するかを明示してください。

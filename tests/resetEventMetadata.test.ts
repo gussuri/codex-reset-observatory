@@ -132,7 +132,7 @@ test("accepts source quotations with internal punctuation, abbreviations, and de
       scope: null,
       scopeEvidence: null,
       noteJa: "Tibo氏はDay 15のリセット完了を報告しました。",
-      noteEn: "Tibo marked Day 15 with “we're still cooking... and reset. Enjoy.” The announcement confirmed the usage-limit reset. At 3.5 p.m., e.g., the recorded window had closed.",
+      noteEn: "Tibo marked Day 15 with “we're still cooking... and reset. Enjoy.” The announcement confirmed the usage-limit reset; the completion post confirmed it had finished, e.g., this was not only a prediction.",
       noteZh: "Tibo报告第15天重置完成。原文保留了烹饪相关的措辞。",
     },
     "test-model",
@@ -141,7 +141,84 @@ test("accepts source quotations with internal punctuation, abbreviations, and de
   );
 
   assert.equal(result.status, "success");
-  assert.equal(result.noteEn, "Tibo marked Day 15 with “we're still cooking... and reset. Enjoy.” The announcement confirmed the usage-limit reset. At 3.5 p.m., e.g., the recorded window had closed.");
+  assert.equal(result.noteEn, "Tibo marked Day 15 with “we're still cooking... and reset. Enjoy.” The announcement confirmed the usage-limit reset; the completion post confirmed it had finished, e.g., this was not only a prediction.");
+});
+
+test("rejects calendar and clock details from public summaries and notes", () => {
+  const examples = [
+    ["summaryJa", "2026年10月23日にCodexの週間利用枠がリセットされました。"],
+    ["summaryEn", "The reset was announced on Friday, October 23, 2026."],
+    ["summaryZh", "重置于10月23日星期五完成。"],
+    ["summaryJa", "金曜日にCodexの週間利用枠がリセットされました。"],
+    ["noteJa", "続く返信では午前10時（PST）前と案内されました。"],
+    ["noteJa", "続く返信では午後10時までと案内されました。"],
+    ["noteJa", "告知は2時に行われ、Codexの利用枠が回復しました。"],
+    ["noteJa", "午前10時にCodexの利用枠が回復しました。"],
+    ["noteEn", "The usage limit reset at 10:15."],
+    ["noteJa", "Codexの利用枠は10時15分に回復しました。"],
+    ["noteEn", "The follow-up said it would happen tomorrow at 10 a.m. PST."],
+    ["noteZh", "回复说明下周UTC+9上午10点前完成。"],
+  ] as const;
+
+  for (const [field, copy] of examples) {
+    const result = parseResetEventMetadataResponse(
+      { ...validPayload, [field]: copy },
+      "test-model",
+      0,
+      sourceContext,
+    );
+    assert.equal(result.status, "invalid_schema", field);
+  }
+});
+
+test("allows elapsed-duration wording in public metadata", () => {
+  const allowedExamples = [
+    ["noteJa", "告知から2時間後にCodexの利用枠が回復しました。"],
+    ["noteJa", "24時間が経過してからCodexの利用枠が回復しました。"],
+    ["noteJa", "告知から2時間半後にCodexの利用枠が回復しました。"],
+    ["noteJa", "告知から2時間が経過した後、Codexの利用枠が回復しました。"],
+  ] as const;
+
+  for (const [field, copy] of allowedExamples) {
+    const result = parseResetEventMetadataResponse(
+      { ...validPayload, [field]: copy },
+      "test-model",
+      0,
+      sourceContext,
+    );
+    assert.equal(result.status, "success", copy);
+  }
+});
+
+test("does not interpret ordinary Chinese weekly cadence as a weekday", () => {
+  const result = parseResetEventMetadataResponse(
+    { ...validPayload, noteZh: "每周一次的更新节奏中，Codex使用额度恢复。" },
+    "test-model",
+    0,
+    sourceContext,
+  );
+
+  assert.equal(result.status, "success");
+});
+
+test("allows Day N series references and a deadline mention without repeating its time", () => {
+  const result = parseResetEventMetadataResponse(
+    {
+      ...validPayload,
+      summaryJa: "Day 17の「忘れたと思った？」という冗談に続き、Codexの週間利用枠がリセットされました。",
+      summaryEn: "The Day 17 post joked that the reset had not been forgotten.",
+      summaryZh: "第17天的帖子开玩笑说，这次重置并没有被忘记。",
+      noteJa: "Tibo氏がリセット日だと告知し、続く返信で実施の期限を案内しました。その後、Codexの週間利用枠が回復しました。",
+      noteEn: "Tibo announced reset day, then a follow-up reply gave the deadline. The Codex weekly usage allowance was restored afterward.",
+      noteZh: "Tibo宣布了重置日，随后在回复中说明了实施期限。之后，Codex每周使用额度恢复。",
+    },
+    "test-model",
+    0,
+    sourceContext,
+  );
+
+  assert.equal(result.status, "success");
+  assert.match(result.summaryJa ?? "", /Day 17/);
 });
 
 test("prompt treats all canonical related posts as one event and prioritizes specific cause context", () => {
@@ -159,6 +236,7 @@ test("prompt treats all canonical related posts as one event and prioritizes spe
   assert.match(prompt, /same canonical reset event/i);
   assert.match(prompt, /specific|cause|reason|incident|milestone/i);
   assert.match(prompt, /all paid plans/i);
+  assert.match(prompt, /Chronology-only completion timestamp \(do not repeat in public copy\)/i);
 });
 
 test("short cooking callbacks get retrospective notes without invented incident or audience details", () => {
@@ -181,6 +259,9 @@ test("short cooking callbacks get retrospective notes without invented incident 
   assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /2–3 short factual sentences as a style target/i);
   assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /single concise factual sentence is acceptable/i);
   assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /Do not pad.*or invent facts/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /Do not include calendar dates, weekdays, clock times, time zones, or relative calendar words/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /today, tomorrow, or yesterday/i);
+  assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /deadline without repeating its date or clock time/i);
   assert.match(RESET_EVENT_METADATA_SYSTEM_PROMPT, /If applicability is difficult to determine, return null/i);
   assert.doesNotMatch(prompt, /2112268918681485431/);
 });
