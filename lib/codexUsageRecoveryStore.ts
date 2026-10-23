@@ -103,6 +103,7 @@ const LEGACY_COVERAGE_STATE_COLUMNS = "source_key,observed_at,received_at,limit_
 const LEGACY_STATE_COLUMNS = "source_key,observed_at,received_at,limit_id,plan_type,used_percent,window_duration_mins,resets_at,updated_at";
 const OBSERVATION_COLUMNS = "id,source_key,observed_at,previous_observed_at,previous_used_percent,current_used_percent,previous_resets_at,current_resets_at,cycle_hint,confidence,status,matched_tibo_tweet_id,confirmed_at,created_at,updated_at";
 const EXECUTION_ESTIMATE_COLUMNS = "id,reset_event_key,display_execution_at,execution_time_source,execution_time_confidence,execution_time_precision,execution_window_start_at,execution_window_end_at,recovery_observation_id,recovery_previous_observed_at,recovery_observed_at,tibo_announced_at,tibo_primary_tweet_id,tibo_source_tweet_ids,official_notice_tweet_id,official_notice_at,estimator_version,manual_override_at,manual_override_by,manual_override_reason,manual_execution_at,manual_execution_precision,created_at,updated_at";
+const RESET_HISTORY_READ_LIMIT = 2_000;
 
 function isMissingBankedColumnError(
   error: { code?: string | null; message?: string | null; details?: string | null } | null | undefined,
@@ -1356,7 +1357,7 @@ export async function readResetExecutionEstimates(client: SupabaseClient<any>) {
     .from("reset_execution_estimates")
     .select(EXECUTION_ESTIMATE_COLUMNS)
     .order("display_execution_at", { ascending: false })
-    .limit(2000);
+    .limit(RESET_HISTORY_READ_LIMIT);
 
   const rows = (result.data ?? [])
     .map((row) => toResetExecutionEstimate(row as ResetExecutionEstimateRow))
@@ -1485,11 +1486,11 @@ export async function readCodexRecoveryObservations(client: SupabaseClient<any>)
     .from("codex_recovery_observations")
     .select(OBSERVATION_COLUMNS)
     .eq("source_key", CODEX_USAGE_SOURCE_KEY)
-    .eq("status", "observed")
+    .in("status", ["observed", "confirmed"])
     .eq("confidence", "strong")
-    .neq("cycle_hint", "regular")
+    .eq("cycle_hint", "unexpected")
     .order("observed_at", { ascending: false })
-    .limit(20);
+    .limit(RESET_HISTORY_READ_LIMIT);
 
   return {
     rows: (result.data ?? [])
