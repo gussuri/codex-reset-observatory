@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "label": "diagnostic-regression-not-holdout",
+  "model": "gemini-3.5-flash-lite",
+  "conditions": ["A", "B", "C", "D"],
+  "groups": [
+    { "id": "oct15-day10", "textOnlyCase": "2110595484180214059::text_only", "evidenceCase": "2110595484180214059::text_only", "expected": ["official_notice"], "temporalDirection": "future", "temporalRule": "no_invented_clock", "notes": "Day 10 reset notice; no invented clock. Accept a date/day or unresolved schedule, but reject a fabricated exact clock in raw model output regardless of resolver output." },
+    { "id": "oct15-landing", "textOnlyCase": "2110595554036400151::text-only", "evidenceCase": "2110595554036400151::verified-parent", "expected": ["official_notice"], "temporalDirection": "future", "safeNoClaimWithoutEvidence": true, "temporal": { "startAt": "2026-10-15T04:56:07.000Z", "endAt": "2026-10-15T06:56:07.000Z", "precision": "range", "basePostId": "2110595554036400151" }, "notes": "Two-hour window is anchored to the reply itself at 04:56:07Z." },
+    { "id": "oct15-completion", "textOnlyCase": "2110618732666257557::text-only", "evidenceCase": "2110618732666257557::verified-quote-reply-parent-chain", "expected": ["reset_executed"], "temporalDirection": "completed_now", "safeNoClaimWithoutEvidence": true, "referenceAccepted": ["irrelevant", "reset_executed"], "systemLimitation": "The production formatter sends the quoted timing reply but omits its Day10 parent; irrelevant is a safe no-claim for this reference input.", "notes": "Completion-post time is not independently confirmed reset execution time." },
+    { "id": "oct10-eod", "textOnlyCase": "2109045392684032299::text_only", "evidenceCase": "2109045392684032299::text_only", "expected": ["official_notice"], "temporalDirection": "future", "temporal": { "startAt": "2026-10-10T22:16:20.000Z", "endAt": "2026-10-11T07:00:00.000Z", "precision": "daypart", "basePostId": "2109045392684032299" }, "notes": "EOD is a deadline through next-day midnight in America/Los_Angeles." },
+    { "id": "oct11-completion", "textOnlyCase": "2109132167112782291::text_only", "evidenceCase": "2109132167112782291::text_only", "expected": ["reset_executed"], "temporalDirection": "completed_now", "notes": "Self-contained completion control; no unverified Oct 10 edge." },
+    { "id": "long-apology-notice", "textOnlyCase": "2098612714704891959::text_only", "evidenceCase": "2098612714704891959::text_only", "expected": ["official_notice"], "temporalDirection": "future", "notes": "Do not infer reset scope from the Astra greeting." },
+    { "id": "landing-virtual", "textOnlyCase": "eval-syn-001", "evidenceCase": "eval-syn-002", "expected": ["official_notice"], "temporalDirection": "future", "safeNoClaimWithoutEvidence": true, "temporal": { "startAt": "2026-10-16T16:00:00.000Z", "endAt": "2026-10-16T18:00:00.000Z", "precision": "range", "basePostId": "syn-target-landing" } },
+    { "id": "relative-clock", "textOnlyCase": "eval-syn-013", "evidenceCase": "eval-syn-014", "expected": ["official_notice"], "temporalDirection": "future", "safeNoClaimWithoutEvidence": true },
+    { "id": "codex-teaser-boundary", "textOnlyCase": "eval-syn-025", "evidenceCase": "eval-syn-026", "expected": ["teaser"], "safeNoClaimWithoutEvidence": true, "withoutEvidenceAccepts": ["irrelevant", "teaser"], "withoutEvidenceForbids": ["official_notice", "reset_executed"] },
+    { "id": "banked-delivery", "textOnlyCase": "eval-syn-033", "evidenceCase": "eval-syn-033", "expected": ["irrelevant"], "temporalDirection": "completed_now", "publicOutcome": "banked_distribution" },
+    { "id": "cancel-parent", "textOnlyCase": "eval-syn-041", "evidenceCase": "eval-syn-042", "expected": ["irrelevant"], "safeNoClaimWithoutEvidence": true },
+    { "id": "release-notes-negative", "textOnlyCase": "eval-syn-release-notes-negative", "evidenceCase": "eval-syn-release-notes-negative", "expected": ["irrelevant"] }
+  ]
+}
