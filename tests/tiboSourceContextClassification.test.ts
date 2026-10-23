@@ -89,7 +89,10 @@ function installGeminiPromptCapture(
   teaserStrengthReasonJa: null,
   contextualResetAssessment: "not_applicable",
   contextualResetTweetId: null,
-}, responseStatuses: number[] = [], options: { preserveMissingContextualResetAssessment?: boolean } = {}) {
+}, responseStatuses: number[] = [], options: {
+  preserveMissingContextualResetAssessment?: boolean;
+  simulateTimeout?: boolean;
+} = {}) {
   const original = https.request;
   const prompts: string[] = [];
   https.request = ((...args: any[]) => {
@@ -97,16 +100,23 @@ function installGeminiPromptCapture(
     const request = new EventEmitter() as EventEmitter & {
       write: (body: string) => boolean;
       end: () => void;
+      destroy: () => void;
     };
     let payload = "";
     request.write = (body) => {
       payload += body;
       return true;
     };
+    request.destroy = () => {};
     request.end = () => {
       const requestBody = JSON.parse(payload) as {
         contents: Array<{ parts: Array<{ text: string }> }>;
       };
+      if (options.simulateTimeout) {
+        prompts.push(requestBody.contents[0]!.parts[1]!.text);
+        queueMicrotask(() => request.emit("timeout"));
+        return;
+      }
       prompts.push(requestBody.contents[0]!.parts[1]!.text);
       const responseIndex = prompts.length - 1;
       const responseStatus = responseStatuses[responseIndex] ?? 200;
@@ -516,6 +526,223 @@ test("an unclear official notice without an explicit timing status fails closed"
   }
 });
 
+test("a normal webhook reclassifies the exact stored source context and records its completion marker", async () => {
+  const previous = saveEnvironment();
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+  const revisionHash = "a".repeat(64);
+  const target = {
+    ...contextTargetRow(),
+    source_context_snapshot: {
+      parent: {
+        tweetId: PARENT_ID,
+        tweetUrl: PARENT_URL,
+        authorHandle: "@thsottiaux",
+        text: PARENT_TEXT,
+      },
+    },
+    source_context_revision_hashes: [revisionHash],
+    source_context_classified_revision_hashes: [],
+    source_context_generation: 1,
+  };
+  const database = installSourceContextDatabase([parentRow(), target]);
+  const gemini = installGeminiPromptCapture();
+
+  try {
+    const response = await POST(buildRequest(sourceMetadata()));
+
+    assert.equal(response.status, 200);
+    assert.equal(gemini.prompts.length, 1);
+    assert.match(gemini.prompts[0]!, /VALIDATED CONNECTED SOURCE CONTEXT/);
+    assert.match(gemini.prompts[0]!, new RegExp(PARENT_ID));
+    assert.match(gemini.prompts[0]!, /"relation":"reply"/);
+
+    const row = database.rows.get(TARGET_ID)!;
+    assert.equal(row.ai_classification_status, "success");
+    assert.equal(row.ai_signal_type, "official_notice");
+    assert.equal(row.ai_temporal_direction, "future");
+    assert.equal(row.classification_source, "gemini");
+    assert.deepEqual(row.source_context_revision_hashes, [revisionHash]);
+    assert.deepEqual(row.source_context_classified_revision_hashes, [revisionHash]);
+
+    const markerPatch = database.patches.find((patch) =>
+      patch.payload.source_context_classified_revision_hashes?.[0] === revisionHash,
+    );
+    assert.ok(markerPatch);
+    const markerFilter = new URL(markerPatch.url).searchParams;
+    assert.equal(markerFilter.get("source_context_revision_hashes"), `eq.{${revisionHash}}`);
+    assert.equal(markerFilter.get("source_context_generation"), "eq.1");
+  } finally {
+    gemini.restore();
+    database.restore();
+    restoreEnvironment(previous);
+  }
+});
+
+test("a normal webhook keeps an incomplete stored context pending until its exact parent is available", async () => {
+  const previous = saveEnvironment();
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+  const revisionHash = "d".repeat(64);
+  const target = {
+    ...contextTargetRow(),
+    source_context_snapshot: {
+      parent: {
+        tweetId: PARENT_ID,
+        tweetUrl: PARENT_URL,
+        authorHandle: "@thsottiaux",
+        text: PARENT_TEXT,
+      },
+    },
+    source_context_revision_hashes: [revisionHash],
+    source_context_classified_revision_hashes: [],
+    source_context_generation: 1,
+  };
+  const database = installSourceContextDatabase([target]);
+  const gemini = installGeminiPromptCapture();
+
+  try {
+    const firstResponse = await POST(buildRequest(sourceMetadata()));
+
+    assert.equal(firstResponse.status, 200);
+    assert.equal(gemini.prompts.length, 1);
+    assert.match(gemini.prompts[0]!, /VALIDATED CONNECTED SOURCE CONTEXT/);
+    assert.match(gemini.prompts[0]!, /omissions/);
+    const firstRow = database.rows.get(TARGET_ID)!;
+    assert.equal(firstRow.ai_classification_status, "success");
+    assert.deepEqual(firstRow.source_context_revision_hashes, [revisionHash]);
+    assert.deepEqual(firstRow.source_context_classified_revision_hashes, []);
+    assert.equal(database.patches.some((patch) =>
+      Object.prototype.hasOwnProperty.call(patch.payload, "source_context_classified_revision_hashes"),
+    ), false);
+
+    database.rows.set(PARENT_ID, parentRow());
+    const retryResponse = await POST(buildRequest(sourceMetadata()));
+
+    assert.equal(retryResponse.status, 200);
+    assert.equal(gemini.prompts.length, 2);
+    assert.match(gemini.prompts[1]!, /VALIDATED CONNECTED SOURCE CONTEXT/);
+    assert.match(gemini.prompts[1]!, new RegExp(PARENT_ID));
+    assert.ok(gemini.prompts[1]!.includes(PARENT_TEXT));
+    const retriedRow = database.rows.get(TARGET_ID)!;
+    assert.equal(retriedRow.ai_classification_status, "success");
+    assert.deepEqual(retriedRow.source_context_revision_hashes, [revisionHash]);
+    assert.deepEqual(retriedRow.source_context_classified_revision_hashes, [revisionHash]);
+  } finally {
+    gemini.restore();
+    database.restore();
+    restoreEnvironment(previous);
+  }
+});
+
+test("a normal webhook with a failed source-context Gemini call leaves the revision pending", async () => {
+  const previous = saveEnvironment();
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+  const revisionHash = "b".repeat(64);
+  const target = {
+    ...contextTargetRow(),
+    source_context_snapshot: {
+      parent: {
+        tweetId: PARENT_ID,
+        tweetUrl: PARENT_URL,
+        authorHandle: "@thsottiaux",
+        text: PARENT_TEXT,
+      },
+    },
+    source_context_revision_hashes: [revisionHash],
+    source_context_classified_revision_hashes: [],
+    source_context_generation: 1,
+  };
+  const database = installSourceContextDatabase([parentRow(), target]);
+  const gemini = installGeminiPromptCapture(undefined, [503, 503]);
+
+  try {
+    const response = await POST(buildRequest(sourceMetadata()));
+
+    assert.equal(response.status, 200);
+    assert.equal(gemini.prompts.length, 2);
+    assert.match(gemini.prompts[0]!, /VALIDATED CONNECTED SOURCE CONTEXT/);
+    const row = database.rows.get(TARGET_ID)!;
+    assert.equal(row.ai_classification_status, "api_error");
+    assert.deepEqual(row.source_context_revision_hashes, [revisionHash]);
+    assert.deepEqual(row.source_context_classified_revision_hashes, []);
+    assert.equal(database.patches.some((patch) =>
+      Object.prototype.hasOwnProperty.call(patch.payload, "source_context_classified_revision_hashes"),
+    ), false);
+  } finally {
+    gemini.restore();
+    database.restore();
+    restoreEnvironment(previous);
+  }
+});
+
+test("a timed-out normal source-context classification leaves the revision pending", async () => {
+  const previous = saveEnvironment();
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "test-model";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+  process.env.RESET_DISPLAY_NAME_CANDIDATE_MODE = "off";
+  const revisionHash = "c".repeat(64);
+  const target = {
+    ...contextTargetRow(),
+    source_context_snapshot: {
+      parent: {
+        tweetId: PARENT_ID,
+        tweetUrl: PARENT_URL,
+        authorHandle: "@thsottiaux",
+        text: PARENT_TEXT,
+      },
+    },
+    source_context_revision_hashes: [revisionHash],
+    source_context_classified_revision_hashes: [],
+    source_context_generation: 1,
+  };
+  const database = installSourceContextDatabase([parentRow(), target]);
+  const gemini = installGeminiPromptCapture(undefined, [], { simulateTimeout: true });
+
+  try {
+    const response = await POST(buildRequest(sourceMetadata()));
+
+    assert.equal(response.status, 200);
+    assert.equal(gemini.prompts.length, 2);
+    assert.match(gemini.prompts[0]!, /VALIDATED CONNECTED SOURCE CONTEXT/);
+    const row = database.rows.get(TARGET_ID)!;
+    assert.equal(row.ai_classification_status, "timeout");
+    assert.deepEqual(row.source_context_revision_hashes, [revisionHash]);
+    assert.deepEqual(row.source_context_classified_revision_hashes, []);
+    assert.equal(database.patches.some((patch) =>
+      Object.prototype.hasOwnProperty.call(patch.payload, "source_context_classified_revision_hashes"),
+    ), false);
+  } finally {
+    gemini.restore();
+    database.restore();
+    restoreEnvironment(previous);
+  }
+});
+
 test("late context is reclassified once and a response-loss replay sees the durable marker", async () => {
   const previous = saveEnvironment();
   process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
@@ -609,7 +836,13 @@ test("a formal-flow failure leaves the source-context revision pending for retry
     const failedResponse = await POST(request());
 
     assert.equal(failedResponse.status, 503);
-    assert.deepEqual(database.rows.get(TARGET_ID)?.source_context_classified_revision_hashes, []);
+    const failedRow = database.rows.get(TARGET_ID)!;
+    assert.equal(failedRow.ai_classification_status, "success");
+    assert.equal(failedRow.ai_signal_type, "reset_executed");
+    assert.equal(failedRow.source_context_revision_hashes.length, 1);
+    assert.deepEqual(failedRow.source_context_classified_revision_hashes, []);
+    assert.equal(gemini.prompts.length, 1);
+    assert.match(gemini.prompts[0]!, /VALIDATED CONNECTED SOURCE CONTEXT/);
 
     await POST(request());
     assert.equal(gemini.prompts.length, 2);
@@ -944,6 +1177,10 @@ test("source-context reclassification keeps BANKED completion and reviewed manua
     assert.equal(finalRow.signal_type, "irrelevant");
     assert.equal(finalRow.classification_source, "manual");
     assert.equal(finalRow.ai_signal_type, "reset_executed");
+    assert.deepEqual(
+      finalRow.source_context_classified_revision_hashes,
+      finalRow.source_context_revision_hashes,
+    );
     assert.equal(database.urls.some((url) => url.includes("/rpc/claim_tibo_formal_adoption")), false);
     assert.equal(database.urls.some((url) => url.includes("reset_execution_estimates")), false);
     assert.equal(database.upserts.filter((row) => row.tweet_id === bankedId).length, 2);

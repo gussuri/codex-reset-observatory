@@ -2028,16 +2028,30 @@ async function handleTiboWebhookPost(
       );
     }
 
-    if (internalOptions.sourceContextRevisionHashes) {
-      const expectedRevisions = `{${internalOptions.sourceContextRevisionHashes.join(",")}}`;
+    const normalContextClassificationComplete = Boolean(
+      !internalOptions.sourceContextRevisionHashes &&
+      normalExpectedRevisions?.length &&
+      normalExpectedRevisions.every((hash) => /^[a-f0-9]{64}$/.test(hash)) &&
+      Number.isSafeInteger(normalExpectedGeneration) &&
+      (normalExpectedGeneration ?? -1) >= 0 &&
+      tiboEvidenceInput &&
+      tiboEvidenceContext?.status === "complete" &&
+      tiboEvidenceContext.omissions.length === 0 &&
+      aiResult?.status === "success" &&
+      selectedClassification.classificationSource === "gemini"
+    );
+    if (internalOptions.sourceContextRevisionHashes || normalContextClassificationComplete) {
+      const completedRevisionHashes = internalOptions.sourceContextRevisionHashes ?? normalExpectedRevisions!;
+      const completedGeneration = internalOptions.sourceContextGeneration ?? normalExpectedGeneration!;
+      const expectedRevisions = `{${completedRevisionHashes.join(",")}}`;
       const markerUpdateResult = await supabase
         .from("tibo_signals")
         .update({
-          source_context_classified_revision_hashes: internalOptions.sourceContextRevisionHashes,
+          source_context_classified_revision_hashes: completedRevisionHashes,
         })
         .eq("tweet_id", tweetId)
         .eq("source_context_revision_hashes", expectedRevisions)
-        .eq("source_context_generation", internalOptions.sourceContextGeneration)
+        .eq("source_context_generation", completedGeneration)
         .select("tweet_id");
       if (markerUpdateResult.error) {
         console.warn("[Webhook Warning] Tibo source context completion marker save failed", {
