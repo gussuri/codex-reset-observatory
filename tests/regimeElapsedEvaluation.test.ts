@@ -260,7 +260,7 @@ test("point-in-time projection excludes future dynamic records and strips future
   assert.deepEqual(futureForecast.predictions, baselineForecast.predictions);
 });
 
-test("production point-in-time fixture preserves dynamic boundaries and separates cross-type events", () => {
+test("production point-in-time fixture excludes dynamic resets without authoritative monitor evidence", () => {
   const report = evaluateRegimeElapsedProbability(
     createProductionPointInTimeRadarData(),
     PRODUCTION_PARITY_ORIGIN,
@@ -270,13 +270,13 @@ test("production point-in-time fixture preserves dynamic boundaries and separate
   assert.equal(report.evaluationReport.inputMode, "production-point-in-time");
   assert.equal(report.evaluationReport.futureLeakagePolicyVersion, "availability-timestamps-v1");
   assert.equal(report.evaluationReport.backfilled, false);
-  assert.equal(report.evaluationReport.eventCount, 26);
-  assert.equal(report.evaluationReport.recoveryBoundaryCount, 31);
-  assert.equal(report.evaluationReport.currentSnapshot.latestRandomResetAt, "2026-08-13T03:34:43.341Z");
-  assert.equal(report.evaluationReport.currentSnapshot.latestRecoveryResetAt, "2026-08-13T03:34:43.341Z");
-  assert.equal(full.regimeDiagnostics.rawRandomEventCount, 26);
-  assert.ok(Math.abs(full.regimeDiagnostics.regimeMultiplier - 1.6281772625) < 1e-9);
-  assert.ok(Math.abs(full.predictions.probability24h - 0.3287456050) < 1e-9);
-  assert.ok(Math.abs(full.predictions.probability48h - 0.6584455811) < 1e-9);
+  assert.equal(report.evaluationReport.eventCount, 23);
+  assert.equal(report.evaluationReport.recoveryBoundaryCount, 28);
+  assert.equal(report.evaluationReport.currentSnapshot.latestRandomResetAt, "2026-08-01T03:32:00.000Z");
+  assert.equal(report.evaluationReport.currentSnapshot.latestRecoveryResetAt, "2026-08-08T03:32:00.000Z");
+  assert.equal(full.regimeDiagnostics.rawRandomEventCount, 23);
+  assert.ok(Math.abs(full.regimeDiagnostics.regimeMultiplier - 0.6812646997) < 1e-9);
+  assert.ok(Math.abs(full.predictions.probability24h - 0.9) < 1e-9);
+  assert.ok(Math.abs(full.predictions.probability48h - 0.96) < 1e-9);
   assert.equal(typeof report.evaluationReport.currentSnapshot.elapsedOnly.probability24h, "number");
 });

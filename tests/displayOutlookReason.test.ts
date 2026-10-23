@@ -68,6 +68,27 @@ function randomResetAt(completedAt: string): NonNullable<RadarData["formal_tibo_
   };
 }
 
+function monitorObservationsFor(
+  signals: NonNullable<RadarData["formal_tibo_resets"]>,
+) {
+  return signals.map((signal) => ({
+    id: `monitor-${signal.tweet_id}`,
+    sourceKey: "local-codex-app-server",
+    observedAt: signal.tweet_created_at,
+    previousObservedAt: new Date(Date.parse(signal.tweet_created_at) - 2 * 60_000).toISOString(),
+    previousUsedPercent: 100,
+    currentUsedPercent: 0,
+    previousResetsAt: 1_700_000_000,
+    currentResetsAt: 1_700_003_600,
+    matchedTiboTweetId: signal.tweet_id,
+    confidence: "strong" as const,
+    cycleHint: "unexpected" as const,
+    status: "observed" as const,
+    createdAt: signal.tweet_created_at,
+    updatedAt: signal.tweet_created_at,
+  }));
+}
+
 function modelContext(
   regimeMultiplier: number,
   elapsedHours: number,
@@ -148,6 +169,7 @@ function reasonFor({
     calculationNow: now,
     activeTiboSignals: signals,
     formalTiboResets,
+    codexRecoveryObservations: monitorObservationsFor(formalTiboResets ?? []),
     regularResetEvents,
   });
   const baseEvaluation = getLocalSignalEvaluation(data, now);
@@ -328,10 +350,12 @@ test("Radar view uses the random reset clock even when a regular boundary is new
   const withoutRegularData = getLocalRadarData({
     calculationNow: now,
     formalTiboResets: [randomResetAt(randomAt)],
+    codexRecoveryObservations: monitorObservationsFor([randomResetAt(randomAt)]),
   });
   const withRegularData = getLocalRadarData({
     calculationNow: now,
     formalTiboResets: [randomResetAt(randomAt)],
+    codexRecoveryObservations: monitorObservationsFor([randomResetAt(randomAt)]),
     regularResetEvents: [regularResetAt(regularAt)],
   });
   const withoutRegular = getRadarViewModel(
@@ -855,6 +879,7 @@ test("formats 107h representative age matching user specification in all locales
       },
     ],
   });
+  testData.codex_recovery_observations = monitorObservationsFor(testData.formal_tibo_resets ?? []);
   const model = calculateRegimeElapsedProbability(testData, { now: referenceNow });
   const publishedCalculation = {
     source: "shadow" as const,
@@ -904,6 +929,7 @@ test("uses the selected Survival-Conditioned hazard for relative outlook levels"
     verification_status: "confirmed" as const,
   }));
   const data = getLocalRadarData({ calculationNow: now, formalTiboResets });
+  data.codex_recovery_observations = monitorObservationsFor(formalTiboResets);
   const canonicalHistoryContext = buildCanonicalResetHistoryContext(data, {
     defaultStaticHistory: [],
   });
@@ -969,6 +995,7 @@ test("formats low 24h and medium 48h from the selected Survival hazard", () => {
     verification_status: "confirmed" as const,
   }));
   const data = getLocalRadarData({ calculationNow: now, formalTiboResets });
+  data.codex_recovery_observations = monitorObservationsFor(formalTiboResets);
   const canonicalHistoryContext = buildCanonicalResetHistoryContext(data, {
     defaultStaticHistory: [],
   });
@@ -1023,6 +1050,7 @@ test("renders the neutral elapsed template across locales", () => {
       },
     ],
   });
+  testData.codex_recovery_observations = monitorObservationsFor(testData.formal_tibo_resets ?? []);
   const evaluation = getLocalSignalEvaluation(testData, testNow);
 
   const jaSame = getDisplayProbabilityReason(testData, 0.1, Number.NaN, "ja", evaluation, null, testNow, diagSameLow);

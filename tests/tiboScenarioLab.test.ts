@@ -24,6 +24,7 @@ import {
 import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 
 const fixture = fixtureJson as TiboScenarioFixture;
 const scenarios = fixture.scenarios;
@@ -299,7 +300,14 @@ test("semantic sensitivity distinguishes a negated time expression", () => {
 
 test("duplicate executed posts are reduced to one history event", () => {
   const signal = runTiboScenario(scenarioById.get("exec-01")!).formalSignal;
-  const history = combineResetHistory([], [signal, signal]);
+  const history = combineResetHistory(
+    [],
+    [signal, signal],
+    [],
+    [],
+    [],
+    monitorRecoveryObservationsFor([signal]),
+  );
   assert.equal(history.length, 1);
   assert.deepEqual(history[0].sourceTweetIds, [signal.tweet_id]);
 });

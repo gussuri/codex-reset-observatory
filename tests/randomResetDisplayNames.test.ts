@@ -28,6 +28,7 @@ import {
 import { getLocalRadarData } from "../lib/radar";
 import { getCompletedResetTimestamp } from "../lib/radar/probability";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 import {
   getResetDisplayNameWritePayload,
   hashResetDisplayNameInput,
@@ -427,24 +428,28 @@ test("accepted write payload keeps manual and audit fields separate", () => {
 
 test("AI display names affect titles without changing public audit fields or probabilities", () => {
   const now = new Date("2026-08-09T00:00:00.000Z");
+  const formalReset = {
+    tweet_id: "2086188036493344823",
+    text: "A weekend reset is live.",
+    tweet_url: sourceUrl,
+    tweet_created_at: completedAt,
+    detected_at: completedAt,
+    signal_type: "reset_executed" as const,
+    confidence: 0.98,
+    verification_status: "confirmed" as const,
+    classification_source: "gemini" as const,
+  };
+  const codexRecoveryObservations = monitorRecoveryObservationsFor([formalReset]);
   const withName = getLocalRadarData({
     calculationNow: now,
-    formalTiboResets: [{
-      tweet_id: "2086188036493344823",
-      text: "A weekend reset is live.",
-      tweet_url: sourceUrl,
-      tweet_created_at: completedAt,
-      detected_at: completedAt,
-      signal_type: "reset_executed",
-      confidence: 0.98,
-      verification_status: "confirmed",
-      classification_source: "gemini",
-    }],
+    formalTiboResets: [formalReset],
+    codexRecoveryObservations,
     resetDisplayNames: [acceptedRecord()],
   });
   const withoutName = getLocalRadarData({
     calculationNow: now,
     formalTiboResets: withName.formal_tibo_resets,
+    codexRecoveryObservations,
   });
   const ja = getRadarViewModel(withName, "ja", true, undefined, now);
   const en = getRadarViewModel(withName, "en", true, undefined, now);
@@ -467,19 +472,21 @@ test("AI display names affect titles without changing public audit fields or pro
 test("manual Japanese display names use localized fallbacks on history pages", () => {
   const now = new Date("2026-08-30T00:00:00.000Z");
   const manualName = "Codex利用制限改善対応リセット";
+  const formalReset = {
+    tweet_id: "2086188036493344823",
+    text: "A weekend reset is live.",
+    tweet_url: sourceUrl,
+    tweet_created_at: completedAt,
+    detected_at: completedAt,
+    signal_type: "reset_executed" as const,
+    confidence: 0.98,
+    verification_status: "confirmed" as const,
+    classification_source: "gemini" as const,
+  };
   const data = getLocalRadarData({
     calculationNow: now,
-    formalTiboResets: [{
-      tweet_id: "2086188036493344823",
-      text: "A weekend reset is live.",
-      tweet_url: sourceUrl,
-      tweet_created_at: completedAt,
-      detected_at: completedAt,
-      signal_type: "reset_executed",
-      confidence: 0.98,
-      verification_status: "confirmed",
-      classification_source: "gemini",
-    }],
+    formalTiboResets: [formalReset],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([formalReset]),
     resetDisplayNames: [{
       ...acceptedRecord(),
       manual_name_ja: manualName,
@@ -666,6 +673,7 @@ test("localized AI display names are selected without changing the public DTO", 
   };
   const localizedData = getLocalRadarData({
     formalTiboResets: [formalSignal],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([formalSignal]),
     resetDisplayNames: [record],
   });
   const localizedEnItem = getRadarViewModel(

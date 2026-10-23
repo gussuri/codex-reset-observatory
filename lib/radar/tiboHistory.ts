@@ -8,10 +8,13 @@ import type {
   TemporalResolutionSource,
   TemporalResolutionStatus,
 } from "./tiboTemporal";
+import {
+  MAX_USAGE_COMPARISON_GAP_MS,
+  RESET_AT_MEANINGFUL_FORWARD_SEC,
+} from "../codexUsageRecoveryConstants";
 import type { CodexRecoveryObservation } from "../codexUsageRecovery";
 import {
   MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION,
-  RESET_EXECUTION_ESTIMATOR_VERSION,
   TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION,
   isPublicRandomResetExecutionEstimate,
   type ResetExecutionEstimate,
@@ -1101,6 +1104,111 @@ function getRecoveryObservationIdForLogicalPost(
   return matchingObservationIds.length === 1 ? matchingObservationIds[0] : null;
 }
 
+function getFormalSignalIdentityAliases(signal: FormalTiboResetSignal) {
+  const replyProof = getCurrentTiboFormalReplyAdmissionProof(signal);
+  return new Set(uniqueTweetIds([
+    signal.tweet_id,
+    signal.logical_post_id,
+    ...(signal.edit_history_tweet_ids ?? []),
+    ...(replyProof ? [replyProof.contextualResetTweetId, ...replyProof.pathTweetIds] : []),
+  ]));
+}
+
+function isAuthoritativeMonitorRecoveryObservation(
+  observation: CodexRecoveryObservationInput | undefined,
+) {
+  const observedAt = getTimestamp(observation?.observedAt);
+  const previousObservedAt = getTimestamp(observation?.previousObservedAt);
+  const previousUsedPercent = observation?.previousUsedPercent;
+  const currentUsedPercent = observation?.currentUsedPercent;
+  const previousResetsAt = observation?.previousResetsAt;
+  const currentResetsAt = observation?.currentResetsAt;
+  const id = observation?.id?.trim();
+  return Boolean(
+    id &&
+      !isExcludedRecoveryObservationId(id) &&
+      observation?.confidence === "strong" &&
+      observation.cycleHint === "unexpected" &&
+      (observation.status === "observed" || observation.status === "confirmed") &&
+      observedAt !== null &&
+      previousObservedAt !== null &&
+      previousObservedAt < observedAt &&
+      observedAt - previousObservedAt <= MAX_USAGE_COMPARISON_GAP_MS &&
+      typeof previousUsedPercent === "number" &&
+      Number.isFinite(previousUsedPercent) &&
+      previousUsedPercent >= 0 &&
+      previousUsedPercent <= 100 &&
+      typeof currentUsedPercent === "number" &&
+      Number.isFinite(currentUsedPercent) &&
+      currentUsedPercent >= 0 &&
+      currentUsedPercent <= 100 &&
+      previousUsedPercent - currentUsedPercent >= 1 &&
+      typeof previousResetsAt === "number" &&
+      Number.isFinite(previousResetsAt) &&
+      typeof currentResetsAt === "number" &&
+      Number.isFinite(currentResetsAt) &&
+      currentResetsAt - previousResetsAt >= RESET_AT_MEANINGFUL_FORWARD_SEC,
+  );
+}
+
+function isEstimateBackedByMonitorObservation(
+  estimate: ResetExecutionEstimate,
+  observation: CodexRecoveryObservationInput | undefined,
+) {
+  if (
+    !isPublicRandomResetExecutionEstimate(estimate) ||
+    !estimate.recoveryObservationId ||
+    estimate.recoveryObservationId !== observation?.id ||
+    !isAuthoritativeMonitorRecoveryObservation(observation)
+  ) return false;
+
+  const displayAt = getTimestamp(estimate.displayExecutionAt);
+  const windowStartAt = getTimestamp(estimate.executionWindowStartAt);
+  const windowEndAt = getTimestamp(estimate.executionWindowEndAt);
+  const observedAt = getTimestamp(observation.observedAt);
+  const previousObservedAt = getTimestamp(observation.previousObservedAt);
+  return Boolean(
+    displayAt !== null &&
+      windowStartAt !== null &&
+      windowEndAt !== null &&
+      observedAt !== null &&
+      previousObservedAt !== null &&
+      displayAt === observedAt &&
+      windowStartAt === previousObservedAt &&
+      windowEndAt === observedAt,
+  );
+}
+
+function hasMonitorRecoveryEvidenceForFormalSignal(
+  signal: FormalTiboResetSignal,
+  recoveryObservations: ReadonlyArray<CodexRecoveryObservationInput>,
+  estimates: ReadonlyArray<ResetExecutionEstimate>,
+) {
+  const aliases = getFormalSignalIdentityAliases(signal);
+  const hasMatchedMonitorObservation = recoveryObservations.some((observation) =>
+    Boolean(
+      observation.matchedTiboTweetId &&
+        aliases.has(observation.matchedTiboTweetId.trim()) &&
+        isAuthoritativeMonitorRecoveryObservation(observation),
+    ),
+  );
+  if (hasMatchedMonitorObservation) return true;
+
+  return estimates.some((estimate) => {
+    const observation = recoveryObservations.find((candidate) =>
+      candidate.id === estimate.recoveryObservationId,
+    );
+    if (!isEstimateBackedByMonitorObservation(estimate, observation)) return false;
+
+    const estimateAliases = uniqueTweetIds([
+      estimate.tiboPrimaryTweetId,
+      ...estimate.tiboSourceTweetIds,
+      observation?.matchedTiboTweetId,
+    ]);
+    return estimateAliases.some((tweetId) => aliases.has(tweetId));
+  });
+}
+
 function getHistoryIdentityProjectionInput(
   formalSignals: ReadonlyArray<FormalTiboResetSignal>,
   context: TiboHistoryIdentityContext,
@@ -2020,46 +2128,20 @@ export function getNoticeBackedHistoryInputs(data: NoticeBackedHistoryData | nul
 }
 
 function isValidNoticeBackedEstimate(estimate: ResetExecutionEstimate) {
-  return isPublicRandomResetExecutionEstimate(estimate) ||
-    isValidManualNoticeBackedEstimate(estimate);
-}
-
-function isValidManualNoticeBackedEstimate(estimate: ResetExecutionEstimate) {
-  const displayTime = getTimestamp(estimate.displayExecutionAt);
-  const manualTime = getTimestamp(estimate.manualExecutionAt ?? null);
-  const auditedAt = getTimestamp(estimate.manualOverrideAt ?? null);
-  const officialNoticeTweetId = estimate.officialNoticeTweetId?.trim();
-  const sourceTweetIds = new Set(estimate.tiboSourceTweetIds.map((tweetId) => tweetId.trim()));
-
-  return Boolean(
-    estimate.executionTimeSource === "manual_override" &&
-      estimate.executionTimeConfidence === "high" &&
-      (estimate.executionTimePrecision === "approximate" || estimate.executionTimePrecision === "exact") &&
-      estimate.manualExecutionPrecision === estimate.executionTimePrecision &&
-      displayTime !== null &&
-      manualTime === displayTime &&
-      auditedAt !== null &&
-      estimate.manualOverrideReason?.trim() &&
-      estimate.estimatorVersion === RESET_EXECUTION_ESTIMATOR_VERSION &&
-      officialNoticeTweetId &&
-      sourceTweetIds.has(officialNoticeTweetId) &&
-      !estimate.recoveryObservationId &&
-      !estimate.executionWindowStartAt &&
-      !estimate.executionWindowEndAt,
-  );
+  return isPublicRandomResetExecutionEstimate(estimate);
 }
 
 function isValidSupportingRecoveryObservation(
   observation: CodexRecoveryObservationInput | undefined,
   allowMedium = false,
 ) {
-  if (!observation) return true;
+  if (!observation) return false;
   const observedAt = getTimestamp(observation.observedAt);
   const previousObservedAt = getTimestamp(observation.previousObservedAt);
   return Boolean(
     (observation.confidence === "strong" || (allowMedium && observation.confidence === "medium")) &&
-      observation.cycleHint !== "regular" &&
-      observation.status !== "rejected" &&
+      observation.cycleHint === "unexpected" &&
+      (observation.status === "observed" || observation.status === "confirmed") &&
       observedAt !== null &&
       previousObservedAt !== null &&
       previousObservedAt < observedAt,
@@ -2068,10 +2150,16 @@ function isValidSupportingRecoveryObservation(
 
 export function getNoticeBackedRecoveryObservationIds(
   estimates: ReadonlyArray<ResetExecutionEstimate> = [],
+  recoveryObservations: ReadonlyArray<CodexRecoveryObservationInput> = [],
 ) {
   return new Set(
     estimates
-      .filter(isValidNoticeBackedEstimate)
+      .filter((estimate) =>
+        isValidNoticeBackedEstimate(estimate) &&
+        recoveryObservations.some((observation) =>
+          isEstimateBackedByMonitorObservation(estimate, observation),
+        ),
+      )
       .map((estimate) => estimate.recoveryObservationId!)
       .filter(Boolean),
   );
@@ -2089,12 +2177,12 @@ function buildNoticeBackedRecoveryEvent(
   if (!isValidNoticeBackedEstimate(estimate)) return null;
 
   const recoveryObservationId = estimate.recoveryObservationId;
-  const isManualEstimate = isValidManualNoticeBackedEstimate(estimate);
-  if (!recoveryObservationId && !isManualEstimate) return null;
+  if (!recoveryObservationId) return null;
 
   const recoveryObservation = recoveryObservations.find(
     (observation) => observation.id === recoveryObservationId,
   );
+  if (!isEstimateBackedByMonitorObservation(estimate, recoveryObservation)) return null;
   const officialNoticeTweetId = estimate.officialNoticeTweetId?.trim() || null;
   const teaserTweetId = (!officialNoticeTweetId && estimate.tiboPrimaryTweetId?.trim()) || null;
   const isTeaserCorroborated =
@@ -2106,7 +2194,7 @@ function buildNoticeBackedRecoveryEvent(
     !isTeaserCorroborated &&
     (estimate.estimatorVersion === MONITOR_OBSERVED_RESET_EXECUTION_ESTIMATOR_VERSION ||
       (!estimate.tiboPrimaryTweetId && Boolean(recoveryObservationId)));
-  if (!isValidSupportingRecoveryObservation(recoveryObservation, isTeaserCorroborated || isMonitorObserved)) {
+  if (!isValidSupportingRecoveryObservation(recoveryObservation, isTeaserCorroborated)) {
     return null;
   }
 
@@ -2128,13 +2216,6 @@ function buildNoticeBackedRecoveryEvent(
       rawNotice &&
       isCurrentUsageResetAnnouncement(rawNotice.text ?? ""),
   );
-  if (isManualEstimate && (
-    !officialNoticeTweetId ||
-    !rawNotice ||
-    rawNotice.signal_type !== "official_notice" ||
-    rawNotice.verification_status !== "confirmed" ||
-    rawNotice.is_reply === true
-  )) return null;
   const notice: TiboNoticeSignal | null = rawNotice &&
       officialNoticeTweetId &&
       rawNotice.signal_type === "reset_executed"
@@ -2230,13 +2311,14 @@ export function findNoticeBackedRecoveryEvents(
     if (seen.has(estimate.resetEventKey)) return [];
     if (isExcludedResetEventKey(estimate.resetEventKey)) return [];
     if (isExcludedRecoveryObservationId(estimate.recoveryObservationId)) return [];
-    seen.add(estimate.resetEventKey);
     const event = buildNoticeBackedRecoveryEvent(
       estimate,
       noticeSignals,
       recoveryObservations,
     );
-    return event ? [event] : [];
+    if (!event) return [];
+    seen.add(estimate.resetEventKey);
+    return [event];
   });
 }
 
@@ -2501,7 +2583,12 @@ function buildCanonicalResetHistoryParts(
   projection?: TiboReadSideProjection,
 ): CanonicalResetHistoryParts {
   const formalSignals = formalTiboResets
-    .filter(isFormalTiboResetSignal);
+    .filter(isFormalTiboResetSignal)
+    .filter((signal) => hasMonitorRecoveryEvidenceForFormalSignal(
+      signal,
+      recoveryObservations,
+      estimates,
+    ));
   const canonicalFormalHistory = identityContext
     ? buildCanonicalFormalHistory(
         formalSignals,

@@ -11,12 +11,13 @@ import {
 } from "../lib/radar/probability";
 import { calculateSurvivalConditionedProbability } from "../lib/radar/survivalConditionedProbability";
 import { getLastRandomRecoveryResetAt, getRecoveryResetEvents } from "../lib/radar/recoveryBoundary";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
+import type { FormalTiboResetSignal } from "../lib/radar/tiboHistory";
 
 test("reset_executed resets days since last reset to 0 and updates effectiveLatestResetAt", () => {
   const now = new Date("2026-07-18T15:00:00.000Z");
   const recentExecutionTime = now.toISOString();
-  const mockRadarData = getLocalRadarData({
-    formalTiboResets: [
+  const formalTiboResets: FormalTiboResetSignal[] = [
       {
         tweet_id: "1111",
         text: "All Codex limits have been reset.",
@@ -26,7 +27,10 @@ test("reset_executed resets days since last reset to 0 and updates effectiveLate
         tweet_created_at: recentExecutionTime,
         verification_status: "confirmed",
       },
-    ],
+    ];
+  const mockRadarData = getLocalRadarData({
+    formalTiboResets,
+    codexRecoveryObservations: monitorRecoveryObservationsFor(formalTiboResets),
     calculationNow: now,
   });
 

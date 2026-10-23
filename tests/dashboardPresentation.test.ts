@@ -32,6 +32,7 @@ import {
 import type { FormalTiboResetSignal, TiboNoticeSignal } from "../lib/radar/tiboHistory";
 import type { ActiveTiboSignal, ResetDisplayNameRecord } from "../lib/radar/types";
 import type { CodexRecoveryObservation } from "../lib/codexUsageRecovery";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
 
@@ -991,7 +992,10 @@ test("publishes an EOD notice window in three locales and consumes it after the 
     related_notice: notice,
   };
   const afterCompletion = getLocalRadarData({
-    calculationNow: new Date("2026-10-11T06:35:00.000Z"), activeTiboSignals: [notice], formalTiboResets: [reset],
+    calculationNow: new Date("2026-10-11T06:35:00.000Z"),
+    activeTiboSignals: [notice],
+    formalTiboResets: [reset],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([reset]),
   });
   const localizedWindow = {
     ja: /07:16 JST ～ .*16:00 JST/,
@@ -2813,12 +2817,14 @@ test("keeps notice-backed history on the shared notice-to-execution schema", () 
       verification_status: "auto_unverified",
     },
   });
+  const formalTiboResets = [
+    makeReset("shared-official-reset", "official_notice", "2026-08-01T07:00:00.000Z", "2026-08-01T09:00:00.000Z"),
+    makeReset("shared-teaser-reset", "teaser", "2026-08-02T07:00:00.000Z", "2026-08-02T09:00:00.000Z"),
+  ];
   const data = getLocalRadarData({
     calculationNow,
-    formalTiboResets: [
-      makeReset("shared-official-reset", "official_notice", "2026-08-01T07:00:00.000Z", "2026-08-01T09:00:00.000Z"),
-      makeReset("shared-teaser-reset", "teaser", "2026-08-02T07:00:00.000Z", "2026-08-02T09:00:00.000Z"),
-    ],
+    formalTiboResets,
+    codexRecoveryObservations: monitorRecoveryObservationsFor(formalTiboResets),
   });
 
   const expected = {

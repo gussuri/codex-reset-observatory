@@ -1,0 +1,2 @@
+export const MAX_USAGE_COMPARISON_GAP_MS = 10 * 60 * 1000;
+export const RESET_AT_MEANINGFUL_FORWARD_SEC = 60 * 60;

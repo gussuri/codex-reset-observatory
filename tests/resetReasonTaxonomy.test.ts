@@ -9,6 +9,7 @@ import {
   RESET_REASON_TYPES,
 } from "@/lib/radar/resetReason";
 import { TIBO_APOLOGY_RESET_NOTICE } from "./fixtures/tiboApologyResetNotice";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 
 const calculationNow = new Date("2026-08-14T00:00:00.000Z");
 
@@ -80,6 +81,10 @@ describe("canonical reset reason taxonomy", () => {
     const tweetId = "2086972933566857393";
     const data = getLocalRadarData({
       calculationNow,
+      codexRecoveryObservations: monitorRecoveryObservationsFor([{
+        tweet_id: tweetId,
+        tweet_created_at: "2026-08-11T00:00:00.000Z",
+      }]),
       formalTiboResets: [{
         tweet_id: tweetId,
         text: "Usage limits have been reset for all paid ChatGPT Work and Codex users. Happy Monday you all. Hope it is a fantastic week.",

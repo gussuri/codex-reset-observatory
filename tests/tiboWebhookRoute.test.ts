@@ -8,6 +8,7 @@ import { NextRequest } from "next/server";
 import { POST } from "../app/api/webhook/tibo/route";
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 import { TARGET_TIBO_TWEET_CREATED_AT, TARGET_TIBO_TWEET_ID, TARGET_TIBO_TWEET_TEXT, TARGET_TIBO_TWEET_URL } from "./fixtures/tiboLongFormReset";
 import { TIBO_APOLOGY_RESET_NOTICE } from "./fixtures/tiboApologyResetNotice";
 import { TIBO_RESET_PROPAGATION_COMPLETION } from "./fixtures/tiboResetPropagationCompletion";
@@ -2067,16 +2068,19 @@ test(`a validated self-reply keeps source context through its deadline and compl
     assert.equal(publicBeforeReset.viewModel.activeWindow.expectedEndAt, scenario.expectedEndAt);
     assert.equal(publicBeforeReset.viewModel.activeWindow.source, noticeSource);
 
+    const completionSignal = {
+      tweet_id: "2113163000000000000",
+      tweet_created_at: scenario.resetAt,
+    };
     const publicAfterReset = toPublicRadarSnapshot(
       getLocalRadarData({
         calculationNow: new Date(scenario.completionNow),
         activeTiboSignals: [savedSignal],
         recentTiboSignals: [savedSignal],
         formalTiboResets: [{
-          tweet_id: "2113163000000000000",
+          ...completionSignal,
           text: "We reset usage limits for all Codex users.",
           tweet_url: "https://x.com/thsottiaux/status/2113163000000000000",
-          tweet_created_at: scenario.resetAt,
           signal_type: "reset_executed",
           confidence: 0.99,
           verification_status: "confirmed",
@@ -2085,6 +2089,7 @@ test(`a validated self-reply keeps source context through its deadline and compl
           ai_classification_status: "success",
           ai_evidence_quote: "We reset usage limits for all Codex users.",
         }],
+        codexRecoveryObservations: monitorRecoveryObservationsFor([completionSignal]),
       }),
       "en",
       { calculationNow: new Date(scenario.completionNow) },

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 import {
   getActiveOfficialNotice,
   getLocalProbabilityCalculation,
@@ -119,6 +120,7 @@ test("a canonical random/global execution still consumes the same official notic
     calculationNow: CALCULATION_AT,
     activeTiboSignals: [unresolvedNotice()],
     formalTiboResets: [resetExecuted()],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([resetExecuted()]),
     regularResetEvents: [regularReset()],
   });
 
