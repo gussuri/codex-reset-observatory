@@ -22,10 +22,13 @@
 ## Review Focus
 
 - Tibo completion without a monitor observation cannot create history or move `lastRandomResetAt`.
+- A raw/formal Tibo completion cannot consume an official notice or alter teaser lifecycle independently of canonical monitor-backed history.
+- Monitor identity aliases must come from `getTrustedTiboEditIdentity`; the current validated reply-admission proof remains the only reply-path alias source.
 - AI confidence, manual confirmation, completion wording, and an adoption ledger do not independently authorize history.
 - A missing, stale, rejected, regular, weak, or unknown recovery observation cannot back a public execution estimate.
 - A valid monitor observation works whether it arrives before or after a Tibo post, and duplicate deliveries remain one event.
-- Existing static archive entries and BANKED/regular events retain their existing authority and identity.
+- Exactly the three previously published Oct 13/15/17 announcement-fallback rows remain in the static archive with their existing key, precision, provenance, and localized presentation; no general AI-only legacy exception is added.
+- BANKED/regular events retain their existing authority and identity.
 
 ---
 
@@ -57,7 +60,18 @@
 
 **Files:**
 - Modify: `docs/reset-history-normalization.md`
+- Modify: `data/resetHistory.ts`
+- Modify: `lib/radar/probability.ts`
+- Modify: `lib/radar/tiboHistory.ts`
+- Modify: `lib/radar.ts`
+- Modify: `lib/radar/types.ts`
+- Modify: `tests/officialNoticeConsumptionBoundary.test.ts`
+- Modify: `tests/tiboCanonicalHistoryIdentity.test.ts`
+- Modify: `tests/tiboFormalHistory.test.ts`
 
-- [x] Document evidence requirements, read-side/order invariance, and the precise legacy archive boundary.
-- [x] Run focused tests, full `pnpm test`, lint, typecheck, production build, and `git diff --check`.
-- [ ] Review the complete diff and commit locally; leave remote publication and deployment for Sol review.
+- [x] Document evidence requirements, read-side/order invariance, and the precise three-row legacy archive boundary.
+- [x] Address Sol review finding 1: remove raw formal-signal cutoffs from official-notice consumption and teaser lifecycle.
+- [x] Address Sol review finding 2: validate edit aliases through the trusted edit-identity helper while retaining validated reply proof aliases.
+- [x] Address Sol review finding 3: freeze only the three previously published announcement-fallback rows with exact keys and provenance.
+- [x] Run focused tests, full `pnpm test`, lint, typecheck, production build, and `git diff --check` on the final diff.
+- [x] Review the complete diff and commit locally; leave remote publication and deployment for Sol review.

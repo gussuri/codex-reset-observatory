@@ -424,8 +424,18 @@ export function getRadarViewModel(
     true,
   );
   const observedLatestWindow = getLatestWindow(source);
-  const observedHistory = getRecentHistory(source, locale, limitHistory, canonicalHistoryContext);
-  const latestCompletedLocalWindow = getLatestCompletedLocalWindow(source, canonicalHistoryContext);
+  const observedHistory = getRecentHistory(
+    source,
+    locale,
+    limitHistory,
+    canonicalHistoryContext,
+    calculationNow,
+  );
+  const latestCompletedLocalWindow = getLatestCompletedLocalWindow(
+    source,
+    canonicalHistoryContext,
+    calculationNow,
+  );
   const effectiveLatestResetAt = getLastGlobalResetAt(source, calculationNow, canonicalHistoryContext)?.toISOString() ??
     observedHistory.find((item) => item.resetAt)?.resetAt ??
     null;
@@ -689,15 +699,19 @@ function addPersonalResetEventsToHistory(
 function getLatestCompletedLocalWindow(
   data?: RadarData | null,
   canonicalHistoryContext?: CanonicalResetHistoryContext,
+  now: Date = new Date(),
 ): WindowLike | undefined {
   const globalHistory = canonicalHistoryContext?.displayHistory ?? getCombinedResetHistory(data);
+  const nowTime = now.getTime();
 
   return globalHistory
-    .filter((item) =>
-      getCompletedResetAt(item) &&
-      (getHistoryRecordKind(item) === "confirmed_global" ||
-        getHistoryRecordKind(item) === "regular_completed")
-    )
+    .filter((item) => {
+      const completedAt = getCompletedResetAt(item);
+      const completedTime = completedAt ? getDateTime(completedAt) : 0;
+      return completedTime > 0 && completedTime <= nowTime &&
+        (getHistoryRecordKind(item) === "confirmed_global" ||
+          getHistoryRecordKind(item) === "regular_completed");
+    })
     .sort((a, b) => {
       const aTime = getDateTime(getCompletedResetAt(a));
       const bTime = getDateTime(getCompletedResetAt(b));
@@ -753,6 +767,13 @@ function getHistoryExecutionPresentation(
 ) {
   if (!canonicalResetAt) {
     return { resetAt: null, executionTimePrecision: null } as const;
+  }
+
+  if (item.executionTimePrecision === "announcement_fallback") {
+    return {
+      resetAt: canonicalResetAt,
+      executionTimePrecision: item.executionTimePrecision,
+    } as const;
   }
 
   const estimate = getResetExecutionEstimateForHistoryItem(data, item);
@@ -1441,10 +1462,18 @@ function getRecentHistory(
   locale: Locale = "ja",
   limit: boolean = true,
   canonicalHistoryContext?: CanonicalResetHistoryContext,
+  now: Date = new Date(),
 ) {
   const seen = new Set<string>();
+  const nowTime = now.getTime();
   const items = (canonicalHistoryContext?.displayHistory ?? getCombinedResetHistory(data))
     .filter((item): item is WindowEventLike => Boolean(item?.title))
+    .filter((item) => {
+      const completedAt = getCompletedResetAt(item);
+      if (!completedAt) return true;
+      const completedTime = getDateTime(completedAt);
+      return completedTime === 0 || completedTime <= nowTime;
+    })
     .filter((item) => {
       const dedupeKey = getHistoryDedupeKey(item);
 

@@ -155,6 +155,16 @@ AI confidence、`verification_status = confirmed`、manual execution-time overri
 
 この gate は formal history の生成前に適用し、history 表示だけでなく共通 canonical history を使う probability boundary と public recovery projection に反映します。既存の `data/resetHistory.ts` にある static archive は legacy authority として維持し、遡及的な backfill / rewrite は行いません。static archive に入っていない legacy AI-confirmed signal を、AI確認済みという理由だけで例外扱いしません。regular reset と BANKED distribution はそれぞれ既存の専用経路を維持します。
 
+monitor gate 導入前に公開済みだった announcement-fallback 履歴のうち、健康かつ非staleの公開API snapshot（`checkedAt=2026-10-23T11:00:01.004Z`）に存在し、従来の `data/resetHistory.ts` に含まれていなかった次の3件だけを、元のevent keyと公開内容を保つ static archive row として追加します。時刻は公開済みの announcement fallback のまま `executionTimePrecision = announcement_fallback` とし、monitor観測時刻へ読み替えません。各行の notice/completion tweet ID、元の signal/window、source URL、空のscope、JA/EN/ZHのtitle・summary・noteを同snapshotに固定します。
+
+| Canonical event key | signal / fallback time (UTC) | notice / completion tweet IDs |
+| --- | --- | --- |
+| `tibo-reset-2109873287853707513` | `2026-10-13T01:03:59Z` / `2026-10-13T05:06:06Z` | `2109812360596865224` / `2109873287853707513` |
+| `tibo-reset-2110618732666257557` | `2026-10-15T04:55:51Z` / `2026-10-15T06:28:13Z` | `2110595484180214059` / `2110618732666257557` |
+| `tibo-reset-2111566005684289735` | `2026-10-17T16:20:57Z` / `2026-10-17T21:12:21Z` | `2111492673890824348` / `2111566005684289735` |
+
+これらは過去に公開された3つの表示・履歴値を保つための限定的な固定データです。monitor evidence が存在したことを示すものではなく、static archive にないAI-only投稿、adoption ledger、手動確認済み投稿へ例外を広げません。以後の新しいdynamic eventは引き続き有効なmonitor gateを通過する必要があります。
+
 ## 7. Identity / chronology invariant
 
 `buildTiboReadSideProjection()` は active/recent/formal の重複を read-side で整理し、trusted edit chain を logical post として扱います。formal reset は `isFormalTiboResetSignal()` の条件と、上記 monitor recovery gate の両方を通過したものだけが新規 formal history になります。

@@ -694,7 +694,7 @@ for (const { name, signal } of [
   });
 }
 
-test("notice older than latest accepted reset is not selected as an active official notice", () => {
+test("an unobserved completion post cannot consume an older active official notice", () => {
   const now = new Date("2026-08-01T12:00:00.000Z");
   const data = getLocalRadarData({
     activeTiboSignals: [
@@ -717,5 +717,5 @@ test("notice older than latest accepted reset is not selected as an active offic
     ],
   });
 
-  assert.strictEqual(getActiveOfficialNotice(data, null, now), null);
+  assert.equal(getActiveOfficialNotice(data, null, now)?.id, "older-notice");
 });

@@ -147,6 +147,94 @@ test("trusted edit versions become one canonical history event beyond the legacy
   assert.equal(history[0].completed_at, root.tweet_created_at);
 });
 
+test("untrusted edit metadata cannot borrow a monitor observation from another tweet ID", () => {
+  const oldTweetId = "2112432076767289678";
+  const cases: Array<{
+    name: string;
+    tweetId: string;
+    editMetadataSource: "none" | "x_api";
+    logicalPostId: string;
+    editHistoryTweetIds: string[];
+    editVersion: number;
+  }> = [
+    {
+      name: "metadata source none",
+      tweetId: "2113492187770175603",
+      editMetadataSource: "none",
+      logicalPostId: oldTweetId,
+      editHistoryTweetIds: [oldTweetId, "2113492187770175603"],
+      editVersion: 2,
+    },
+    {
+      name: "version does not identify this row",
+      tweetId: "2113492187770175604",
+      editMetadataSource: "x_api",
+      logicalPostId: oldTweetId,
+      editHistoryTweetIds: [oldTweetId, "2113492187770175604"],
+      editVersion: 1,
+    },
+    {
+      name: "logical post conflicts with chain root",
+      tweetId: "2113492187770175605",
+      editMetadataSource: "x_api",
+      logicalPostId: "2112432076767289680",
+      editHistoryTweetIds: [oldTweetId, "2113492187770175605"],
+      editVersion: 2,
+    },
+  ];
+
+  for (const item of cases) {
+    const signal = tiboSignal(item.tweetId, "2026-10-23T22:00:00.000Z", {
+      logical_post_id: item.logicalPostId,
+      edit_history_tweet_ids: item.editHistoryTweetIds,
+      edit_version: item.editVersion,
+      edit_metadata_source: item.editMetadataSource,
+    });
+    const observation = monitorObservationFor(signal, {
+      matchedTiboTweetId: oldTweetId,
+    });
+
+    assert.deepEqual(
+      combineResetHistory([], [signal], [], [], [], [observation]),
+      [],
+      item.name,
+    );
+  }
+});
+
+test("a validated X API edit chain can use its matched root monitor observation", () => {
+  const rootTweetId = "2000000000000000101";
+  const editedTweetId = "2000000000000000102";
+  const edited = tiboSignal(editedTweetId, "2026-08-01T01:00:00.000Z", {
+    logical_post_id: rootTweetId,
+    edit_history_tweet_ids: [rootTweetId, editedTweetId],
+    edit_version: 2,
+    edit_metadata_source: "x_api",
+  });
+  const observation = monitorObservationFor(edited, {
+    matchedTiboTweetId: rootTweetId,
+  });
+
+  const history = combineWithIdentityContext(
+    [],
+    [edited],
+    [],
+    [],
+    [],
+    [observation],
+    [],
+    [],
+    {
+      rawTiboSignals: [edited],
+      recoveryObservations: [observation],
+    },
+  );
+
+  assert.equal(history.length, 1);
+  assert.equal(history[0].id, `tibo-reset-${rootTweetId}`);
+  assert.deepEqual(history[0].sourceTweetIds, [rootTweetId, editedTweetId]);
+});
+
 test("trusted logical posts inside five minutes remain separate while legacy none rows keep compatibility", () => {
   const first = tiboSignal("2000000000000000011", "2026-08-01T02:00:00.000Z", {
     logical_post_id: "2000000000000000011",

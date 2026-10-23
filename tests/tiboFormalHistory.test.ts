@@ -1869,6 +1869,168 @@ test("history records distinguish confirmed resets, banked distributions, and so
   assert.equal(getHistorySourceKind({}), "none");
 });
 
+test("the three previously published announcement-fallback events retain their exact API history snapshot", () => {
+  const calculationNow = new Date("2026-10-23T11:00:01.004Z");
+  const data = getLocalRadarData({ calculationNow });
+  const expected = [
+    {
+      key: "tibo-reset-2111566005684289735",
+      signalAt: "2026-10-17T16:20:57Z",
+      resetAt: "2026-10-17T21:12:21Z",
+      source: "https://x.com/thsottiaux/status/2111492673890824348",
+      sourceTweetIds: ["2111492673890824348", "2111566005684289735"],
+      windowLength: { ja: "4時間51分", en: "4h 51m", zh: "4小时51分钟" },
+      noticeToExecution: { ja: "4時間51分", en: "4 hours 51 minutes", zh: "4 小时 51 分钟" },
+      title: {
+        ja: "13日目のル・リミット・リセット",
+        en: "Day 13 · Le Limit Reset",
+        zh: "第13天的 Le Limit 重置",
+      },
+      summary: {
+        ja: "「Day 13/ Le limit reset」と予告された、13日目のCodex利用上限リセット。Tibo氏が後続投稿で完了を報告しました。",
+        en: "The Day 13 Codex usage-limit reset, announced as “Day 13/ Le limit reset.” Tibo later confirmed its completion.",
+        zh: "Tibo 以“Day 13/ Le limit reset”预告了第13天的 Codex 使用额度重置，随后发文确认完成。",
+      },
+      note: {
+        ja: "Tibo氏が「Day 13/ Le limit reset」と予告した、Codexの利用上限を直接リセットする回です。利用できる枠を回復する対応で、後続の「Done」という投稿で完了が報告されました。",
+        en: "Tibo announced this Codex usage-limit reset with “Day 13/ Le limit reset.” It directly refreshed usage limits to restore available capacity, and he confirmed completion in a follow-up post saying “Done.”",
+        zh: "Tibo 以“Day 13/ Le limit reset”预告了这次 Codex 使用额度重置。本次操作直接重置使用额度，以恢复可用额度，随后他发文“Done”确认完成。",
+      },
+    },
+    {
+      key: "tibo-reset-2110618732666257557",
+      signalAt: "2026-10-15T04:55:51Z",
+      resetAt: "2026-10-15T06:28:13Z",
+      source: "https://x.com/thsottiaux/status/2110595484180214059",
+      sourceTweetIds: ["2110595484180214059", "2110618732666257557"],
+      windowLength: { ja: "1時間32分", en: "1h 32m", zh: "1小时32分钟" },
+      noticeToExecution: { ja: "1時間32分", en: "1 hour 32 minutes", zh: "1 小时 32 分钟" },
+      title: {
+        ja: "リセットボタン紛失説は大げさでしたリセット",
+        en: "The Reset Button Is Alive and Well Reset",
+        zh: "重置按钮失踪传闻言过其实重置",
+      },
+      summary: {
+        ja: "Tibo氏が「10日目はリセット」と予告し、その後、Codexの利用上限リセットの完了を報告した回です。",
+        en: "Tibo announced a reset for Day 10, then confirmed that the Codex usage-limit reset was complete.",
+        zh: "Tibo 预告第10天进行重置，随后报告 Codex 使用额度已完成重置。",
+      },
+      note: {
+        ja: "「リセットボタンをなくした」という噂は大げさだと冗談を交え、「10日目はリセット」と予告。続く投稿で「今後2時間以内」と案内し、最初の予告から約1時間32分後に「Done and dusted（無事完了）」と報告しました。Codexの利用上限を直接リセットし、利用できる枠を回復する対応でした。",
+        en: "Tibo joked that reports of his reset button being lost were greatly exaggerated and announced a reset for Day 10. A follow-up said it would land within two hours, and the completion post came about one hour and 32 minutes after the original notice. This reset directly refreshed Codex usage limits to restore available capacity.",
+        zh: "Tibo 开玩笑说，关于他弄丢重置按钮的传闻被严重夸大了，并宣布第10天将进行重置。随后他说明会在接下来两小时内完成，并在最初预告约1小时32分钟后发布了完成消息。这次操作直接重置 Codex 的使用额度，以恢复可用额度。",
+      },
+    },
+    {
+      key: "tibo-reset-2109873287853707513",
+      signalAt: "2026-10-13T01:03:59Z",
+      resetAt: "2026-10-13T05:06:06Z",
+      source: "https://x.com/thsottiaux/status/2109812360596865224",
+      sourceTweetIds: ["2109812360596865224", "2109873287853707513"],
+      windowLength: { ja: "4時間2分", en: "4h 2m", zh: "4小时2分钟" },
+      noticeToExecution: { ja: "4時間2分", en: "4 hours 2 minutes", zh: "4 小时 2 分钟" },
+      title: {
+        ja: "サイドオーダーには何を頼みますかリセット",
+        en: "What’s Your Side Order? Reset",
+        zh: "配菜想点什么？重置",
+      },
+      summary: {
+        ja: "全体リセットの事前告知に続き、Tibo氏がCodexの利用上限のリセット完了を報告しました。",
+        en: "Following an announcement of a global reset, Tibo reported that the Codex usage-limit reset was complete.",
+        zh: "在预告全局重置之后，Tibo 报告 Codex 使用额度已完成重置。",
+      },
+      note: {
+        ja: "Tibo氏がリセットをサイドメニューにたとえた問いかけを添えて、完了を報告した回です。全体リセットの事前告知から約4時間後に、完了投稿が出ました。Codexの利用上限を直接リセットし、利用枠を回復させる対応です。",
+        en: "Tibo announced that the reset was done with a playful question likening it to a side dish. The completion post came about four hours after the global-reset notice. This reset directly refreshed Codex usage limits.",
+        zh: "Tibo 用把重置比作配菜的俏皮提问，报告了重置完成。这条完成消息发布于全局重置预告约四小时之后。本次操作直接重置了 Codex 的使用额度。",
+      },
+    },
+  ] as const;
+
+  for (const event of expected) {
+    const archive = LOCAL_RESET_HISTORY.find((item) => item.id === event.key);
+    assert.ok(archive, `${event.key} should be preserved in the legacy archive`);
+    assert.equal(archive.recordKind, "confirmed_global");
+    assert.equal(archive.executionTimePrecision, "announcement_fallback");
+    assert.equal(archive.scope, "");
+    assert.equal(archive.details?.scope, "");
+    assert.deepEqual(archive.sourceTweetIds, event.sourceTweetIds);
+    assert.equal(archive.officialNoticeTweetId, event.sourceTweetIds[0]);
+    assert.equal(archive.source_url, event.source);
+  }
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const history = toPublicRadarSnapshot(data, locale, {
+      calculationNow,
+      limitHistory: false,
+    }).viewModel.recentHistory;
+    for (const event of expected) {
+      const item = history.find((candidate) => candidate.key === event.key);
+      assert.ok(item, `${locale} ${event.key} should remain public`);
+      assert.equal(item.title, event.title[locale]);
+      assert.equal(item.date, event.resetAt);
+      assert.equal(item.signalAt, event.signalAt);
+      assert.equal(item.resetAt, event.resetAt);
+      assert.equal(item.executionTimePrecision, "announcement_fallback");
+      assert.equal(item.source, event.source);
+      assert.equal(item.sourceKind, "direct_post");
+      assert.equal(item.windowLength, event.windowLength[locale]);
+      assert.equal(item.details?.cycleType, locale === "ja" ? "ランダムリセット" : locale === "en" ? "Random reset" : "随机重置");
+      assert.equal(item.details?.reasonType, locale === "ja" ? "ご祝儀リセット" : locale === "en" ? "Celebration reset" : "庆祝重置");
+      assert.equal(item.details?.resetMethod, locale === "ja" ? "強制リセット" : locale === "en" ? "Hard Reset" : "强制重置");
+      assert.equal(item.details?.scope, "");
+      assert.equal(item.details?.noticeToExecution, event.noticeToExecution[locale]);
+      assert.equal(item.details?.note, event.note[locale]);
+      assert.equal(item.summary, event.summary[locale]);
+    }
+  }
+});
+
+test("future archived completions do not displace earlier history or latest-window state", () => {
+  const calculationNow = new Date("2026-10-16T00:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow });
+  const viewModel = getRadarViewModel(data, "ja", true, undefined, calculationNow);
+  const visibleKeys = new Set(viewModel.recentHistory.map((item) => item.key));
+
+  assert.ok(visibleKeys.has("tibo-reset-2109873287853707513"));
+  assert.ok(visibleKeys.has("tibo-reset-2110618732666257557"));
+  assert.equal(visibleKeys.has("tibo-reset-2111566005684289735"), false);
+  assert.equal(viewModel.latestWindow.closedAt, "2026-10-15T06:28:13Z");
+});
+
+test("legacy archive display names still resolve by the canonical event key", () => {
+  const calculationNow = new Date("2026-10-23T11:00:01.004Z");
+  const key = "tibo-reset-2111566005684289735";
+  const data = getLocalRadarData({
+    calculationNow,
+    resetDisplayNames: [{
+      event_key: key,
+      source_tweet_id: null,
+      manual_name_ja: "Canonical key override JA",
+      manual_name_en: "Canonical key override EN",
+      manual_name_zh: "Canonical key override ZH",
+      ai_name_ja: null,
+      ai_confidence: null,
+      ai_evidence: null,
+      ai_reason: null,
+      ai_model: null,
+      ai_prompt_version: null,
+      ai_input_mode: null,
+      ai_status: null,
+      ai_flags: null,
+      ai_generated_at: null,
+      input_hash: null,
+    }],
+  });
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const item = toPublicRadarSnapshot(data, locale, { calculationNow }).viewModel.recentHistory
+      .find((candidate) => candidate.key === key);
+    assert.ok(item);
+    assert.equal(item.title, `Canonical key override ${locale.toUpperCase()}`);
+  }
+});
+
 test("localized active-window labels do not leak the Japanese no-notice label", () => {
   const data = getLocalRadarData({ calculationNow: new Date("2026-08-04T03:32:00.000Z") });
 

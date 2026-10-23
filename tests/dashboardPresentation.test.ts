@@ -2400,7 +2400,8 @@ test("renders only recognized non-default history scopes", () => {
     getLocalRadarData({ calculationNow }),
     "ja",
     { calculationNow },
-  ).viewModel.recentHistory[0];
+  ).viewModel.recentHistory.find((item) => item.recordKind === "confirmed_global");
+  assert.ok(template);
 
   const makeItem = (scope: string) => ({
     ...template,

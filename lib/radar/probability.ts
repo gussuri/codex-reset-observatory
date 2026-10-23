@@ -383,42 +383,17 @@ function getProbabilityComponents(
         new Date(left.tweet_created_at).getTime() -
         new Date(right.tweet_created_at).getTime(),
     );
-  const latestAcceptedTiboExecutionTime =
-    getLatestAcceptedTiboExecutionAt(data, now)?.getTime() ?? 0;
-  const dynamicRandomRecoveryWindow = getLastRandomRecoveryResetWindow(
-    data,
-    now,
-    [],
-    canonicalHistoryContext,
-  );
   const latestRandomRecoveryWindow = getLastRandomRecoveryResetWindow(
     data,
     now,
     LOCAL_RESET_HISTORY,
     canonicalHistoryContext,
   );
-  const dynamicRandomRecoveryTime = dynamicRandomRecoveryWindow?.executionWindowEndAt ?? null;
   const latestRandomRecoveryTime = latestRandomRecoveryWindow?.executionWindowEndAt ?? null;
-  // A dynamic canonical boundary represents the observed reset itself. A late
-  // Tibo completion post only corroborates it and must not consume teasers
-  // from the next cycle. With no dynamic boundary, retain the legacy fallback
-  // for Tibo-only and static-history cases.
-  const executionTime = dynamicRandomRecoveryTime
-    ? getDateTime(dynamicRandomRecoveryTime)
-    : Math.max(
-        latestAcceptedTiboExecutionTime,
-        latestRandomRecoveryTime ? getDateTime(latestRandomRecoveryTime) : 0,
-      );
-  const executionWindow: ResetExecutionWindow | null = dynamicRandomRecoveryWindow ??
-    (latestRandomRecoveryWindow &&
-      getDateTime(latestRandomRecoveryWindow.executionWindowEndAt ?? "") === executionTime
-      ? latestRandomRecoveryWindow
-      : executionTime > 0
-        ? {
-            executionWindowStartAt: null,
-            executionWindowEndAt: new Date(executionTime).toISOString(),
-          }
-        : null);
+  // Teaser lifecycle follows canonical recovery history. Raw completion posts
+  // cannot consume the next cycle until monitor evidence admits an event.
+  const executionTime = latestRandomRecoveryTime ? getDateTime(latestRandomRecoveryTime) : 0;
+  const executionWindow: ResetExecutionWindow | null = latestRandomRecoveryWindow;
   const validTeasers = sortedSignals.filter((signal) => {
     const createdTime = new Date(signal.tweet_created_at).getTime();
     const secondaryFollowsThisBoundary = signal.is_secondary_future_signal === true &&
@@ -1126,33 +1101,6 @@ export function isCurrentLocalSignal(
   return getEffectiveSignalStatus(signal, now) === "active";
 }
 
-function getLatestAcceptedTiboExecutionAt(
-  data: RadarData | null | undefined,
-  now: Date = new Date(),
-) {
-  // Keep the historical execution cutoff on raw/formal inputs. The logical
-  // projection may suppress a superseded public version, but it must not erase
-  // the reset boundary used to evaluate subsequent signals.
-  const executions = [
-    ...(data?.active_tibo_signals ?? []),
-    ...(data?.formal_tibo_resets ?? []),
-  ].flatMap((signal) => {
-    if (
-      signal.signal_type !== "reset_executed" ||
-      (signal.confidence ?? 0) < 0.95 ||
-      signal.verification_status === "rejected"
-    ) {
-      return [];
-    }
-
-    const timestamp = new Date(signal.tweet_created_at).getTime();
-    return Number.isNaN(timestamp) || timestamp > now.getTime() ? [] : [timestamp];
-  });
-  const latestTimestamp = Math.max(...executions, Number.NEGATIVE_INFINITY);
-
-  return Number.isFinite(latestTimestamp) ? new Date(latestTimestamp) : null;
-}
-
 export function getActiveOfficialNotice(
   data: RadarData | null,
   latestResetAt?: Date | null,
@@ -1218,7 +1166,6 @@ export function getActiveOfficialNotice(
     ? suppliedForcedResetAt
     : forcedRecoveryBoundaryAt;
 
-  const latestExecutionAt = getLatestAcceptedTiboExecutionAt(data, now);
   const dynamicRandomRecoveryBoundaryAt = getLastRandomRecoveryResetAt(data, now, [], canonicalHistoryContext);
   const dynamicRandomRecoveryWindow = getLastRandomRecoveryResetWindow(data, now, [], canonicalHistoryContext);
   const dynamicForcedRecoveryBoundaryAt = getLastForcedRecoveryResetAt(data, now, [], canonicalHistoryContext);
@@ -1236,17 +1183,11 @@ export function getActiveOfficialNotice(
   const randomCutoff = dynamicRandomRecoveryBoundaryAt &&
       getDateTime(dynamicRandomRecoveryBoundaryAt) >= (resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY)
     ? getDateTime(dynamicRandomRecoveryBoundaryAt)
-    : Math.max(
-        resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
-        latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
-      );
+    : resolvedLatestResetAt?.getTime() ?? Number.NEGATIVE_INFINITY;
   const forcedCutoff = dynamicForcedRecoveryBoundaryAt &&
       getDateTime(dynamicForcedRecoveryBoundaryAt) >= (resolvedLatestForcedResetAt?.getTime() ?? Number.NEGATIVE_INFINITY)
     ? getDateTime(dynamicForcedRecoveryBoundaryAt)
-    : Math.max(
-        resolvedLatestForcedResetAt?.getTime() ?? Number.NEGATIVE_INFINITY,
-        latestExecutionAt?.getTime() ?? Number.NEGATIVE_INFINITY,
-      );
+    : resolvedLatestForcedResetAt?.getTime() ?? Number.NEGATIVE_INFINITY;
 
   const rawSignals: Array<ActiveTiboSignal> = expandTiboSignalVariants(Array.from(new Map(
     [

@@ -47,7 +47,10 @@ import {
   isCurrentUsageResetAnnouncement,
 } from "./classification";
 import type { ResetReasonType } from "./types";
-import type { TiboEditIdentityFields } from "./tiboEditIdentity";
+import {
+  getTrustedTiboEditIdentity,
+  type TiboEditIdentityFields,
+} from "./tiboEditIdentity";
 import {
   buildTiboReadSideProjection,
   type TiboReadSideProjection,
@@ -1105,11 +1108,13 @@ function getRecoveryObservationIdForLogicalPost(
 }
 
 function getFormalSignalIdentityAliases(signal: FormalTiboResetSignal) {
+  const trustedEditIdentity = getTrustedTiboEditIdentity(signal, signal.tweet_id);
   const replyProof = getCurrentTiboFormalReplyAdmissionProof(signal);
   return new Set(uniqueTweetIds([
     signal.tweet_id,
-    signal.logical_post_id,
-    ...(signal.edit_history_tweet_ids ?? []),
+    ...(trustedEditIdentity
+      ? [trustedEditIdentity.logical_post_id, ...trustedEditIdentity.edit_history_tweet_ids]
+      : []),
     ...(replyProof ? [replyProof.contextualResetTweetId, ...replyProof.pathTweetIds] : []),
   ]));
 }
