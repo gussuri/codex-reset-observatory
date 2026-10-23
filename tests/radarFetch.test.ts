@@ -827,6 +827,236 @@ test("active and recent Tibo fetches share canonical expiry values through the p
   }
 });
 
+test("a recent-only future reply keeps its source proof through the loader and public snapshot", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const originalFetch = globalThis.fetch;
+  const calculationNow = new Date("2026-10-22T10:00:00.000Z");
+  const parentId = "2113162277688070445";
+  const replyId = "2113162413008884099";
+  const revision = "a".repeat(64);
+  const parentText = "Day 17/ Bet you thought we forgot, but no, it’s reset day today.";
+  const replyText = "Lands tomorrow before 10am PST.";
+  const replyUrl = `https://x.com/thsottiaux/status/${replyId}`;
+  const replyRow = {
+    tweet_id: replyId,
+    signal_type: "official_notice",
+    text: replyText,
+    tweet_url: replyUrl,
+    tweet_created_at: "2026-10-22T06:55:54.000Z",
+    expires_at: "2026-10-23T06:55:54.000Z",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    ai_signal_type: "official_notice",
+    ai_confidence: 0.98,
+    ai_classification_status: "success",
+    ai_temporal_direction: "future",
+    ai_notice_timing_status: "known",
+    ai_evidence_quote: replyText,
+    ai_temporal_expression: "tomorrow before 10am PST",
+    ai_temporal_precision: "range",
+    ai_temporal_timezone: "PST",
+    ai_contextual_reset_assessment: "same_global_reset",
+    ai_contextual_reset_tweet_id: parentId,
+    is_reply: true,
+    is_quote: false,
+    reply_to_handles: ["@thsottiaux"],
+    reply_context_text: parentText,
+    source_context_snapshot: {
+      parent: {
+        tweetId: parentId,
+        tweetUrl: `https://x.com/thsottiaux/status/${parentId}`,
+        authorHandle: "@thsottiaux",
+        text: parentText,
+      },
+    },
+    source_context_revision_hashes: [revision],
+    source_context_classified_revision_hashes: [revision],
+    source_context_generation: 1,
+    temporal_expression: "tomorrow before 10am PST",
+    temporal_precision: "range",
+    temporal_timezone: "PST",
+    temporal_confidence: 0.95,
+    temporal_resolution_status: "resolved",
+    temporal_resolution_version: "tibo-temporal-v9-deadline-start-estimate",
+    expected_start_at: "2026-10-22T15:00:00.000Z",
+    expected_end_at: "2026-10-22T18:00:00.000Z",
+  };
+  let recentRows: Array<Record<string, unknown>> = [replyRow];
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+
+  globalThis.fetch = async (input) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url.hostname === "status.openai.com") {
+      return url.pathname.endsWith("summary.json")
+        ? new Response(JSON.stringify({ page: {}, status: { indicator: "none" }, components: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })
+        : new Response(JSON.stringify({ page: {}, incidents: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+    }
+
+    if (url.hostname !== "example.supabase.co") {
+      throw new Error(`Unexpected test fetch host: ${url.hostname}`);
+    }
+
+    if (url.pathname === "/rest/v1/tibo_signals") {
+      if (url.searchParams.has("expected_end_at")) return new Response("[]", { status: 200 });
+      if (url.searchParams.has("expires_at")) return new Response("[]", { status: 200 });
+      if (url.searchParams.get("limit") === String(TIBO_RECENT_MAX_ROWS)) {
+        return new Response(JSON.stringify(recentRows), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+    }
+
+    return new Response("[]", {
+      status: 200,
+      headers: { "content-type": "application/json", "content-range": "*/0" },
+    });
+  };
+
+  try {
+    const loadSnapshot = async (row: Record<string, unknown>) => {
+      recentRows = [row];
+      const data = await fetchCurrentRadarData({ calculationNow, bypassCache: true });
+      return { data, snapshot: toPublicRadarSnapshot(data, "en", { calculationNow }) };
+    };
+    const { data, snapshot } = await loadSnapshot(replyRow);
+    const recentReply = data.recent_tibo_signals?.find((signal) => signal.tweet_id === replyId);
+
+    assert.equal(data.active_tibo_signals?.some((signal) => signal.tweet_id === replyId), false);
+    assert.deepEqual({
+      revisionHashes: recentReply?.source_context_revision_hashes,
+      classifiedRevisionHashes: recentReply?.source_context_classified_revision_hashes,
+      sourceContextSnapshot: recentReply?.source_context_snapshot,
+      sourceContextGeneration: recentReply?.source_context_generation,
+      aiSignalType: recentReply?.ai_signal_type,
+      aiConfidence: recentReply?.ai_confidence,
+      aiClassificationStatus: recentReply?.ai_classification_status,
+      aiTemporalDirection: recentReply?.ai_temporal_direction,
+      aiNoticeTimingStatus: recentReply?.ai_notice_timing_status,
+      aiContextualResetAssessment: recentReply?.ai_contextual_reset_assessment,
+      aiContextualResetTweetId: recentReply?.ai_contextual_reset_tweet_id,
+      aiEvidenceQuote: recentReply?.ai_evidence_quote,
+      activeWindowKind: snapshot.viewModel.activeWindow.kind,
+      activeWindowSource: snapshot.viewModel.activeWindow.source,
+    }, {
+      revisionHashes: [revision],
+      classifiedRevisionHashes: [revision],
+      sourceContextSnapshot: replyRow.source_context_snapshot,
+      sourceContextGeneration: 1,
+      aiSignalType: "official_notice",
+      aiConfidence: 0.98,
+      aiClassificationStatus: "success",
+      aiTemporalDirection: "future",
+      aiNoticeTimingStatus: "known",
+      aiContextualResetAssessment: "same_global_reset",
+      aiContextualResetTweetId: parentId,
+      aiEvidenceQuote: replyText,
+      activeWindowKind: "official",
+      activeWindowSource: replyUrl,
+    });
+
+    for (const locale of ["ja", "en", "zh"] as const) {
+      const localized = toPublicRadarSnapshot(data, locale, { calculationNow });
+      const baseline = toPublicRadarSnapshot({
+        ...data,
+        active_tibo_signals: [],
+        recent_tibo_signals: [],
+      }, locale, { calculationNow });
+      const publicActivity = localized.latestTiboActivity;
+
+      assert.equal(localized.viewModel.activeWindow.active, true);
+      assert.equal(localized.viewModel.activeWindow.kind, "official");
+      assert.equal(localized.viewModel.activeWindow.source, replyUrl);
+      assert.equal(localized.viewModel.activeWindow.expectedAt, "2026-10-22T15:00:00.000Z");
+      assert.equal(localized.viewModel.activeWindow.expectedEndAt, "2026-10-22T18:00:00.000Z");
+      assert.equal(
+        Date.parse(localized.viewModel.activeWindow.expectedEndAt!) -
+          Date.parse(localized.viewModel.activeWindow.expectedAt!),
+        3 * 60 * 60 * 1000,
+      );
+      assert.equal(publicActivity?.classification, "official_notice");
+      assert.equal(publicActivity?.sourceUrl, replyUrl);
+      assert.equal(publicActivity?.expectedStartAt, "2026-10-22T15:00:00.000Z");
+      assert.equal(publicActivity?.expectedEndAt, "2026-10-22T18:00:00.000Z");
+      assert.deepEqual(localized.viewModel.recentHistory, baseline.viewModel.recentHistory);
+      assert.equal(localized.lastRandomResetAt, baseline.lastRandomResetAt);
+      assert.doesNotMatch(
+        JSON.stringify(localized),
+        /source_context_(?:snapshot|revision_hashes|classified_revision_hashes|generation)|sourceContext(?:Snapshot|RevisionHashes|ClassifiedRevisionHashes|Generation)|ai_(?:signal_type|confidence|classification_status|temporal_direction|notice_timing_status|contextual_reset_assessment|contextual_reset_tweet_id|evidence_quote)|ai(?:SignalType|Confidence|ClassificationStatus|TemporalDirection|NoticeTimingStatus|ContextualResetAssessment|ContextualResetTweetId|EvidenceQuote)|quote_(?:context_text|tweet_url|author_handle)|quote(?:ContextText|TweetUrl|AuthorHandle)/,
+      );
+    }
+
+    const withoutField = (field: string) => {
+      const row = { ...replyRow } as Record<string, unknown>;
+      delete row[field];
+      return row;
+    };
+    const invalidRows: Array<{ label: string; row: Record<string, unknown> }> = [
+      {
+        label: "empty classified revision marker",
+        row: { ...replyRow, source_context_classified_revision_hashes: [] },
+      },
+      {
+        label: "revision mismatch",
+        row: { ...replyRow, source_context_classified_revision_hashes: ["b".repeat(64)] },
+      },
+      {
+        label: "contextual parent mismatch",
+        row: { ...replyRow, ai_contextual_reset_tweet_id: "2113162277688070446" },
+      },
+      {
+        label: "third-party parent",
+        row: {
+          ...replyRow,
+          ai_contextual_reset_tweet_id: "2113162277688070411",
+          reply_to_handles: ["@thirdparty"],
+          reply_context_text: "A reset is planned for third-party users.",
+          source_context_snapshot: {
+            parent: {
+              tweetId: "2113162277688070411",
+              tweetUrl: "https://x.com/thirdparty/status/2113162277688070411",
+              authorHandle: "@thirdparty",
+              text: "A reset is planned for third-party users.",
+            },
+          },
+        },
+      },
+      {
+        label: "quote provenance",
+        row: {
+          ...replyRow,
+          quote_context_text: "A quote with unrelated context.",
+          quote_tweet_url: "https://x.com/thirdparty/status/2113162277688070411",
+          quote_author_handle: "@thirdparty",
+        },
+      },
+      { label: "missing AI evidence quote", row: withoutField("ai_evidence_quote") },
+      { label: "missing source context snapshot", row: withoutField("source_context_snapshot") },
+    ];
+
+    for (const { label, row } of invalidRows) {
+      const { snapshot: invalidSnapshot } = await loadSnapshot(row);
+      assert.notEqual(invalidSnapshot.viewModel.activeWindow.source, replyUrl, label);
+      assert.notEqual(invalidSnapshot.latestTiboActivity?.sourceUrl, replyUrl, label);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousServiceRoleKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceRoleKey;
+  }
+});
+
 test("Tibo reset notice association scans resets chronologically and preserves display order", () => {
   const resets = [
     resetSignal("reset-2", "2026-08-02T10:00:00.000Z"),
