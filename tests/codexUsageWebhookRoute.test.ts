@@ -14,6 +14,7 @@ const ENV_KEYS = [
 ] as const;
 
 const ATOMIC_RPC_PATH = "/rpc/apply_codex_usage_webhook_write_v2";
+const FUTURE_REPLY_ATOMIC_RPC_PATH = "/rpc/apply_codex_usage_future_reply_webhook_write";
 const BANKED_ASSOCIATION_RPC_PATH = "/rpc/record_banked_grant_association_decision";
 
 type MockRequest = {
@@ -49,7 +50,9 @@ function respondToBankedAssociationRpc(body: Record<string, unknown> | null) {
 
 function getAtomicPlanFromRequests(requests: ReadonlyArray<MockRequest>) {
   const rpcRequest = requests.find((request) =>
-    request.method === "POST" && request.url.includes(ATOMIC_RPC_PATH),
+    request.method === "POST" && (
+      request.url.includes(ATOMIC_RPC_PATH) || request.url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH)
+    ),
   );
   assert.ok(rpcRequest, "The webhook should use the atomic write RPC");
   const plan = getAtomicPlan(rpcRequest!.body);
@@ -60,6 +63,66 @@ function getAtomicPlanFromRequests(requests: ReadonlyArray<MockRequest>) {
 function getAtomicPlanPart(requests: ReadonlyArray<MockRequest>, key: string) {
   const value = getAtomicPlanFromRequests(requests)[key];
   return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function verifiedFutureReplyRow(overrides: Record<string, unknown> = {}) {
+  const parentId = "2113162277688070445";
+  const replyId = "2113162413008884099";
+  const revision = "a".repeat(64);
+  const parentText = "Day 17/ Bet you thought we forgot, but no, it’s reset day today.";
+  const replyText = "Lands tomorrow before 10am PST.";
+  return {
+    tweet_id: replyId,
+    text: replyText,
+    tweet_url: `https://x.com/thsottiaux/status/${replyId}`,
+    tweet_created_at: "2026-10-22T06:55:54.000Z",
+    expires_at: "2026-10-23T06:55:54.000Z",
+    signal_type: "official_notice",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    ai_signal_type: "official_notice",
+    ai_confidence: 0.98,
+    ai_classification_status: "success",
+    ai_temporal_direction: "future",
+    ai_notice_timing_status: "known",
+    ai_evidence_quote: replyText,
+    ai_temporal_expression: "tomorrow before 10am PST",
+    ai_temporal_kind: "deadline",
+    ai_temporal_precision: "range",
+    ai_temporal_timezone: "PST",
+    ai_temporal_confidence: 0.95,
+    ai_contextual_reset_assessment: "same_global_reset",
+    ai_contextual_reset_tweet_id: parentId,
+    is_reply: true,
+    is_quote: false,
+    quote_context_text: null,
+    quote_tweet_url: null,
+    quote_author_handle: null,
+    reply_to_handles: ["@thsottiaux"],
+    reply_context_text: parentText,
+    source_context_snapshot: {
+      parent: {
+        tweetId: parentId,
+        tweetUrl: `https://x.com/thsottiaux/status/${parentId}`,
+        authorHandle: "@thsottiaux",
+        text: parentText,
+      },
+    },
+    source_context_revision_hashes: [revision],
+    source_context_classified_revision_hashes: [revision],
+    source_context_generation: 1,
+    temporal_expression: "tomorrow before 10am PST",
+    temporal_kind: "deadline",
+    temporal_precision: "range",
+    temporal_timezone: "PST",
+    temporal_confidence: 0.95,
+    temporal_resolution_status: "resolved",
+    temporal_resolution_version: "tibo-temporal-v9-deadline-start-estimate",
+    expected_start_at: "2026-10-22T15:00:00.000Z",
+    expected_end_at: "2026-10-22T18:00:00.000Z",
+    ...overrides,
+  };
 }
 
 function withEnvironment(values: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>) {
@@ -224,7 +287,9 @@ test("the first valid snapshot is stored as a baseline only", async () => {
     }
     methods.push(method);
     if (init?.body) bodies.push(JSON.parse(String(init.body)));
-    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+    if (method === "POST" && (
+      url.includes(ATOMIC_RPC_PATH) || url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH)
+    )) {
       return respondToAtomicRpc(bodies.at(-1) as Record<string, unknown> | null);
     }
     if (methods.length === 1) {
@@ -2355,14 +2420,21 @@ function createMockSupabaseFetch(options?: {
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
 
-    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+    if (method === "POST" && (
+      url.includes(ATOMIC_RPC_PATH) || url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH)
+    )) {
       return respondToAtomicRpc(body, "mock-observation-id");
     }
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify(options?.previousState ?? defaultState), { status: 200 });
     }
     if (method === "GET" && url.includes("tibo_signals")) {
-      return new Response(JSON.stringify(options?.tiboSignals ?? []), { status: 200 });
+      const query = new URL(url);
+      const replyExcluded = query.searchParams.getAll("or").some((filter) => filter.includes("is_reply"));
+      const rows = options?.tiboSignals ?? [];
+      return new Response(JSON.stringify(replyExcluded
+        ? rows.filter((row) => (row as Record<string, unknown>).is_reply !== true)
+        : rows), { status: 200 });
     }
     if (method === "GET" && url.includes("regular_reset_events")) {
       return new Response(JSON.stringify(options?.regularEvents ?? []), { status: 200 });
@@ -2375,6 +2447,221 @@ function createMockSupabaseFetch(options?: {
 
   return { requests, fetchHandler };
 }
+
+test("a strict future reply can corroborate only the bounded matching recovery query", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const previousResetsAt = Math.floor(Date.parse("2026-10-23T03:55:00.000Z") / 1000);
+  const { requests, fetchHandler } = createMockSupabaseFetch({
+    previousState: {
+      source_key: "local-codex-app-server",
+      observed_at: "2026-10-22T17:54:00.000Z",
+      received_at: "2026-10-22T17:54:01.000Z",
+      limit_id: "codex",
+      plan_type: "plus",
+      used_percent: 60,
+      window_duration_mins: 10080,
+      resets_at: previousResetsAt,
+      coverage_started_at: "2026-10-22T16:00:00.000Z",
+      banked_reset_available_count: 1,
+      last_banked_grant_at: null,
+      updated_at: "2026-10-22T17:54:01.000Z",
+    },
+    tiboSignals: [verifiedFutureReplyRow()],
+  });
+  globalThis.fetch = fetchHandler;
+
+  try {
+    const requestBody = {
+      observedAt: "2026-10-22T17:59:00.000Z",
+      usedPercent: 0,
+      resetsAt: Math.floor(Date.parse("2026-10-30T03:55:00.000Z") / 1000),
+      monitorProtocolVersion: 2,
+      postReason: "recovery_candidate",
+    };
+    const response = await POST(buildRequest(requestBody));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    const estimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(estimate?.official_notice_tweet_id, "2113162413008884099");
+    assert.equal(estimate?.official_notice_at, "2026-10-22T06:55:54.000Z");
+    const plan = getAtomicPlanFromRequests(requests);
+    assert.equal(plan.future_reply_claim && (plan.future_reply_claim as Record<string, unknown>).event_key, "2113162277688070445");
+    const fallbackEstimate = plan.future_reply_fallback_execution_estimate as Record<string, unknown> | undefined;
+    assert.equal(fallbackEstimate?.reset_event_key, "usage-reset-pending");
+    assert.equal(fallbackEstimate?.is_monitor_observed, true);
+    assert.ok(requests.some((request) => request.url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH)));
+
+    const replayResponse = await POST(buildRequest(requestBody));
+    assert.equal(replayResponse.status, 200);
+    const futureReplyWrites = requests.filter((request) =>
+      request.method === "POST" && request.url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH),
+    );
+    assert.equal(futureReplyWrites.length, 2);
+    const firstReplayPlan = getAtomicPlan(futureReplyWrites[0]!.body)!;
+    const secondReplayPlan = getAtomicPlan(futureReplyWrites[1]!.body)!;
+    assert.deepEqual(secondReplayPlan.future_reply_claim, firstReplayPlan.future_reply_claim);
+    assert.deepEqual(secondReplayPlan.future_reply_fallback_execution_estimate, firstReplayPlan.future_reply_fallback_execution_estimate);
+
+    const tiboReads = requests.filter((request) => request.method === "GET" && request.url.includes("tibo_signals"));
+    const boundedRead = tiboReads.find((request) => !new URL(request.url).searchParams.has("tweet_id"));
+    const persistentRead = tiboReads.find((request) => new URL(request.url).searchParams.has("tweet_id"));
+    assert.ok(boundedRead);
+    assert.ok(persistentRead);
+    const boundedUrl = new URL(boundedRead!.url);
+    const persistentUrl = new URL(persistentRead!.url);
+    assert.equal(boundedUrl.searchParams.get("is_reply"), null, "bounded recovery lookup may consider replies");
+    assert.ok(!boundedUrl.searchParams.getAll("or").some((filter) => filter.includes("is_reply")));
+    assert.ok(persistentUrl.searchParams.getAll("or").some((filter) => filter.includes("is_reply")), "persistent notices keep the reply exclusion");
+    for (const column of [
+      "source_context_snapshot",
+      "source_context_revision_hashes",
+      "source_context_classified_revision_hashes",
+      "source_context_generation",
+      "reply_context_text",
+      "reply_to_handles",
+      "temporal_resolution_version",
+    ]) {
+      assert.ok(boundedUrl.searchParams.get("select")?.split(",").includes(column), `query projection must include ${column}`);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("different strict reply events overlapping one recovery fail closed instead of selecting the newest", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const previousResetsAt = Math.floor(Date.parse("2026-10-23T03:55:00.000Z") / 1000);
+  const secondParentId = "2113162277688070446";
+  const secondReply = verifiedFutureReplyRow({
+    tweet_id: "2113162413008884100",
+    tweet_url: "https://x.com/thsottiaux/status/2113162413008884100",
+    tweet_created_at: "2026-10-22T06:56:54.000Z",
+    ai_contextual_reset_tweet_id: secondParentId,
+    reply_context_text: "Day 18/ Reset day today.",
+    source_context_snapshot: {
+      parent: {
+        tweetId: secondParentId,
+        tweetUrl: `https://x.com/thsottiaux/status/${secondParentId}`,
+        authorHandle: "@thsottiaux",
+        text: "Day 18/ Reset day today.",
+      },
+    },
+  });
+  const { requests, fetchHandler } = createMockSupabaseFetch({
+    previousState: {
+      source_key: "local-codex-app-server",
+      observed_at: "2026-10-22T17:54:00.000Z",
+      received_at: "2026-10-22T17:54:01.000Z",
+      limit_id: "codex",
+      plan_type: "plus",
+      used_percent: 60,
+      window_duration_mins: 10080,
+      resets_at: previousResetsAt,
+      coverage_started_at: "2026-10-22T16:00:00.000Z",
+      banked_reset_available_count: 1,
+      last_banked_grant_at: null,
+      updated_at: "2026-10-22T17:54:01.000Z",
+    },
+    tiboSignals: [verifiedFutureReplyRow(), secondReply],
+  });
+  globalThis.fetch = fetchHandler;
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-10-22T17:59:00.000Z",
+      usedPercent: 0,
+      resetsAt: Math.floor(Date.parse("2026-10-30T03:55:00.000Z") / 1000),
+      monitorProtocolVersion: 2,
+      postReason: "recovery_candidate",
+    }));
+
+    assert.equal(response.status, 200);
+    const estimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(estimate?.reset_event_key, "usage-reset-pending");
+    assert.equal(estimate?.official_notice_tweet_id, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("same-parent strict reply edit variants remain one corroborating event", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const previousResetsAt = Math.floor(Date.parse("2026-10-23T03:55:00.000Z") / 1000);
+  const firstReplyId = "2113162413008884099";
+  const secondReplyId = "2113162413008884100";
+  const editHistory = [firstReplyId, secondReplyId];
+  const firstReply = verifiedFutureReplyRow({
+    logical_post_id: firstReplyId,
+    edit_history_tweet_ids: editHistory,
+    edit_version: 1,
+    edit_metadata_source: "x_api",
+  });
+  const secondReply = verifiedFutureReplyRow({
+    tweet_id: secondReplyId,
+    tweet_url: `https://x.com/thsottiaux/status/${secondReplyId}`,
+    tweet_created_at: "2026-10-22T06:56:54.000Z",
+    logical_post_id: firstReplyId,
+    edit_history_tweet_ids: editHistory,
+    edit_version: 2,
+    edit_metadata_source: "x_api",
+  });
+  const { requests, fetchHandler } = createMockSupabaseFetch({
+    previousState: {
+      source_key: "local-codex-app-server",
+      observed_at: "2026-10-22T17:54:00.000Z",
+      received_at: "2026-10-22T17:54:01.000Z",
+      limit_id: "codex",
+      plan_type: "plus",
+      used_percent: 60,
+      window_duration_mins: 10080,
+      resets_at: previousResetsAt,
+      coverage_started_at: "2026-10-22T16:00:00.000Z",
+      banked_reset_available_count: 1,
+      last_banked_grant_at: null,
+      updated_at: "2026-10-22T17:54:01.000Z",
+    },
+    tiboSignals: [firstReply, secondReply],
+  });
+  globalThis.fetch = fetchHandler;
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-10-22T17:59:00.000Z",
+      usedPercent: 0,
+      resetsAt: Math.floor(Date.parse("2026-10-30T03:55:00.000Z") / 1000),
+      monitorProtocolVersion: 2,
+      postReason: "recovery_candidate",
+    }));
+
+    assert.equal(response.status, 200);
+    const plan = getAtomicPlanFromRequests(requests);
+    const estimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(estimate?.reset_event_key, `tibo-reset-${firstReplyId}`);
+    assert.equal((estimate?.tibo_source_tweet_ids as string[]).length, 2);
+    assert.equal((plan.future_reply_claim as Record<string, unknown>)?.event_key, "2113162277688070445");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
 
 test("protocol v2 strict validation: rejects missing postReason with status 400", async () => {
   const restore = withEnvironment({

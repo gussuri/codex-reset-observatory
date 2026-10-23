@@ -26,6 +26,7 @@ import {
 } from "./codexUsageBankedGrant";
 
 export const CODEX_USAGE_ATOMIC_RPC = "apply_codex_usage_webhook_write_v2";
+export const CODEX_USAGE_FUTURE_REPLY_ATOMIC_RPC = "apply_codex_usage_future_reply_webhook_write";
 export const LEGACY_CODEX_USAGE_ATOMIC_RPC = "apply_codex_usage_webhook_write";
 
 export type CodexUsageAtomicStateWrite = Pick<
@@ -111,6 +112,13 @@ export type CodexUsageAtomicWritePlan = {
   banked_distribution_estimate?: CodexUsageAtomicBankedWrite;
   banked_grant_observation?: CodexUsageAtomicBankedObservationWrite;
   banked_post_association_decision?: CodexUsageAtomicBankedAssociationWrite;
+  future_reply_claim?: {
+    event_key: string;
+    reply_tweet_id: string;
+    recovery_observed_at: string;
+    reset_event_key: string;
+  };
+  future_reply_fallback_execution_estimate?: CodexUsageAtomicEstimateWrite;
   promotion?: CodexUsageAtomicPromotion;
 };
 
@@ -315,6 +323,25 @@ export async function applyCodexUsageAtomicWrite(
   if (response.error) return { result: null, error: response.error };
   if (!isRecord(response.data) || (response.data.status !== "applied" && response.data.status !== "stale")) {
     return { result: null, error: new Error("Atomic Codex usage RPC returned an invalid result") };
+  }
+  return {
+    result: {
+      status: response.data.status,
+      retryRequired: response.data.retry_required === true,
+      observationId: typeof response.data.observation_id === "string" ? response.data.observation_id : null,
+    },
+    error: null,
+  };
+}
+
+export async function applyCodexUsageFutureReplyAtomicWrite(
+  client: SupabaseClient<any>,
+  plan: CodexUsageAtomicWritePlan,
+): Promise<{ result: CodexUsageAtomicWriteResult | null; error: unknown }> {
+  const response = await client.rpc(CODEX_USAGE_FUTURE_REPLY_ATOMIC_RPC, { p_plan: plan });
+  if (response.error) return { result: null, error: response.error };
+  if (!isRecord(response.data) || (response.data.status !== "applied" && response.data.status !== "stale")) {
+    return { result: null, error: new Error("Future reply Codex usage RPC returned an invalid result") };
   }
   return {
     result: {

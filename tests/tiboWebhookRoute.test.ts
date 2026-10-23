@@ -648,11 +648,13 @@ test("duplicate source-context enrichment exits before classification, translati
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { success: true, status: "duplicate" });
     assert.equal(modelCalls, 0);
-    assert.equal(requests.length, 3);
+    assert.equal(requests.length, 4);
     assert.equal(requests[0].url.endsWith("/rest/v1/rpc/merge_tibo_source_context_enrichment"), true);
     assert.equal(requests[0].method, "POST");
     assert.equal(requests[1].method, "GET");
     assert.equal(requests[2].method, "GET");
+    assert.equal(requests[3].method, "GET");
+    assert.equal(requests[3].url.includes("/rest/v1/tibo_signals"), true);
     const args = requests[0].body as Record<string, any>;
     assert.equal(args.p_tweet_id, "2084000000000000200");
     assert.equal(args.p_snapshot.parent.authorHandle, "@parent_author");

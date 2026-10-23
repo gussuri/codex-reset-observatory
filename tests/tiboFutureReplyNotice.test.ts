@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { getLocalRadarData } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { isVerifiedTiboFutureReplyNoticeInExecutionWindow } from "../lib/radar/tiboFutureReplyNotice";
 import { interpretTiboSignal, type ResetTeaserSignal } from "../lib/radar/teaserStrength";
 import type { ActiveTiboSignal } from "../lib/radar/types";
 
@@ -80,6 +81,37 @@ test("a complete source-validated future self-reply is an official deadline noti
   assert.equal(snapshot.viewModel.activeWindow.expectedAt, "2026-10-22T15:00:00.000Z");
   assert.equal(snapshot.viewModel.activeWindow.expectedEndAt, "2026-10-22T18:00:00.000Z");
   assert.equal(snapshot.viewModel.activeWindow.source, `https://x.com/thsottiaux/status/${replyId}`);
+});
+
+test("future reply corroboration requires strict overlap with a valid execution window", () => {
+  const signal = verifiedReplySignal();
+  assert.equal(isVerifiedTiboFutureReplyNoticeInExecutionWindow(signal, {
+    executionWindowStartAt: "2026-10-22T17:54:00.000Z",
+    executionWindowEndAt: "2026-10-22T17:59:00.000Z",
+  }), true);
+  assert.equal(isVerifiedTiboFutureReplyNoticeInExecutionWindow(signal, {
+    executionWindowStartAt: "2026-10-22T14:00:00.000Z",
+    executionWindowEndAt: "2026-10-22T15:00:00.000Z",
+  }), false, "touching the notice start is not an overlap");
+  assert.equal(isVerifiedTiboFutureReplyNoticeInExecutionWindow(signal, {
+    executionWindowStartAt: "2026-10-22T18:00:00.000Z",
+    executionWindowEndAt: "2026-10-22T19:00:00.000Z",
+  }), false, "touching the notice end is not an overlap");
+  assert.equal(isVerifiedTiboFutureReplyNoticeInExecutionWindow(signal, {
+    executionWindowStartAt: "invalid",
+    executionWindowEndAt: "2026-10-22T17:59:00.000Z",
+  }), false);
+  assert.equal(isVerifiedTiboFutureReplyNoticeInExecutionWindow(signal, {
+    executionWindowStartAt: "2026-10-22T17:59:00.000Z",
+    executionWindowEndAt: "2026-10-22T17:54:00.000Z",
+  }), false);
+  assert.equal(isVerifiedTiboFutureReplyNoticeInExecutionWindow({
+    ...signal,
+    source_context_snapshot: null,
+  }, {
+    executionWindowStartAt: "2026-10-22T17:54:00.000Z",
+    executionWindowEndAt: "2026-10-22T17:59:00.000Z",
+  }), false, "the overlap check still requires the complete strict source proof");
 });
 
 test("a short deadline reply clamps its estimate to the post time and rejects inconsistent windows", () => {

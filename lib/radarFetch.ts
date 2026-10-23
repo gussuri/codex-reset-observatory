@@ -80,6 +80,7 @@ import {
 import { isExecutionBearingResetDisplayNameNotice, type ResetDisplayNameCandidateActivation } from "@/lib/radar/resetDisplayNameCandidateTypes";
 import type { ResetDisplayNameCandidateNotice } from "@/lib/radar/resetDisplayNameReconciliation";
 import { TIBO_NOTICE_GRACE_MS } from "@/lib/radar/tiboTemporal";
+import { isVerifiedTiboFutureReplyNotice } from "@/lib/radar/tiboFutureReplyNotice";
 
 export const API_CACHE_CONTROL =
   "public, max-age=0, s-maxage=300, stale-while-revalidate=120";
@@ -1155,20 +1156,29 @@ const getCachedResetDisplayNames = unstable_cache(
   },
 );
 
-function toNoticeSignal(signal: FormalTiboResetSignal): TiboNoticeSignal | null {
-  if (signal.is_reply === true) return null;
+function toNoticeSignal(signal: FormalTiboResetSignal | ActiveTiboSignal): TiboNoticeSignal | null {
+  if (signal.is_reply === true && !isVerifiedTiboFutureReplyNotice(signal)) return null;
   if (signal.signal_type !== "official_notice" && signal.signal_type !== "teaser") {
     return null;
   }
 
   return {
     tweet_id: signal.tweet_id,
-    text: signal.text,
-    tweet_url: signal.tweet_url,
+    text: signal.text ?? "",
+    tweet_url: signal.tweet_url ?? "",
     tweet_created_at: signal.tweet_created_at,
     signal_type: signal.signal_type,
-    confidence: signal.confidence,
-    verification_status: signal.verification_status,
+    confidence: signal.confidence ?? null,
+    verification_status: signal.verification_status ?? "auto_unverified",
+    classification_source: signal.classification_source ?? null,
+    ai_signal_type: signal.ai_signal_type ?? null,
+    ai_confidence: signal.ai_confidence ?? null,
+    ai_classification_status: signal.ai_classification_status ?? null,
+    ai_temporal_direction: signal.ai_temporal_direction ?? null,
+    ai_notice_timing_status: signal.ai_notice_timing_status ?? null,
+    ai_contextual_reset_assessment: signal.ai_contextual_reset_assessment ?? null,
+    ai_contextual_reset_tweet_id: signal.ai_contextual_reset_tweet_id ?? null,
+    ai_evidence_quote: signal.ai_evidence_quote ?? null,
     ai_temporal_expression: signal.ai_temporal_expression ?? null,
     ai_temporal_kind: signal.ai_temporal_kind ?? null,
     ai_temporal_precision: signal.ai_temporal_precision ?? null,
@@ -1182,6 +1192,18 @@ function toNoticeSignal(signal: FormalTiboResetSignal): TiboNoticeSignal | null 
     expected_start_at: signal.expected_start_at ?? null,
     expected_end_at: signal.expected_end_at ?? null,
     temporal_resolution_status: signal.temporal_resolution_status ?? null,
+    temporal_resolution_version: signal.temporal_resolution_version ?? null,
+    is_reply: signal.is_reply ?? null,
+    is_quote: signal.is_quote ?? null,
+    quote_context_text: signal.quote_context_text ?? null,
+    quote_tweet_url: signal.quote_tweet_url ?? null,
+    quote_author_handle: signal.quote_author_handle ?? null,
+    reply_to_handles: signal.reply_to_handles ?? null,
+    reply_context_text: signal.reply_context_text ?? null,
+    source_context_snapshot: signal.source_context_snapshot ?? null,
+    source_context_revision_hashes: signal.source_context_revision_hashes ?? null,
+    source_context_classified_revision_hashes: signal.source_context_classified_revision_hashes ?? null,
+    source_context_generation: signal.source_context_generation ?? null,
     logical_post_id: signal.logical_post_id ?? null,
     edit_history_tweet_ids: signal.edit_history_tweet_ids ?? null,
     edit_version: signal.edit_version ?? null,
@@ -1365,15 +1387,21 @@ async function getTiboSignalBundle(
   const recentSignalsSource = historyResult.recent && historyResult.recent.health.state !== "degraded"
     ? historyResult.recent.data
     : historyResult.withReplies.data;
-  const acceptedResets = signals.filter(isFormalTiboResetSignal);
-  const notices = expandTiboSignalVariants(signals)
-    .map(toNoticeSignal)
-    .filter((signal): signal is TiboNoticeSignal => Boolean(signal));
-
-  const formalResets = associateTiboNotices(acceptedResets, notices);
   const recentSignals = recentSignalsSource.map((signal) =>
     formatAsActiveSignal(signal, getEffectiveSignalExpiryMs(signal))
   );
+  const acceptedResets = signals.filter(isFormalTiboResetSignal);
+  const notices = [
+    ...expandTiboSignalVariants(signals)
+      .map(toNoticeSignal)
+      .filter((signal): signal is TiboNoticeSignal => Boolean(signal)),
+    ...recentSignals
+      .filter((signal) => signal.is_reply === true && isVerifiedTiboFutureReplyNotice(signal))
+      .map(toNoticeSignal)
+      .filter((signal): signal is TiboNoticeSignal => Boolean(signal)),
+  ];
+
+  const formalResets = associateTiboNotices(acceptedResets, notices);
   const rejectedResets = signals
     .filter(
       (signal) =>

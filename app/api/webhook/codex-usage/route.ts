@@ -23,6 +23,7 @@ import {
 import {
   applyCodexUsageAtomicWrite,
   applyCodexUsageBankedAssociation,
+  applyCodexUsageFutureReplyAtomicWrite,
   buildCodexUsageAtomicWritePlan,
   buildResetExecutionEstimateWrite,
 } from "@/lib/codexUsageAtomic";
@@ -55,8 +56,9 @@ import { buildBankedGrantObservationWrite } from "@/lib/codexUsageBankedGrant";
 import { resolveBankedAssociation as resolveSharedBankedAssociation } from "@/lib/codexUsageBankedAssociation";
 import type { BankedPostAssociationDecision } from "@/lib/radar/resetPostAssociation";
 import { getTrustedTiboEditIdentity, type TiboEditIdentityUpdate } from "@/lib/radar/tiboEditIdentity";
+import { isVerifiedTiboFutureReplyNoticeInExecutionWindow } from "@/lib/radar/tiboFutureReplyNotice";
 
-const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,classification_source,is_reply,is_quote,ai_temporal_expression,ai_temporal_kind,ai_temporal_direction,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,expected_start_at,expected_end_at,temporal_resolution_status,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source";
+const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,classification_source,is_reply,is_quote,quote_context_text,quote_tweet_url,quote_author_handle,reply_to_handles,reply_context_text,source_context_snapshot,source_context_revision_hashes,source_context_classified_revision_hashes,source_context_generation,ai_confidence,ai_signal_type,ai_classification_status,ai_temporal_expression,ai_temporal_kind,ai_temporal_direction,ai_notice_timing_status,ai_evidence_quote,ai_contextual_reset_assessment,ai_contextual_reset_tweet_id,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,temporal_resolution_version,expected_start_at,expected_end_at,temporal_resolution_status,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source";
 const REGULAR_COLUMNS = "schedule_key,window_start_at,window_end_at,representative_at,scheduled_at,completed_at,cycle_type,reset_method,scope,record_kind,status,correction_reason,corrected_at";
 const TIBO_EDIT_CHAIN_PAGE_SIZE = 500;
 const MAX_TIBO_EDIT_CHAIN_ROWS = 5000;
@@ -155,6 +157,7 @@ type OfficialNoticeLookup = {
   noticeSignals: TiboNoticeSignal[];
   teaserSignal: ActiveTiboSignal | null;
   allSignals: ActiveTiboSignal[];
+  futureReplyClaim: { eventKey: string; replyTweetId: string } | null;
   error: unknown;
 };
 
@@ -215,6 +218,7 @@ async function hasActiveOfficialNotice(
   executionWindow: ResetExecutionWindow | null = null,
   includeTerminatedExecutionEvidence = false,
   includeTrustedEditChainVersions = false,
+  includeVerifiedFutureReplies = false,
 ): Promise<OfficialNoticeLookup> {
   const observedAtIso = observedAt.toISOString();
   const noticeLookbackStartIso = new Date(
@@ -233,18 +237,21 @@ async function hasActiveOfficialNotice(
       .order("tweet_id", { ascending: false })
       .limit(1000)
     : Promise.resolve({ data: [], error: null });
-  const [tiboResult, persistentTiboResult, regularResult] = await Promise.all([
-    client
-      .from("tibo_signals")
-      .select(NOTICE_COLUMNS)
-      .in("signal_type", ["official_notice", "reset_executed", "teaser", "irrelevant"])
-      .or("is_reply.is.null,is_reply.eq.false")
+  const boundedTiboQuery = client
+    .from("tibo_signals")
+    .select(NOTICE_COLUMNS)
+    .in("signal_type", ["official_notice", "reset_executed", "teaser", "irrelevant"]);
+  const boundedTiboResultPromise = (includeVerifiedFutureReplies
+    ? boundedTiboQuery
+    : boundedTiboQuery.or("is_reply.is.null,is_reply.eq.false"))
       .neq("verification_status", "rejected")
       .lte("tweet_created_at", observedAtIso)
       .or(`tweet_created_at.gte.${noticeLookbackStartIso},expires_at.gt.${observedAtIso}`)
       .order("tweet_created_at", { ascending: false })
       .order("tweet_id", { ascending: false })
-      .limit(1000),
+      .limit(1000);
+  const [tiboResult, persistentTiboResult, regularResult] = await Promise.all([
+    boundedTiboResultPromise,
     persistentTiboResultPromise,
     client
       .from("regular_reset_events")
@@ -264,6 +271,7 @@ async function hasActiveOfficialNotice(
       noticeSignals: [],
       teaserSignal: null,
       allSignals: [],
+      futureReplyClaim: null,
       error: tiboResult.error ?? persistentTiboResult.error ?? regularResult.error,
     };
   }
@@ -274,6 +282,22 @@ async function hasActiveOfficialNotice(
       ...((persistentTiboResult.data ?? []) as unknown as ActiveTiboSignal[]),
     ].map((signal) => [signal.tweet_id, signal] as const),
   ).values());
+  const overlappingFutureReplies = includeVerifiedFutureReplies
+    ? signals.filter((signal) => signal.is_reply === true &&
+      isVerifiedTiboFutureReplyNoticeInExecutionWindow(signal, executionWindow))
+    : [];
+  const futureReplyEvents = new Set(
+    overlappingFutureReplies
+      .map((signal) => signal.ai_contextual_reset_tweet_id)
+      .filter((tweetId): tweetId is string => typeof tweetId === "string"),
+  );
+  const ambiguousFutureReplyEvents = futureReplyEvents.size > 1;
+  const eligibleFutureReplyIds = new Set(
+    ambiguousFutureReplyEvents ? [] : overlappingFutureReplies.map((signal) => signal.tweet_id),
+  );
+  const recoverySignals = signals.filter((signal) =>
+    signal.is_reply !== true || eligibleFutureReplyIds.has(signal.tweet_id),
+  );
   const bankedAssociationSignals = includeTrustedEditChainVersions
     ? await loadTrustedEditChainVersions(client, signals)
     : { signals, error: null };
@@ -284,12 +308,13 @@ async function hasActiveOfficialNotice(
       noticeSignals: [],
       teaserSignal: null,
       allSignals: [],
+      futureReplyClaim: null,
       error: bankedAssociationSignals.error,
     };
   }
   const data: RadarData = {
-    active_tibo_signals: signals,
-    formal_tibo_resets: signals
+    active_tibo_signals: recoverySignals,
+    formal_tibo_resets: recoverySignals
       .filter((signal) => signal.signal_type === "reset_executed")
       .map((signal) => ({
         ...signal,
@@ -313,14 +338,20 @@ async function hasActiveOfficialNotice(
     undefined,
     true,
   );
-  const noticeSignals = collectOfficialTiboNoticeSignals(signals, []);
-  const teaserSignal = findRecentTiboTeaser(signals, observedAt, executionWindow);
+  const noticeSignals = collectOfficialTiboNoticeSignals(recoverySignals, []);
+  const teaserSignal = findRecentTiboTeaser(recoverySignals, observedAt, executionWindow);
+  const selectedFutureReply = activeNotice
+    ? recoverySignals.find((signal) => signal.tweet_id === activeNotice.id && signal.is_reply === true)
+    : undefined;
   return {
     active: Boolean(activeNotice),
     noticeSignal: activeNotice ?? null,
     noticeSignals,
     teaserSignal,
     allSignals: bankedAssociationSignals.signals,
+    futureReplyClaim: selectedFutureReply?.ai_contextual_reset_tweet_id
+      ? { eventKey: selectedFutureReply.ai_contextual_reset_tweet_id, replyTweetId: selectedFutureReply.tweet_id }
+      : null,
     error: null,
   };
 }
@@ -376,7 +407,9 @@ async function applyAtomicPlanOrRetry(
   retryCount: number,
   onBankedAssociation?: (status: "accepted" | "pending" | "conflict" | "stale" | "failed") => void,
 ): Promise<NextResponse | null> {
-  const result = await applyCodexUsageAtomicWrite(client, plan);
+  const result = plan.future_reply_claim
+    ? await applyCodexUsageFutureReplyAtomicWrite(client, plan)
+    : await applyCodexUsageAtomicWrite(client, plan);
   if (result.error) {
     console.warn("[Codex usage] atomic write failed", { reason: "database_error" });
     return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
@@ -569,6 +602,8 @@ async function processCodexUsageSnapshot(
     client,
     new Date(snapshot.observedAt),
     recoveryExecutionWindow,
+    true,
+    false,
     true,
   );
   if (recoveryNotice.error) {
@@ -840,6 +875,30 @@ async function processCodexUsageSnapshot(
         }
       : undefined,
   });
+  if (
+    executionEstimate && noticeSignal &&
+    recoveryNotice.futureReplyClaim?.replyTweetId === noticeSignal.id
+  ) {
+    const fallbackEstimate = buildResetExecutionEstimate({
+      resetEventKey: "usage-reset-pending",
+      usageObservation: observation,
+      isMonitorObserved: true,
+      tiboAnnouncedAt: null,
+      tiboPrimaryTweetId: null,
+      tiboSourceTweetIds: [],
+    });
+    if (!fallbackEstimate) return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
+    plan.future_reply_claim = {
+      event_key: recoveryNotice.futureReplyClaim.eventKey,
+      reply_tweet_id: recoveryNotice.futureReplyClaim.replyTweetId,
+      recovery_observed_at: snapshot.observedAt,
+      reset_event_key: executionEstimate.reset_event_key,
+    };
+    plan.future_reply_fallback_execution_estimate = buildResetExecutionEstimateWrite(
+      fallbackEstimate,
+      { monitorObserved: true },
+    );
+  }
   const atomicResponse = await applyPlan(plan);
   if (atomicResponse) return atomicResponse;
 

@@ -48,3 +48,13 @@ Reconstruct the prior B changes from the Sol-provided specification:
 
 - 2026-10-24 01:05 JST: previous worktree path was missing; only its parent marker remained. A/HEAD was verified from Git. No B patch/archive/stash was available. New managed worktree created at `C:\Users\Yura\.codex\worktrees\reset-history-recovery\codex-reset-observatory`, branch `codex/day18-source-context-marker`, clean at HEAD `80ec245bd35b46ec93163e39ca976a837ffc606f`. Sol was informed of the recovery state and exact path.
 - Old worktree's forward B tests reportedly passed 44/44, 6/6, and 27/27; source-context suite had 21 pass plus one intentional reverse-order RED. Those results do not validate the reconstructed files. Fresh verification is required.
+
+## Reconstructed implementation and verification (2026-10-24)
+
+- Reconstructed B and the reverse-order verified future-reply reconciliation from the recorded specification. The reverse transaction updates only provenance on one exact existing monitor-only estimate, uses a future-reply-specific claim guard, and leaves observation status and matched tweet identity untouched.
+- The Next.js build initially found that a cache-invalidation helper was exported from the webhook route module. Moved it to `lib/radar/tiboFutureReplyCacheInvalidation.ts`; route type validation then passed.
+- `pnpm test`: 2628 passed, 0 failed. The suite made two unrelated OpenAI Status GETs, both returned 503; the test suite still completed successfully.
+- `pnpm run lint`, `pnpm run typecheck`, `pnpm run build`, and `git diff --check`: passed.
+- Isolated PGlite execution applied the migration and passed serial SQL scenarios for reverse ambiguity, strict proof guarding, already-linked retry/cache acknowledgement, and forward claim idempotency/reuse fallback. PGlite is single-session; no real multi-session PostgreSQL concurrency test was available. No Production database/API or monitor was used.
+- The separately authorized Gemini comparison used 2 of the 32-request maximum, one request per row and no retries. Both calls returned `api_error` (514 ms and 110 ms); the evaluator did not save the underlying HTTP error detail. The official model catalog lists `gemini-3.5-flash-lite` as a stable model, but the comparison result remains inconclusive. The two-row CSV is retained as local evidence and excluded from the implementation commit.
+- No push, PR, deployment, production migration, or scheduled task was run.

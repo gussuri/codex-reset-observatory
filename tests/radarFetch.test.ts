@@ -883,6 +883,18 @@ test("a recent-only future reply keeps its source proof through the loader and p
     expected_start_at: "2026-10-22T15:00:00.000Z",
     expected_end_at: "2026-10-22T18:00:00.000Z",
   };
+  const resetRow = {
+    tweet_id: "2113162500000000001",
+    text: "I reset usage limits for Codex.",
+    tweet_url: "https://x.com/thsottiaux/status/2113162500000000001",
+    tweet_created_at: "2026-10-22T17:59:00.000Z",
+    detected_at: "2026-10-22T17:59:01.000Z",
+    signal_type: "reset_executed",
+    confidence: 0.99,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    is_reply: false,
+  };
   let recentRows: Array<Record<string, unknown>> = [replyRow];
   process.env.SUPABASE_URL = "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
@@ -914,6 +926,12 @@ test("a recent-only future reply keeps its source proof through the loader and p
           headers: { "content-type": "application/json" },
         });
       }
+      if (url.searchParams.get("limit") === String(TIBO_HISTORY_PAGE_SIZE)) {
+        return new Response(JSON.stringify([resetRow]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
     }
 
     return new Response("[]", {
@@ -930,8 +948,10 @@ test("a recent-only future reply keeps its source proof through the loader and p
     };
     const { data, snapshot } = await loadSnapshot(replyRow);
     const recentReply = data.recent_tibo_signals?.find((signal) => signal.tweet_id === replyId);
+    const completedReset = data.formal_tibo_resets?.find((signal) => signal.tweet_id === resetRow.tweet_id);
 
     assert.equal(data.active_tibo_signals?.some((signal) => signal.tweet_id === replyId), false);
+    assert.equal(completedReset?.related_notice?.tweet_id, replyId, "strict recent replies join notice candidates without becoming completions");
     assert.deepEqual({
       revisionHashes: recentReply?.source_context_revision_hashes,
       classifiedRevisionHashes: recentReply?.source_context_classified_revision_hashes,
