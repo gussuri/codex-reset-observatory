@@ -26,7 +26,7 @@ function recoveryObservation(
     previousResetsAt: 1780000000,
     currentResetsAt: 1780600000,
     cycleHint: "unexpected",
-    confidence: "medium",
+    confidence: "strong",
     status: "confirmed",
     matchedTiboTweetId: "tibo-1",
     confirmedAt: "2026-08-11T00:28:00.000Z",
@@ -169,10 +169,12 @@ test("display-only execution estimate changes history time but not published pro
   const base = getLocalRadarData({
     calculationNow: now,
     formalTiboResets: [tiboReset()],
+    codexRecoveryObservations: [recoveryObservation()],
   });
   const withEstimate = getLocalRadarData({
     calculationNow: now,
     formalTiboResets: [tiboReset()],
+    codexRecoveryObservations: [recoveryObservation()],
     resetExecutionEstimates: [{
       resetEventKey: "tibo-reset-tibo-1",
       displayExecutionAt: "2026-08-11T00:02:00.000Z",

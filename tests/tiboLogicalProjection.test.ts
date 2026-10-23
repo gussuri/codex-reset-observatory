@@ -728,7 +728,7 @@ test("adding edited versions of one logical reset leaves probability invariants 
   assert.deepEqual(invariantSnapshot(threeVersions), expected);
 });
 
-test("the raw formal execution cutoff still suppresses a pre-reset teaser after edit suppression", () => {
+test("an unobserved raw formal execution does not suppress a pre-reset teaser after edit suppression", () => {
   const completedAt = "2026-08-31T11:00:00.000Z";
   const formalReset = signal(A, "reset_executed", {
     text: "We reset usage for everyone.",
@@ -763,8 +763,8 @@ test("the raw formal execution cutoff still suppresses a pre-reset teaser after 
 
   const withoutTeaserAudit = getLocalProbabilityCalculation(withoutTeaser, { now: NOW });
   const withTeaserAudit = getLocalProbabilityCalculation(withTeaser, { now: NOW });
-  assert.equal(withTeaserAudit.inputSnapshot.activeTeaserCount, withoutTeaserAudit.inputSnapshot.activeTeaserCount);
-  assert.equal(withTeaserAudit.inputSnapshot.activeTeaserCount, 0);
+  assert.equal(withoutTeaserAudit.inputSnapshot.activeTeaserCount, 0);
+  assert.equal(withTeaserAudit.inputSnapshot.activeTeaserCount, 1);
 });
 
 test("a manual conflict suppresses new boosts without erasing the formal reset boundary", () => {

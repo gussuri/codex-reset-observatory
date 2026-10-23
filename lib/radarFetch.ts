@@ -1599,7 +1599,10 @@ async function fetchCurrentRadarDataBase(
     getPublicRecoveryObservation(
       observation,
       calculationNow,
-      getNoticeBackedRecoveryObservationIds(resetExecutionEstimates.data),
+      getNoticeBackedRecoveryObservationIds(
+        resetExecutionEstimates.data,
+        codexRecovery.data,
+      ),
     ),
   ) ?? null;
 

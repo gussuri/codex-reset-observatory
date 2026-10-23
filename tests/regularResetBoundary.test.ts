@@ -14,6 +14,7 @@ import {
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
 import { getLatestRegularScheduleAnchorAt } from "../lib/radar";
 import { getLastResetBoundaryAt } from "../lib/radar/probability";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 import {
   combineResetHistory,
   type FormalTiboResetSignal,
@@ -87,12 +88,20 @@ function radarData(
     regular_reset_events: regularResetEvents,
     formal_tibo_resets: formalTiboResets,
     rejected_tibo_resets: rejectedTiboResets,
+    codex_recovery_observations: monitorRecoveryObservationsFor(formalTiboResets),
   } as RadarData;
 }
 
 test("regular and random resets remain separate across history and recovery boundaries", () => {
   const random = randomSignal("2026-08-20T03:37:00.000Z", "random-near-regular");
-  const combined = combineResetHistory([], [random], [], [regularEvent()]);
+  const combined = combineResetHistory(
+    [],
+    [random],
+    [],
+    [regularEvent()],
+    [],
+    monitorRecoveryObservationsFor([random]),
+  );
 
   assert.equal(combined.length, 2);
   assert.deepEqual(

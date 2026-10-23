@@ -8,7 +8,10 @@ import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import { ResetHistoryDetails } from "../components/ResetHistoryDetails";
 
 test("2026-09-12 latest reset has canonical manual correction for scope and reason", () => {
-  const latestStatic = LOCAL_RESET_HISTORY[0];
+  const latestStatic = LOCAL_RESET_HISTORY.find(
+    (item) => item.id === "local-codex-sweet-dreams-reset-2026-09-12",
+  );
+  assert.ok(latestStatic);
   assert.equal(latestStatic.id, "local-codex-sweet-dreams-reset-2026-09-12");
   assert.equal(latestStatic.scope, "全有料プラン");
   assert.equal(latestStatic.details?.scope, "全有料プラン");

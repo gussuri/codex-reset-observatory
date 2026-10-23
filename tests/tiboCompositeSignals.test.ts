@@ -14,6 +14,7 @@ import {
 } from "../lib/radar/tiboSecondarySignal";
 import type { ActiveTiboSignal } from "../lib/radar/types";
 import type { FormalTiboResetSignal } from "../lib/radar/tiboHistory";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 
 const NOW = new Date("2026-08-24T09:10:00.000Z");
 
@@ -89,6 +90,7 @@ test("completed reset plus a secondary official notice remains active at the sam
     activeTiboSignals: [parent],
     recentTiboSignals: [parent],
     formalTiboResets: [parent as unknown as FormalTiboResetSignal],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([parent]),
   });
 
   const notice = getActiveOfficialNotice(data, null, NOW);
@@ -271,6 +273,7 @@ test("a secondary signal at the same time as a Tibo-only reset is not consumed b
     activeTiboSignals: [parent],
     recentTiboSignals: [parent],
     formalTiboResets: [parent as unknown as FormalTiboResetSignal],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([parent]),
   });
 
   const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow: NOW });

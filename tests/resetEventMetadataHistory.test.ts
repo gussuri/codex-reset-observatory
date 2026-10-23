@@ -4,6 +4,7 @@ import test from "node:test";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import type { ResetDisplayNameRecord } from "../lib/radar/types";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 
 const tweetId = "2099000000000000001";
 const eventKey = `tibo-reset-${tweetId}`;
@@ -67,6 +68,7 @@ function data(record: ResetDisplayNameRecord) {
   return getLocalRadarData({
     calculationNow: now,
     formalTiboResets: [sourceSignal],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([sourceSignal]),
     resetDisplayNames: [record],
   });
 }

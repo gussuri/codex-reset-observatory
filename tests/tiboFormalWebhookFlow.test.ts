@@ -935,6 +935,23 @@ test("Monitor-first formal adoption names one canonical event from its Tibo prov
   assert.equal(namingPayload.includes("GPT Nova is launching today."), false);
 
   const publicData = {
+    codex_recovery_observations: [{
+      id: recoveryId,
+      sourceKey: "local-codex-app-server",
+      observedAt: recoveryObservedAt,
+      previousObservedAt: "2026-08-31T00:00:30.000Z",
+      previousUsedPercent: 100,
+      currentUsedPercent: 0,
+      previousResetsAt: 1788000000,
+      currentResetsAt: 1788604800,
+      cycleHint: "unexpected",
+      confidence: "strong",
+      status: "observed",
+      matchedTiboTweetId: null,
+      confirmedAt: null,
+      createdAt: recoveryObservedAt,
+      updatedAt: recoveryObservedAt,
+    }],
     reset_execution_estimates: [{
       resetEventKey: "usage-reset-monitor-e2e",
       displayExecutionAt: recoveryObservedAt,

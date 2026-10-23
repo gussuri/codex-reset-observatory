@@ -10,6 +10,7 @@ import {
 import type { TiboFormalAdoptionLedgerLike } from "../lib/radar/tiboResetEventIdentity";
 import type { ResetExecutionEstimate } from "../lib/radar/resetExecution";
 import type { WindowEventLike } from "../lib/radar/types";
+import type { CodexRecoveryObservation } from "../lib/codexUsageRecovery";
 
 const ROOT_TWEET_ID = "2094251180121854309";
 const EDITED_TWEET_ID = "2094252447271366730";
@@ -54,6 +55,30 @@ function tiboSignal(
     edit_history_tweet_ids: [tweetId],
     edit_version: 1,
     edit_metadata_source: "none",
+    ...overrides,
+  };
+}
+
+function monitorObservationFor(
+  signal: FormalTiboResetSignal,
+  overrides: Partial<CodexRecoveryObservation> = {},
+): CodexRecoveryObservation {
+  const observedAt = overrides.observedAt ?? signal.tweet_created_at;
+  return {
+    id: `monitor-${signal.tweet_id}`,
+    sourceKey: "local-codex-app-server",
+    observedAt,
+    previousObservedAt: new Date(Date.parse(observedAt) - 2 * 60_000).toISOString(),
+    previousUsedPercent: 100,
+    currentUsedPercent: 0,
+    previousResetsAt: 1_700_000_000,
+    currentResetsAt: 1_700_003_600,
+    matchedTiboTweetId: signal.tweet_id,
+    confidence: "strong",
+    cycleHint: "unexpected",
+    status: "observed",
+    createdAt: observedAt,
+    updatedAt: observedAt,
     ...overrides,
   };
 }
@@ -106,10 +131,10 @@ test("trusted edit versions become one canonical history event beyond the legacy
     [],
     [],
     [],
+    [monitorObservationFor(root)],
     [],
     [],
-    [],
-    { rawTiboSignals: [edited, root] },
+    { rawTiboSignals: [edited, root], recoveryObservations: [monitorObservationFor(root)] },
   );
 
   assert.equal(history.length, 1);
@@ -120,6 +145,94 @@ test("trusted edit versions become one canonical history event beyond the legacy
   ]);
   assert.equal(history[0].source_url, edited.tweet_url);
   assert.equal(history[0].completed_at, root.tweet_created_at);
+});
+
+test("untrusted edit metadata cannot borrow a monitor observation from another tweet ID", () => {
+  const oldTweetId = "2112432076767289678";
+  const cases: Array<{
+    name: string;
+    tweetId: string;
+    editMetadataSource: "none" | "x_api";
+    logicalPostId: string;
+    editHistoryTweetIds: string[];
+    editVersion: number;
+  }> = [
+    {
+      name: "metadata source none",
+      tweetId: "2113492187770175603",
+      editMetadataSource: "none",
+      logicalPostId: oldTweetId,
+      editHistoryTweetIds: [oldTweetId, "2113492187770175603"],
+      editVersion: 2,
+    },
+    {
+      name: "version does not identify this row",
+      tweetId: "2113492187770175604",
+      editMetadataSource: "x_api",
+      logicalPostId: oldTweetId,
+      editHistoryTweetIds: [oldTweetId, "2113492187770175604"],
+      editVersion: 1,
+    },
+    {
+      name: "logical post conflicts with chain root",
+      tweetId: "2113492187770175605",
+      editMetadataSource: "x_api",
+      logicalPostId: "2112432076767289680",
+      editHistoryTweetIds: [oldTweetId, "2113492187770175605"],
+      editVersion: 2,
+    },
+  ];
+
+  for (const item of cases) {
+    const signal = tiboSignal(item.tweetId, "2026-10-23T22:00:00.000Z", {
+      logical_post_id: item.logicalPostId,
+      edit_history_tweet_ids: item.editHistoryTweetIds,
+      edit_version: item.editVersion,
+      edit_metadata_source: item.editMetadataSource,
+    });
+    const observation = monitorObservationFor(signal, {
+      matchedTiboTweetId: oldTweetId,
+    });
+
+    assert.deepEqual(
+      combineResetHistory([], [signal], [], [], [], [observation]),
+      [],
+      item.name,
+    );
+  }
+});
+
+test("a validated X API edit chain can use its matched root monitor observation", () => {
+  const rootTweetId = "2000000000000000101";
+  const editedTweetId = "2000000000000000102";
+  const edited = tiboSignal(editedTweetId, "2026-08-01T01:00:00.000Z", {
+    logical_post_id: rootTweetId,
+    edit_history_tweet_ids: [rootTweetId, editedTweetId],
+    edit_version: 2,
+    edit_metadata_source: "x_api",
+  });
+  const observation = monitorObservationFor(edited, {
+    matchedTiboTweetId: rootTweetId,
+  });
+
+  const history = combineWithIdentityContext(
+    [],
+    [edited],
+    [],
+    [],
+    [],
+    [observation],
+    [],
+    [],
+    {
+      rawTiboSignals: [edited],
+      recoveryObservations: [observation],
+    },
+  );
+
+  assert.equal(history.length, 1);
+  assert.equal(history[0].id, `tibo-reset-${rootTweetId}`);
+  assert.deepEqual(history[0].sourceTweetIds, [rootTweetId, editedTweetId]);
 });
 
 test("trusted logical posts inside five minutes remain separate while legacy none rows keep compatibility", () => {
@@ -139,16 +252,26 @@ test("trusted logical posts inside five minutes remain separate while legacy non
     [],
     [],
     [],
+    [monitorObservationFor(first), monitorObservationFor(second)],
     [],
     [],
-    [],
-    { rawTiboSignals: [first, second] },
+    {
+      rawTiboSignals: [first, second],
+      recoveryObservations: [monitorObservationFor(first), monitorObservationFor(second)],
+    },
   );
   assert.equal(trustedHistory.length, 2);
 
   const legacyFirst = tiboSignal("legacy-one", "2026-08-01T03:00:00.000Z");
   const legacySecond = tiboSignal("legacy-two", "2026-08-01T03:01:00.000Z");
-  const legacyHistory = combineResetHistory([], [legacyFirst, legacySecond]);
+  const legacyHistory = combineResetHistory(
+    [],
+    [legacyFirst, legacySecond],
+    [],
+    [],
+    [],
+    [monitorObservationFor(legacyFirst), monitorObservationFor(legacySecond)],
+  );
   assert.equal(legacyHistory.length, 1);
 });
 
@@ -174,10 +297,10 @@ test("a trusted logical post cannot time-merge with unrelated unlabeled history"
     [],
     [],
     [],
+    [monitorObservationFor(trusted)],
     [],
     [],
-    [],
-    { rawTiboSignals: [trusted] },
+    { rawTiboSignals: [trusted], recoveryObservations: [monitorObservationFor(trusted)] },
   );
 
   assert.equal(history.length, 2);
@@ -231,6 +354,14 @@ test("a prior notice shared by history and a stale estimate does not merge two c
     completed_at: oldCompletion.tweet_created_at,
     closed_at: oldCompletion.tweet_created_at,
   };
+  const recoveryObservations = [
+    monitorObservationFor(oldCompletion),
+    monitorObservationFor(currentCompletion, {
+      id: "observation-current-reset",
+      observedAt: staleEstimate.displayExecutionAt,
+      previousObservedAt: staleEstimate.executionWindowStartAt,
+    }),
+  ];
 
   const history = combineWithIdentityContext(
     [],
@@ -238,11 +369,12 @@ test("a prior notice shared by history and a stale estimate does not merge two c
     [],
     [],
     [oldNotice],
-    [],
+    recoveryObservations,
     [staleEstimate],
     [],
     {
       rawTiboSignals: [oldNotice, oldCompletion, currentCompletion],
+      recoveryObservations,
       dynamicEvents: [oldDynamicEvent],
     },
   );
@@ -292,6 +424,7 @@ test("a shared official notice alone does not dedupe distinct completion records
       related_notices: [notice],
     },
   );
+  const recoveryObservations = [monitorObservationFor(currentCompletion)];
 
   const history = combineWithIdentityContext(
     [oldEvent],
@@ -299,10 +432,10 @@ test("a shared official notice alone does not dedupe distinct completion records
     [],
     [],
     [],
+    recoveryObservations,
     [],
     [],
-    [],
-    { rawTiboSignals: [currentCompletion] },
+    { rawTiboSignals: [currentCompletion], recoveryObservations },
   );
 
   assert.deepEqual(
@@ -331,6 +464,11 @@ test("reuses an estimate key when one recovery observation uniquely matches the 
     tiboSourceTweetIds: [],
     estimatorVersion: "usage-execution-monitor-v1",
   };
+  const recovery = monitorObservationFor(signal, {
+    id: "recovery-evidence-1",
+    observedAt: estimate.displayExecutionAt,
+    previousObservedAt: estimate.executionWindowStartAt,
+  });
 
   const history = combineWithIdentityContext(
     [],
@@ -338,18 +476,12 @@ test("reuses an estimate key when one recovery observation uniquely matches the 
     [],
     [],
     [],
-    [{
-      id: "recovery-evidence-1",
-      matchedTiboTweetId: signal.tweet_id,
-    }],
+    [recovery],
     [estimate],
     [],
     {
       rawTiboSignals: [signal],
-      recoveryObservations: [{
-        id: "recovery-evidence-1",
-        matchedTiboTweetId: signal.tweet_id,
-      }],
+      recoveryObservations: [recovery],
     },
   );
 
@@ -372,23 +504,29 @@ test("monitor-backed estimate key wins over a dynamic and ledger self key", () =
     executionTimePrecision: "approximate",
     executionWindowStartAt: "2026-08-01T07:00:00.000Z",
     executionWindowEndAt: "2026-08-01T07:05:00.000Z",
-    recoveryObservationId: null,
+    recoveryObservationId: "monitor-backed-estimate-observation",
     tiboPrimaryTweetId: signal.tweet_id,
     tiboSourceTweetIds: [signal.tweet_id],
     estimatorVersion: "usage-execution-monitor-v1",
   };
 
+  const recovery = monitorObservationFor(signal, {
+    id: "monitor-backed-estimate-observation",
+    observedAt: estimate.displayExecutionAt,
+    previousObservedAt: estimate.executionWindowStartAt,
+  });
   const history = combineWithIdentityContext(
     [],
     [signal],
     [],
     [],
     [],
-    [],
+    [recovery],
     [estimate],
     [],
     {
       rawTiboSignals: [signal],
+      recoveryObservations: [recovery],
       adoptionLedgers: [{
         logicalPostId: signal.tweet_id,
         logicalPostTweetIds: [signal.tweet_id],
@@ -415,6 +553,7 @@ test("a ledger read error is not treated as an empty ledger for new history", ()
     edit_version: 1,
     edit_metadata_source: "x_api",
   });
+  const recovery = monitorObservationFor(signal);
 
   const history = combineWithIdentityContext(
     [],
@@ -422,11 +561,12 @@ test("a ledger read error is not treated as an empty ledger for new history", ()
     [],
     [],
     [],
-    [],
+    [recovery],
     [],
     [],
     {
       rawTiboSignals: [signal],
+      recoveryObservations: [recovery],
       adoptionLedgerReadError: true,
     },
   );
@@ -448,8 +588,10 @@ test("canonical history is idempotent and keeps provenance ordering deterministi
     edit_version: 2,
     edit_metadata_source: "x_api",
   });
+  const recoveryObservations = [monitorObservationFor(root)];
   const context = {
     rawTiboSignals: [edited, root],
+    recoveryObservations,
   } satisfies HistoryIdentityContext;
   const first = combineWithIdentityContext(
     [],
@@ -457,7 +599,7 @@ test("canonical history is idempotent and keeps provenance ordering deterministi
     [],
     [],
     [],
-    [],
+    recoveryObservations,
     [],
     [],
     context,
@@ -468,7 +610,7 @@ test("canonical history is idempotent and keeps provenance ordering deterministi
     [],
     [],
     [],
-    [],
+    recoveryObservations,
     [],
     [],
     { ...context, rawTiboSignals: [root, edited], dynamicEvents: first },
@@ -752,6 +894,7 @@ test("persisted teaser provenance remains attached to its canonical reset event"
     claimSource: "new_adoption",
     adoptedAt: "2026-10-07T03:34:00.000Z",
   };
+  const recovery = monitorObservationFor(reset);
 
   const history = combineWithIdentityContext(
     [],
@@ -759,11 +902,12 @@ test("persisted teaser provenance remains attached to its canonical reset event"
     [],
     [],
     [teaser],
-    [],
+    [recovery],
     [],
     [],
     {
       rawTiboSignals: [teaser, reset],
+      recoveryObservations: [recovery],
       adoptionLedgers: [ledger],
     },
   );

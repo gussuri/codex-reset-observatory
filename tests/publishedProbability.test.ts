@@ -13,6 +13,7 @@ import {
   roundPublicProbabilityTime,
   selectPublishedProbability,
 } from "../lib/radar/publishedProbability";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 import {
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
@@ -355,7 +356,11 @@ test("view model and public DTO share the actual completed reset boundary", () =
     ai_reset_type_ja: "ランダムリセット",
     is_reply: false,
   };
-  const data = getLocalRadarData({ calculationNow, formalTiboResets: [formalReset] });
+  const data = getLocalRadarData({
+    calculationNow,
+    formalTiboResets: [formalReset],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([formalReset]),
+  });
   const calculationContext = createRadarCalculationContext(data, calculationNow);
   const published = calculatePublishedProbability(data, {
     now: calculationNow,
@@ -609,10 +614,12 @@ test("teaser strength before the latest formal reset has no probability effect",
   const baseline = getLocalRadarData({
     calculationNow: NOW,
     formalTiboResets: [formalReset],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([formalReset]),
   });
   const withOldStrength = getLocalRadarData({
     calculationNow: NOW,
     formalTiboResets: [formalReset],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([formalReset]),
     recentTiboSignals: [{
       tweet_id: "strength-before-latest-reset",
       signal_type: "irrelevant",

@@ -140,9 +140,34 @@ Production の 2026-09-12 record では、notice tweet `2098612714704891959` と
 
 新しい処理では、AI 解釈だけを authoritative execution の代用にしないこと、notice だけで completed event を作らないことを守ります。
 
+### 強制・ランダムリセット完了履歴の monitor gate
+
+新しく採用する Tibo の強制リセット投稿は、投稿の分類・verification・正式採用台帳だけでは completed history になりません。`lib/radar/tiboHistory.ts` は、次のいずれかを要求します。
+
+- recovery observation の `matchedTiboTweetId` が投稿の tweet ID / logical post / trusted edit alias に一致する。
+- `reset_execution_estimates` の public-valid estimate が、同じ回復観測 ID と前後時刻を持つ実体のある観測に結び付き、estimate の Tibo source ID が投稿の identity alias に一致する。
+
+正式な monitor 回復観測は、除外されていない ID、`strong` confidence、`unexpected` cycle、`observed` または `confirmed` status、順序の正しい比較時刻、10 分以内の比較間隔、1 ポイント以上の使用率低下、1 時間以上の `resets_at` 前進を満たします。個人 BANKED 消費は保存時に `rejected` となり、regular / unknown cycle と rejected observation は採用されません。baseline、restart/rebase、gap、no-difference は有効な比較観測にならないため、履歴を作りません。
+
+monitor observation の `matchedTiboTweetId` は、実行済み投稿との一致を表します。これは notice の関連付け欄ではありません。matched ID がなくても、public-valid estimate に authoritative observation と同じ Tibo source IDs が記録されていれば、notice-backed または monitor-only event を復元できます。notice は provenance を説明しますが、execution の根拠を代替しません。
+
+AI confidence、`verification_status = confirmed`、manual execution-time override、adoption ledger、完了を示す投稿文だけではこの gate を通過しません。手動 estimate は monitor observation がない限り公開 completed history・確率境界へ入りません。invalid estimate の重複が先に届いても、後続の valid copy を捨てず、retry/duplicate delivery の順序で canonical event を変えません。
+
+この gate は formal history の生成前に適用し、history 表示だけでなく共通 canonical history を使う probability boundary と public recovery projection に反映します。既存の `data/resetHistory.ts` にある static archive は legacy authority として維持し、遡及的な backfill / rewrite は行いません。static archive に入っていない legacy AI-confirmed signal を、AI確認済みという理由だけで例外扱いしません。regular reset と BANKED distribution はそれぞれ既存の専用経路を維持します。
+
+monitor gate 導入前に公開済みだった announcement-fallback 履歴のうち、健康かつ非staleの公開API snapshot（`checkedAt=2026-10-23T11:00:01.004Z`）に存在し、従来の `data/resetHistory.ts` に含まれていなかった次の3件だけを、元のevent keyと公開内容を保つ static archive row として追加します。時刻は公開済みの announcement fallback のまま `executionTimePrecision = announcement_fallback` とし、monitor観測時刻へ読み替えません。各行の notice/completion tweet ID、元の signal/window、source URL、空のscope、JA/EN/ZHのtitle・summary・noteを同snapshotに固定します。
+
+| Canonical event key | signal / fallback time (UTC) | notice / completion tweet IDs |
+| --- | --- | --- |
+| `tibo-reset-2109873287853707513` | `2026-10-13T01:03:59Z` / `2026-10-13T05:06:06Z` | `2109812360596865224` / `2109873287853707513` |
+| `tibo-reset-2110618732666257557` | `2026-10-15T04:55:51Z` / `2026-10-15T06:28:13Z` | `2110595484180214059` / `2110618732666257557` |
+| `tibo-reset-2111566005684289735` | `2026-10-17T16:20:57Z` / `2026-10-17T21:12:21Z` | `2111492673890824348` / `2111566005684289735` |
+
+これらは過去に公開された3つの表示・履歴値を保つための限定的な固定データです。monitor evidence が存在したことを示すものではなく、static archive にないAI-only投稿、adoption ledger、手動確認済み投稿へ例外を広げません。以後の新しいdynamic eventは引き続き有効なmonitor gateを通過する必要があります。
+
 ## 7. Identity / chronology invariant
 
-`buildTiboReadSideProjection()` は active/recent/formal の重複を read-side で整理し、trusted edit chain を logical post として扱います。formal reset は `isFormalTiboResetSignal()` の条件を通過したものだけが formal history の候補になります。
+`buildTiboReadSideProjection()` は active/recent/formal の重複を read-side で整理し、trusted edit chain を logical post として扱います。formal reset は `isFormalTiboResetSignal()` の条件と、上記 monitor recovery gate の両方を通過したものだけが新規 formal history になります。
 
 `resolveTiboResetEventIdentity()` と canonical history merge は、明示された logical identity、edit alias、adoption ledger、execution estimate、static/dynamic event provenance を使います。conflict、missing authoritative tail、manual conflict は fail-safe に扱います。異なる cycle type の記録を時間だけでまとめず、stable identity がない legacy compatibility のみ限定された近接判定を使います。
 
@@ -255,7 +280,7 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 
 現行コードには、legacy input normalization、unknown record の `reference` fallback、static history の個別 correction など、互換性を守るための個別ルールがあります。random/Tibo scope labelは入力互換のために `全有料プラン`、`一部ユーザー`、または空へ正規化し、regular scopeは `全有料プラン`、`任意リセット未使用アカウント`、または空へ正規化します。これらは一つの理想的な evidence order に置き換えず、各 helper と既存テストを正本として扱います。
 
-今回追加するのは、Day N 見出しを時間根拠にしない Gemini 指示と temporal guard、日時を省く将来 summary / note の生成・検証ルール、および上述の versioned proof による reply 完了投稿の正式履歴 admission です。migration は repository に含めますが、適用はしません。
+今回追加するのは、Day N 見出しを時間根拠にしない Gemini 指示と temporal guard、日時を省く将来 summary / note の生成・検証ルール、versioned proof による reply 完了投稿の正式履歴 admission、および上述の monitor recovery gate です。migration は repository に含めますが、適用はしません。
 
 次は変更しません。
 
@@ -263,6 +288,6 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 - Tibo classification の既存 safety conditions、reason inference、proof のない投稿の採否
 - BANKED/conditional semantics と probability eligibility。BANKED/conditional completion は reply proof でも forced-reset 履歴へ変換しない
 - public UI の既存フィールド構成、canonical reason/scope の表示ルール、履歴レイアウト（上記の将来 summary / note の日時表記ルールを除く）
-- probability model、public-v1 DTO、既存の recovery/adoption source semantics
+- probability formula、public-v1 schema、regular/BANKED の recovery source semantics
 
 今後この領域を変更する場合は、まずこの文書と列挙した実装・テストを読み、変更が source normalization、canonical identity/chronology、または presentation のどの層に属するかを明示してください。

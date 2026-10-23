@@ -159,6 +159,8 @@ export type WindowLike = {
   source_url?: string | null;
   sourceKind?: HistorySourceKind;
   sourceTweetIds?: string[];
+  /** Pinned display precision for an explicitly archived legacy event. */
+  executionTimePrecision?: ExecutionTimePrecision | null;
   /** Internal trusted X logical-post identity used to keep separate posts apart. */
   tiboLogicalPostId?: string;
   /** Internal probability-target marker; intentionally omitted from public DTOs. */

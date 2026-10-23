@@ -33,12 +33,135 @@ export function isExcludedRecoveryObservationId(id: string | null | undefined): 
 
 /**
  * 単一の信頼できる情報源 (Single Source of Truth)
- * 全31件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット配布含む）
+ * 全34件のリセットイベント履歴（全体強制リセット・定期リセット・任意リセット配布含む）
  * details.cycleType distinguishes regular and random resets, while recordKind
  * remains an independent record classification and resetMethod describes how
  * the reset was delivered.
  */
 export const LOCAL_RESET_HISTORY: Array<WindowEventLike> = [
+  // Frozen from the healthy public API snapshot checked at 2026-10-23T11:00:01.004Z.
+  // These three already-published rows remain legacy display/history authority;
+  // their announcement fallback timestamps are not monitor observations.
+  {
+    id: "tibo-reset-2111566005684289735",
+    recordKind: "confirmed_global",
+    title: {
+      ja: "13日目のル・リミット・リセット",
+      en: "Day 13 · Le Limit Reset",
+      zh: "第13天的 Le Limit 重置",
+    },
+    kind: "reset_completed",
+    status: "closed",
+    opened_at: "2026-10-17T16:20:57Z",
+    closed_at: "2026-10-17T21:12:21Z",
+    completed_at: "2026-10-17T21:12:21Z",
+    date: "2026-10-17T21:12:21Z",
+    window_minutes: 291,
+    scope: "",
+    executionTimePrecision: "announcement_fallback",
+    summary: {
+      ja: "「Day 13/ Le limit reset」と予告された、13日目のCodex利用上限リセット。Tibo氏が後続投稿で完了を報告しました。",
+      en: "The Day 13 Codex usage-limit reset, announced as “Day 13/ Le limit reset.” Tibo later confirmed its completion.",
+      zh: "Tibo 以“Day 13/ Le limit reset”预告了第13天的 Codex 使用额度重置，随后发文确认完成。",
+    },
+    source_url: "https://x.com/thsottiaux/status/2111492673890824348",
+    sourceKind: "direct_post",
+    sourceTweetIds: ["2111492673890824348", "2111566005684289735"],
+    officialNoticeTweetId: "2111492673890824348",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "ご祝儀リセット",
+      resetMethod: "強制リセット",
+      scope: "",
+      noticeToExecution: "4時間51分",
+      noticeType: "公式告知あり",
+      note: {
+        ja: "Tibo氏が「Day 13/ Le limit reset」と予告した、Codexの利用上限を直接リセットする回です。利用できる枠を回復する対応で、後続の「Done」という投稿で完了が報告されました。",
+        en: "Tibo announced this Codex usage-limit reset with “Day 13/ Le limit reset.” It directly refreshed usage limits to restore available capacity, and he confirmed completion in a follow-up post saying “Done.”",
+        zh: "Tibo 以“Day 13/ Le limit reset”预告了这次 Codex 使用额度重置。本次操作直接重置使用额度，以恢复可用额度，随后他发文“Done”确认完成。",
+      },
+    },
+  },
+  {
+    id: "tibo-reset-2110618732666257557",
+    recordKind: "confirmed_global",
+    title: {
+      ja: "リセットボタン紛失説は大げさでしたリセット",
+      en: "The Reset Button Is Alive and Well Reset",
+      zh: "重置按钮失踪传闻言过其实重置",
+    },
+    kind: "reset_completed",
+    status: "closed",
+    opened_at: "2026-10-15T04:55:51Z",
+    closed_at: "2026-10-15T06:28:13Z",
+    completed_at: "2026-10-15T06:28:13Z",
+    date: "2026-10-15T06:28:13Z",
+    window_minutes: 92,
+    scope: "",
+    executionTimePrecision: "announcement_fallback",
+    summary: {
+      ja: "Tibo氏が「10日目はリセット」と予告し、その後、Codexの利用上限リセットの完了を報告した回です。",
+      en: "Tibo announced a reset for Day 10, then confirmed that the Codex usage-limit reset was complete.",
+      zh: "Tibo 预告第10天进行重置，随后报告 Codex 使用额度已完成重置。",
+    },
+    source_url: "https://x.com/thsottiaux/status/2110595484180214059",
+    sourceKind: "direct_post",
+    sourceTweetIds: ["2110595484180214059", "2110618732666257557"],
+    officialNoticeTweetId: "2110595484180214059",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "ご祝儀リセット",
+      resetMethod: "強制リセット",
+      scope: "",
+      noticeToExecution: "1時間32分",
+      noticeType: "公式告知あり",
+      note: {
+        ja: "「リセットボタンをなくした」という噂は大げさだと冗談を交え、「10日目はリセット」と予告。続く投稿で「今後2時間以内」と案内し、最初の予告から約1時間32分後に「Done and dusted（無事完了）」と報告しました。Codexの利用上限を直接リセットし、利用できる枠を回復する対応でした。",
+        en: "Tibo joked that reports of his reset button being lost were greatly exaggerated and announced a reset for Day 10. A follow-up said it would land within two hours, and the completion post came about one hour and 32 minutes after the original notice. This reset directly refreshed Codex usage limits to restore available capacity.",
+        zh: "Tibo 开玩笑说，关于他弄丢重置按钮的传闻被严重夸大了，并宣布第10天将进行重置。随后他说明会在接下来两小时内完成，并在最初预告约1小时32分钟后发布了完成消息。这次操作直接重置 Codex 的使用额度，以恢复可用额度。",
+      },
+    },
+  },
+  {
+    id: "tibo-reset-2109873287853707513",
+    recordKind: "confirmed_global",
+    title: {
+      ja: "サイドオーダーには何を頼みますかリセット",
+      en: "What’s Your Side Order? Reset",
+      zh: "配菜想点什么？重置",
+    },
+    kind: "reset_completed",
+    status: "closed",
+    opened_at: "2026-10-13T01:03:59Z",
+    closed_at: "2026-10-13T05:06:06Z",
+    completed_at: "2026-10-13T05:06:06Z",
+    date: "2026-10-13T05:06:06Z",
+    window_minutes: 242,
+    scope: "",
+    executionTimePrecision: "announcement_fallback",
+    summary: {
+      ja: "全体リセットの事前告知に続き、Tibo氏がCodexの利用上限のリセット完了を報告しました。",
+      en: "Following an announcement of a global reset, Tibo reported that the Codex usage-limit reset was complete.",
+      zh: "在预告全局重置之后，Tibo 报告 Codex 使用额度已完成重置。",
+    },
+    source_url: "https://x.com/thsottiaux/status/2109812360596865224",
+    sourceKind: "direct_post",
+    sourceTweetIds: ["2109812360596865224", "2109873287853707513"],
+    officialNoticeTweetId: "2109812360596865224",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "ご祝儀リセット",
+      resetMethod: "強制リセット",
+      scope: "",
+      noticeToExecution: "4時間2分",
+      noticeType: "公式告知あり",
+      note: {
+        ja: "Tibo氏がリセットをサイドメニューにたとえた問いかけを添えて、完了を報告した回です。全体リセットの事前告知から約4時間後に、完了投稿が出ました。Codexの利用上限を直接リセットし、利用枠を回復させる対応です。",
+        en: "Tibo announced that the reset was done with a playful question likening it to a side dish. The completion post came about four hours after the global-reset notice. This reset directly refreshed Codex usage limits.",
+        zh: "Tibo 用把重置比作配菜的俏皮提问，报告了重置完成。这条完成消息发布于全局重置预告约四小时之后。本次操作直接重置了 Codex 的使用额度。",
+      },
+    },
+  },
   {
     "id": "local-codex-sweet-dreams-reset-2026-09-12",
     "recordKind": "confirmed_global",

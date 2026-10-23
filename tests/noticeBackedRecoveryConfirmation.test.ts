@@ -89,6 +89,76 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     assert.equal(events[0].closed_at, sampleRecovery.observedAt);
   });
 
+  it("public execution estimates do not create history when their referenced monitor observation is absent", () => {
+    const events = findNoticeBackedRecoveryEvents([sampleNotice], [], [sampleEstimate]);
+    assert.equal(events.length, 0);
+  });
+
+  it("only valid unexpected monitor comparisons can support public reset history", () => {
+    const invalidComparisons: Array<{
+      observation: CodexRecoveryObservationInput;
+      estimate: typeof sampleEstimate;
+    }> = [
+      {
+        observation: { ...sampleRecovery, previousObservedAt: null },
+        estimate: sampleEstimate,
+      },
+      {
+        observation: {
+          ...sampleRecovery,
+          previousObservedAt: "2026-08-13T03:10:00.000Z",
+        },
+        estimate: {
+          ...sampleEstimate,
+          executionWindowStartAt: "2026-08-13T03:10:00.000Z",
+        },
+      },
+      {
+        observation: { ...sampleRecovery, currentUsedPercent: sampleRecovery.previousUsedPercent },
+        estimate: sampleEstimate,
+      },
+      {
+        observation: { ...sampleRecovery, currentResetsAt: sampleRecovery.previousResetsAt },
+        estimate: sampleEstimate,
+      },
+      {
+        observation: { ...sampleRecovery, status: "rejected" },
+        estimate: sampleEstimate,
+      },
+      {
+        observation: { ...sampleRecovery, cycleHint: "regular" },
+        estimate: sampleEstimate,
+      },
+    ];
+
+    for (const { observation, estimate } of invalidComparisons) {
+      const events = findNoticeBackedRecoveryEvents([sampleNotice], [observation], [estimate]);
+      assert.equal(events.length, 0);
+    }
+  });
+
+  it("duplicate estimates converge regardless of whether an invalid copy arrives first", () => {
+    const invalidCopy = {
+      ...sampleEstimate,
+      recoveryObservationId: "missing-monitor-row",
+    };
+    const invalidFirst = findNoticeBackedRecoveryEvents(
+      [sampleNotice],
+      [sampleRecovery],
+      [invalidCopy, sampleEstimate],
+    );
+    const validFirst = findNoticeBackedRecoveryEvents(
+      [sampleNotice],
+      [sampleRecovery],
+      [sampleEstimate, invalidCopy],
+    );
+
+    assert.equal(invalidFirst.length, 1);
+    assert.equal(validFirst.length, 1);
+    assert.equal(invalidFirst[0].id, sampleEstimate.resetEventKey);
+    assert.equal(validFirst[0].id, sampleEstimate.resetEventKey);
+  });
+
   it("匂わせ + strong unexpected recovery は完了投稿なしでも1件の正式履歴になる", () => {
     const teaser = {
       ...sampleNotice,
@@ -251,8 +321,8 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     }
   });
 
-  it("K. active notice/recoveryがなくてもpersisted estimateだけで残る", () => {
-    const events = findNoticeBackedRecoveryEvents([], [], [sampleEstimate]);
+  it("K. active noticeがなくてもpersisted estimateと実体のあるmonitor観測から再構成できる", () => {
+    const events = findNoticeBackedRecoveryEvents([], [sampleRecovery], [sampleEstimate]);
     assert.equal(events.length, 1);
     assert.equal(events[0].id, sampleEstimate.resetEventKey);
     assert.equal(events[0].completed_at, sampleEstimate.displayExecutionAt);
@@ -348,6 +418,7 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
       id: "composite-recovery-0837",
       observedAt: "2026-08-23T23:37:43.201Z",
       previousObservedAt: "2026-08-23T23:33:43.156Z",
+      matchedTiboTweetId: "2092000000000000001",
     };
     const compositeEstimate = {
       ...sampleEstimate,
@@ -476,6 +547,7 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
   it("O. notice expiry後・recovery公開期限後もestimate由来eventが残る", () => {
     const data: RadarData = {
       reset_execution_estimates: [sampleEstimate as any],
+      codex_recovery_observations: [sampleRecovery as any],
     };
     for (const calculationNow of ["2026-08-13T04:02:00Z", "2026-08-13T05:10:00Z"]) {
       const snapshot = toPublicRadarSnapshot(data, "ja", {

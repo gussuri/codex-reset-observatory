@@ -24,10 +24,13 @@ import {
   findRelatedTiboNotice,
   isFormalTiboResetSignal,
   selectRepresentativeTiboNotice,
+  type CodexRecoveryObservationInput,
   type FormalTiboResetSignal,
   type TiboNoticeSignal,
 } from "../lib/radar/tiboHistory";
 import type { HistoryRecordKind, WindowEventLike } from "../lib/radar/types";
+import type { CodexRecoveryObservation } from "../lib/codexUsageRecovery";
+import { DAY18_MONITOR_GATE_SOURCE_FACTS } from "./fixtures/tiboDay18MonitorGate";
 import {
   TARGET_TIBO_TWEET_CREATED_AT,
   TARGET_TIBO_TWEET_ID,
@@ -51,6 +54,30 @@ function resetSignal(overrides: Partial<FormalTiboResetSignal> = {}): FormalTibo
     ai_reset_type_ja: "ご祝儀リセット",
     ai_notice_to_execution: null,
     expires_at: "2026-08-01T10:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function monitorObservationFor(
+  signal: FormalTiboResetSignal,
+  overrides: Partial<CodexRecoveryObservation> = {},
+): CodexRecoveryObservation {
+  const observedAt = overrides.observedAt ?? signal.tweet_created_at;
+  return {
+    id: `monitor-${signal.tweet_id}`,
+    sourceKey: "local-codex-app-server",
+    observedAt,
+    previousObservedAt: new Date(Date.parse(observedAt) - 2 * 60_000).toISOString(),
+    previousUsedPercent: 100,
+    currentUsedPercent: 0,
+    previousResetsAt: 1_700_000_000,
+    currentResetsAt: 1_700_003_600,
+    matchedTiboTweetId: signal.tweet_id,
+    confidence: "strong",
+    cycleHint: "unexpected",
+    status: "observed",
+    createdAt: observedAt,
+    updatedAt: observedAt,
     ...overrides,
   };
 }
@@ -822,7 +849,14 @@ test("the 2026-08-11 duplicate completion posts become one canonical event", () 
     related_notice: notice,
   });
 
-  const combined = combineResetHistory([], [second, first]);
+  const combined = combineResetHistory(
+    [],
+    [second, first],
+    [],
+    [],
+    [],
+    [monitorObservationFor(first), monitorObservationFor(second)],
+  );
 
   assert.equal(combined.length, 1);
   assert.equal(combined[0].completed_at, "2026-08-11T00:27:44.000Z");
@@ -836,7 +870,13 @@ test("the 2026-08-11 duplicate completion posts become one canonical event", () 
   withLocalHistory([], () => {
     assert.equal(
       getRecent7DayResetCount(
-        { formal_tibo_resets: [first, second] },
+        {
+          formal_tibo_resets: [first, second],
+          codex_recovery_observations: [
+            monitorObservationFor(first),
+            monitorObservationFor(second),
+          ],
+        },
         new Date("2026-08-11T01:00:00.000Z"),
       ),
       1,
@@ -887,7 +927,17 @@ test("formal resets more than five minutes apart remain separate", () => {
     tweet_created_at: "2026-08-11T00:33:00.000Z",
   });
 
-  assert.equal(combineResetHistory([], [first, second]).length, 2);
+  assert.equal(
+    combineResetHistory(
+      [],
+      [first, second],
+      [],
+      [],
+      [],
+      [monitorObservationFor(first), monitorObservationFor(second)],
+    ).length,
+    2,
+  );
 });
 
 test("rejected and irrelevant posts cannot enter a formal reset cluster", () => {
@@ -903,7 +953,14 @@ test("rejected and irrelevant posts cannot enter a formal reset cluster", () => 
     signal_type: "irrelevant",
   });
 
-  const combined = combineResetHistory([], [valid, rejected, irrelevant]);
+  const combined = combineResetHistory(
+    [],
+    [valid, rejected, irrelevant],
+    [],
+    [],
+    [],
+    [monitorObservationFor(valid)],
+  );
   assert.deepEqual(combined.map((item) => item.sourceTweetIds), [["valid-reset"]]);
 });
 
@@ -919,11 +976,148 @@ test("notice-to-execution duration and notice type are stored in the converted e
   assert.equal(event.details?.noticeType, "公式予告あり");
 });
 
+test("Day 18 formal adoption without monitor recovery stays out of history and the probability boundary", () => {
+  const calculationNow = new Date("2026-10-23T20:00:00.000Z");
+  const parentId = DAY18_MONITOR_GATE_SOURCE_FACTS.parentTweetId;
+  const parent = resetSignal({
+    tweet_id: parentId,
+    tweet_url: `https://x.com/thsottiaux/status/${parentId}`,
+    tweet_created_at: "2026-10-23T19:00:00.000Z",
+    logical_post_id: parentId,
+    edit_history_tweet_ids: [parentId],
+    edit_version: 1,
+    edit_metadata_source: "x_api",
+    verification_status: "confirmed",
+    classification_source: "gemini",
+    ai_confidence: 0.99,
+  });
+  const directReply = noticeSignal({
+    tweet_id: DAY18_MONITOR_GATE_SOURCE_FACTS.directReply.tweetId,
+    text: "Future deadline reply fixture.",
+    tweet_url: `https://x.com/thsottiaux/status/${DAY18_MONITOR_GATE_SOURCE_FACTS.directReply.tweetId}`,
+    tweet_created_at: "2026-10-23T14:50:00.000Z",
+    signal_type: "official_notice",
+    is_reply: true,
+    ai_temporal_direction: "future",
+    expected_start_at: DAY18_MONITOR_GATE_SOURCE_FACTS.directReply.windowStartAt,
+    expected_end_at: DAY18_MONITOR_GATE_SOURCE_FACTS.directReply.windowEndAt,
+    temporal_resolution_status: "resolved",
+  });
+  const adoptionLedger = {
+    logicalPostId: parentId,
+    logicalPostTweetIds: [parentId],
+    resetEventKey: `tibo-reset-${parentId}`,
+    representativeTweetId: parentId,
+    sourceTweetIds: [parentId],
+    claimSource: "new_adoption",
+  };
+  const data = getLocalRadarData({
+    calculationNow,
+    formalTiboResets: [parent],
+    tiboFormalAdoptions: [adoptionLedger as any],
+    activeTiboSignals: [directReply as any],
+    recentTiboSignals: [directReply as any],
+    canonicalTiboSignals: [parent as any, directReply as any],
+  });
+  const baselineData = getLocalRadarData({ calculationNow });
+  const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
+  const baselineLastReset = getLastGlobalResetAt(baselineData, calculationNow)?.toISOString() ?? null;
+
+  assert.equal(data.active_tibo_signals?.[0]?.tweet_id, DAY18_MONITOR_GATE_SOURCE_FACTS.directReply.tweetId);
+  assert.equal(
+    snapshot.viewModel.recentHistory.some((item) => item.key === `tibo-reset-${parentId}`),
+    false,
+  );
+  assert.equal(
+    getLastGlobalResetAt(data, calculationNow)?.toISOString() ?? null,
+    baselineLastReset,
+    "AI confidence, confirmed verification, completion wording, and the adoption ledger do not move the reset boundary",
+  );
+});
+
+test("a valid monitor observation admits the Day 18 post once across ordering and duplicate deliveries", () => {
+  const calculationNow = new Date("2026-10-23T20:00:00.000Z");
+  const parentId = DAY18_MONITOR_GATE_SOURCE_FACTS.parentTweetId;
+  const parent = resetSignal({
+    tweet_id: parentId,
+    tweet_url: `https://x.com/thsottiaux/status/${parentId}`,
+    tweet_created_at: "2026-10-23T19:00:00.000Z",
+    logical_post_id: parentId,
+    edit_history_tweet_ids: [parentId],
+    edit_version: 1,
+    edit_metadata_source: "x_api",
+    verification_status: "confirmed",
+    classification_source: "gemini",
+    ai_confidence: 0.99,
+  });
+  const replyId = DAY18_MONITOR_GATE_SOURCE_FACTS.directReply.tweetId;
+  const directReply = noticeSignal({
+    tweet_id: replyId,
+    text: "Future deadline reply fixture.",
+    tweet_url: `https://x.com/thsottiaux/status/${replyId}`,
+    tweet_created_at: "2026-10-23T14:50:00.000Z",
+    signal_type: "official_notice",
+    is_reply: true,
+    ai_temporal_direction: "future",
+    expected_start_at: DAY18_MONITOR_GATE_SOURCE_FACTS.directReply.windowStartAt,
+    expected_end_at: DAY18_MONITOR_GATE_SOURCE_FACTS.directReply.windowEndAt,
+    temporal_resolution_status: "resolved",
+  });
+  const recovery = {
+    id: "day18-strong-unexpected-recovery",
+    observedAt: "2026-10-23T19:05:00.000Z",
+    previousObservedAt: "2026-10-23T18:55:00.000Z",
+    previousUsedPercent: 100,
+    currentUsedPercent: 0,
+    previousResetsAt: 1_798_000_000,
+    currentResetsAt: 1_798_003_600,
+    confidence: "strong" as const,
+    cycleHint: "unexpected" as const,
+    status: "observed" as const,
+    matchedTiboTweetId: parentId,
+  };
+  const firstData = getLocalRadarData({
+    calculationNow,
+    formalTiboResets: [parent],
+    activeTiboSignals: [directReply as any],
+    recentTiboSignals: [directReply as any],
+    canonicalTiboSignals: [parent as any, directReply as any],
+    codexRecoveryObservations: [recovery as any],
+  });
+  const resentData = getLocalRadarData({
+    calculationNow,
+    formalTiboResets: [parent, parent],
+    activeTiboSignals: [directReply as any],
+    recentTiboSignals: [directReply as any, parent as any],
+    canonicalTiboSignals: [directReply as any, parent as any, parent as any],
+    codexRecoveryObservations: [recovery as any, recovery as any],
+  });
+  const firstSnapshot = toPublicRadarSnapshot(firstData, "ja", { calculationNow });
+  const resentSnapshot = toPublicRadarSnapshot(resentData, "ja", { calculationNow });
+  const firstEvents = firstSnapshot.viewModel.recentHistory.filter((item) =>
+    item.key === `tibo-reset-${parentId}`,
+  );
+  const resentEvents = resentSnapshot.viewModel.recentHistory.filter((item) =>
+    item.key === `tibo-reset-${parentId}`,
+  );
+
+  assert.equal(firstEvents.length, 1);
+  assert.equal(resentEvents.length, 1);
+  assert.equal(
+    getLastGlobalResetAt(firstData, calculationNow)?.toISOString(),
+    getLastGlobalResetAt(resentData, calculationNow)?.toISOString(),
+  );
+});
+
 test("current usage-limit announcement can provide official history provenance for the matching Monitor event", () => {
   const recovery = {
     id: "41c8ec4e-f752-4e5b-b685-4af67a1e6925",
     observedAt: "2026-08-29T21:25:40.549Z",
     previousObservedAt: "2026-08-29T21:21:40.487Z",
+    previousUsedPercent: 100,
+    currentUsedPercent: 0,
+    previousResetsAt: 1_798_613_260,
+    currentResetsAt: 1_798_616_860,
     confidence: "strong" as const,
     cycleHint: "unexpected" as const,
     status: "observed" as const,
@@ -974,7 +1168,7 @@ test("current usage-limit announcement can provide official history provenance f
   assert.equal(event.details?.reasonType, "詫びリセット");
 });
 
-test("a manually corrected approximate execution linked to an official notice becomes public history without a fabricated recovery observation", () => {
+test("a manually corrected approximate execution without a monitor observation cannot create public history", () => {
   const calculationNow = new Date("2026-09-27T02:20:00.000+09:00");
   const executionAt = "2026-09-26T17:10:06.297Z";
   const notice = noticeSignal({
@@ -1017,13 +1211,15 @@ test("a manually corrected approximate execution linked to an official notice be
   const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
   const event = snapshot.viewModel.recentHistory.find((item) => item.key === estimate.resetEventKey);
 
-  assert.equal(snapshot.lastRandomResetAt, executionAt);
-  assert.ok(event, "manual estimate should be rendered as a completed history event");
-  assert.equal(event.recordKind, "confirmed_global");
-  assert.equal(event.resetAt, executionAt);
-  assert.equal(event.executionTimePrecision, "approximate");
-  assert.equal(event.details?.reasonType, "詫びリセット");
-  assert.equal(event.source, notice.tweet_url);
+  const baseline = toPublicRadarSnapshot(getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [notice as any],
+    recentTiboSignals: [notice as any],
+    canonicalTiboSignals: [notice as any],
+  }), "ja", { calculationNow });
+
+  assert.equal(snapshot.lastRandomResetAt, baseline.lastRandomResetAt);
+  assert.equal(event, undefined, "a manual estimate cannot substitute for a monitor recovery observation");
   assert.equal(data.codex_recovery_observations?.length ?? 0, 0);
 });
 
@@ -1033,6 +1229,10 @@ test("the Monitor-backed current announcement is localized from the canonical ev
     id: "41c8ec4e-f752-4e5b-b685-4af67a1e6925",
     observedAt: "2026-08-29T21:25:40.549Z",
     previousObservedAt: "2026-08-29T21:21:40.487Z",
+    previousUsedPercent: 100,
+    currentUsedPercent: 0,
+    previousResetsAt: 1_798_613_260,
+    currentResetsAt: 1_798_616_860,
     confidence: "strong" as const,
     cycleHint: "unexpected" as const,
     status: "observed" as const,
@@ -1152,7 +1352,10 @@ test("automatically generated Tibo history is localized without Japanese leakage
       text: testCase.text,
       ai_reset_type_ja: "ランダムリセット",
     });
-    const data = getLocalRadarData({ formalTiboResets: [signal] });
+    const data = getLocalRadarData({
+      formalTiboResets: [signal],
+      codexRecoveryObservations: [monitorObservationFor(signal)],
+    });
 
     for (const locale of ["en", "zh"] as const) {
       const viewModel = getRadarViewModel(data, locale, false);
@@ -1377,7 +1580,11 @@ test("formal reset updates latest reset time and regular forecast anchor", () =>
     tweet_url: "https://x.com/thsottiaux/status/2083999999999999998",
   });
   const calculationNow = new Date("2026-08-01T10:00:00.000Z");
-  const data = getLocalRadarData({ formalTiboResets: [signal], calculationNow });
+  const data = getLocalRadarData({
+    formalTiboResets: [signal],
+    codexRecoveryObservations: [monitorObservationFor(signal)],
+    calculationNow,
+  });
   const latest = getLastGlobalResetAt(data, calculationNow);
   const viewModel = getRadarViewModel(data, "ja", false, undefined, calculationNow);
 
@@ -1478,6 +1685,11 @@ test("formal reset contributes to the recent seven-day reset count", () => {
           tweet_created_at: "2026-08-10T22:00:00.000Z",
         }),
       ],
+      codexRecoveryObservations: [monitorObservationFor(resetSignal({
+        tweet_id: "unique-recent-reset",
+        tweet_url: "https://x.com/thsottiaux/status/unique-recent-reset",
+        tweet_created_at: "2026-08-10T22:00:00.000Z",
+      }))],
       calculationNow,
     }),
     calculationNow,
@@ -1489,6 +1701,9 @@ test("formal reset contributes to the recent seven-day reset count", () => {
 test("formal reset remains in history after its signal expiry", () => {
   const data = getLocalRadarData({
     formalTiboResets: [resetSignal({ expires_at: "2026-07-01T00:00:00.000Z" })],
+    codexRecoveryObservations: [monitorObservationFor(resetSignal({
+      expires_at: "2026-07-01T00:00:00.000Z",
+    }))],
   });
   const history = getRadarViewModel(data, "ja", false).recentHistory;
 
@@ -1500,7 +1715,10 @@ test("rejected dynamic reset allows the latest reset to fall back to static hist
     tweet_id: "2098000000000000000",
     tweet_created_at: "2026-09-15T09:00:00.000Z",
   });
-  const acceptedData = getLocalRadarData({ formalTiboResets: [futureReset] });
+  const acceptedData = getLocalRadarData({
+    formalTiboResets: [futureReset],
+    codexRecoveryObservations: [monitorObservationFor(futureReset)],
+  });
   const rejectedData = getLocalRadarData({
     formalTiboResets: [],
     rejectedTiboResets: [futureReset],
@@ -1649,6 +1867,168 @@ test("history records distinguish confirmed resets, banked distributions, and so
   assert.equal(getHistorySourceKind({ source_url: "https://x.com/thsottiaux" }), "profile");
   assert.equal(getHistorySourceKind({ source_url: "https://status.openai.com/incidents/123" }), "official_status");
   assert.equal(getHistorySourceKind({}), "none");
+});
+
+test("the three previously published announcement-fallback events retain their exact API history snapshot", () => {
+  const calculationNow = new Date("2026-10-23T11:00:01.004Z");
+  const data = getLocalRadarData({ calculationNow });
+  const expected = [
+    {
+      key: "tibo-reset-2111566005684289735",
+      signalAt: "2026-10-17T16:20:57Z",
+      resetAt: "2026-10-17T21:12:21Z",
+      source: "https://x.com/thsottiaux/status/2111492673890824348",
+      sourceTweetIds: ["2111492673890824348", "2111566005684289735"],
+      windowLength: { ja: "4時間51分", en: "4h 51m", zh: "4小时51分钟" },
+      noticeToExecution: { ja: "4時間51分", en: "4 hours 51 minutes", zh: "4 小时 51 分钟" },
+      title: {
+        ja: "13日目のル・リミット・リセット",
+        en: "Day 13 · Le Limit Reset",
+        zh: "第13天的 Le Limit 重置",
+      },
+      summary: {
+        ja: "「Day 13/ Le limit reset」と予告された、13日目のCodex利用上限リセット。Tibo氏が後続投稿で完了を報告しました。",
+        en: "The Day 13 Codex usage-limit reset, announced as “Day 13/ Le limit reset.” Tibo later confirmed its completion.",
+        zh: "Tibo 以“Day 13/ Le limit reset”预告了第13天的 Codex 使用额度重置，随后发文确认完成。",
+      },
+      note: {
+        ja: "Tibo氏が「Day 13/ Le limit reset」と予告した、Codexの利用上限を直接リセットする回です。利用できる枠を回復する対応で、後続の「Done」という投稿で完了が報告されました。",
+        en: "Tibo announced this Codex usage-limit reset with “Day 13/ Le limit reset.” It directly refreshed usage limits to restore available capacity, and he confirmed completion in a follow-up post saying “Done.”",
+        zh: "Tibo 以“Day 13/ Le limit reset”预告了这次 Codex 使用额度重置。本次操作直接重置使用额度，以恢复可用额度，随后他发文“Done”确认完成。",
+      },
+    },
+    {
+      key: "tibo-reset-2110618732666257557",
+      signalAt: "2026-10-15T04:55:51Z",
+      resetAt: "2026-10-15T06:28:13Z",
+      source: "https://x.com/thsottiaux/status/2110595484180214059",
+      sourceTweetIds: ["2110595484180214059", "2110618732666257557"],
+      windowLength: { ja: "1時間32分", en: "1h 32m", zh: "1小时32分钟" },
+      noticeToExecution: { ja: "1時間32分", en: "1 hour 32 minutes", zh: "1 小时 32 分钟" },
+      title: {
+        ja: "リセットボタン紛失説は大げさでしたリセット",
+        en: "The Reset Button Is Alive and Well Reset",
+        zh: "重置按钮失踪传闻言过其实重置",
+      },
+      summary: {
+        ja: "Tibo氏が「10日目はリセット」と予告し、その後、Codexの利用上限リセットの完了を報告した回です。",
+        en: "Tibo announced a reset for Day 10, then confirmed that the Codex usage-limit reset was complete.",
+        zh: "Tibo 预告第10天进行重置，随后报告 Codex 使用额度已完成重置。",
+      },
+      note: {
+        ja: "「リセットボタンをなくした」という噂は大げさだと冗談を交え、「10日目はリセット」と予告。続く投稿で「今後2時間以内」と案内し、最初の予告から約1時間32分後に「Done and dusted（無事完了）」と報告しました。Codexの利用上限を直接リセットし、利用できる枠を回復する対応でした。",
+        en: "Tibo joked that reports of his reset button being lost were greatly exaggerated and announced a reset for Day 10. A follow-up said it would land within two hours, and the completion post came about one hour and 32 minutes after the original notice. This reset directly refreshed Codex usage limits to restore available capacity.",
+        zh: "Tibo 开玩笑说，关于他弄丢重置按钮的传闻被严重夸大了，并宣布第10天将进行重置。随后他说明会在接下来两小时内完成，并在最初预告约1小时32分钟后发布了完成消息。这次操作直接重置 Codex 的使用额度，以恢复可用额度。",
+      },
+    },
+    {
+      key: "tibo-reset-2109873287853707513",
+      signalAt: "2026-10-13T01:03:59Z",
+      resetAt: "2026-10-13T05:06:06Z",
+      source: "https://x.com/thsottiaux/status/2109812360596865224",
+      sourceTweetIds: ["2109812360596865224", "2109873287853707513"],
+      windowLength: { ja: "4時間2分", en: "4h 2m", zh: "4小时2分钟" },
+      noticeToExecution: { ja: "4時間2分", en: "4 hours 2 minutes", zh: "4 小时 2 分钟" },
+      title: {
+        ja: "サイドオーダーには何を頼みますかリセット",
+        en: "What’s Your Side Order? Reset",
+        zh: "配菜想点什么？重置",
+      },
+      summary: {
+        ja: "全体リセットの事前告知に続き、Tibo氏がCodexの利用上限のリセット完了を報告しました。",
+        en: "Following an announcement of a global reset, Tibo reported that the Codex usage-limit reset was complete.",
+        zh: "在预告全局重置之后，Tibo 报告 Codex 使用额度已完成重置。",
+      },
+      note: {
+        ja: "Tibo氏がリセットをサイドメニューにたとえた問いかけを添えて、完了を報告した回です。全体リセットの事前告知から約4時間後に、完了投稿が出ました。Codexの利用上限を直接リセットし、利用枠を回復させる対応です。",
+        en: "Tibo announced that the reset was done with a playful question likening it to a side dish. The completion post came about four hours after the global-reset notice. This reset directly refreshed Codex usage limits.",
+        zh: "Tibo 用把重置比作配菜的俏皮提问，报告了重置完成。这条完成消息发布于全局重置预告约四小时之后。本次操作直接重置了 Codex 的使用额度。",
+      },
+    },
+  ] as const;
+
+  for (const event of expected) {
+    const archive = LOCAL_RESET_HISTORY.find((item) => item.id === event.key);
+    assert.ok(archive, `${event.key} should be preserved in the legacy archive`);
+    assert.equal(archive.recordKind, "confirmed_global");
+    assert.equal(archive.executionTimePrecision, "announcement_fallback");
+    assert.equal(archive.scope, "");
+    assert.equal(archive.details?.scope, "");
+    assert.deepEqual(archive.sourceTweetIds, event.sourceTweetIds);
+    assert.equal(archive.officialNoticeTweetId, event.sourceTweetIds[0]);
+    assert.equal(archive.source_url, event.source);
+  }
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const history = toPublicRadarSnapshot(data, locale, {
+      calculationNow,
+      limitHistory: false,
+    }).viewModel.recentHistory;
+    for (const event of expected) {
+      const item = history.find((candidate) => candidate.key === event.key);
+      assert.ok(item, `${locale} ${event.key} should remain public`);
+      assert.equal(item.title, event.title[locale]);
+      assert.equal(item.date, event.resetAt);
+      assert.equal(item.signalAt, event.signalAt);
+      assert.equal(item.resetAt, event.resetAt);
+      assert.equal(item.executionTimePrecision, "announcement_fallback");
+      assert.equal(item.source, event.source);
+      assert.equal(item.sourceKind, "direct_post");
+      assert.equal(item.windowLength, event.windowLength[locale]);
+      assert.equal(item.details?.cycleType, locale === "ja" ? "ランダムリセット" : locale === "en" ? "Random reset" : "随机重置");
+      assert.equal(item.details?.reasonType, locale === "ja" ? "ご祝儀リセット" : locale === "en" ? "Celebration reset" : "庆祝重置");
+      assert.equal(item.details?.resetMethod, locale === "ja" ? "強制リセット" : locale === "en" ? "Hard Reset" : "强制重置");
+      assert.equal(item.details?.scope, "");
+      assert.equal(item.details?.noticeToExecution, event.noticeToExecution[locale]);
+      assert.equal(item.details?.note, event.note[locale]);
+      assert.equal(item.summary, event.summary[locale]);
+    }
+  }
+});
+
+test("future archived completions do not displace earlier history or latest-window state", () => {
+  const calculationNow = new Date("2026-10-16T00:00:00.000Z");
+  const data = getLocalRadarData({ calculationNow });
+  const viewModel = getRadarViewModel(data, "ja", true, undefined, calculationNow);
+  const visibleKeys = new Set(viewModel.recentHistory.map((item) => item.key));
+
+  assert.ok(visibleKeys.has("tibo-reset-2109873287853707513"));
+  assert.ok(visibleKeys.has("tibo-reset-2110618732666257557"));
+  assert.equal(visibleKeys.has("tibo-reset-2111566005684289735"), false);
+  assert.equal(viewModel.latestWindow.closedAt, "2026-10-15T06:28:13Z");
+});
+
+test("legacy archive display names still resolve by the canonical event key", () => {
+  const calculationNow = new Date("2026-10-23T11:00:01.004Z");
+  const key = "tibo-reset-2111566005684289735";
+  const data = getLocalRadarData({
+    calculationNow,
+    resetDisplayNames: [{
+      event_key: key,
+      source_tweet_id: null,
+      manual_name_ja: "Canonical key override JA",
+      manual_name_en: "Canonical key override EN",
+      manual_name_zh: "Canonical key override ZH",
+      ai_name_ja: null,
+      ai_confidence: null,
+      ai_evidence: null,
+      ai_reason: null,
+      ai_model: null,
+      ai_prompt_version: null,
+      ai_input_mode: null,
+      ai_status: null,
+      ai_flags: null,
+      ai_generated_at: null,
+      input_hash: null,
+    }],
+  });
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const item = toPublicRadarSnapshot(data, locale, { calculationNow }).viewModel.recentHistory
+      .find((candidate) => candidate.key === key);
+    assert.ok(item);
+    assert.equal(item.title, `Canonical key override ${locale.toUpperCase()}`);
+  }
 });
 
 test("localized active-window labels do not leak the Japanese no-notice label", () => {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 import {
   getActiveOfficialNotice,
   getLocalProbabilityCalculation,
@@ -119,6 +120,7 @@ test("a canonical random/global execution still consumes the same official notic
     calculationNow: CALCULATION_AT,
     activeTiboSignals: [unresolvedNotice()],
     formalTiboResets: [resetExecuted()],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([resetExecuted()]),
     regularResetEvents: [regularReset()],
   });
 
@@ -127,6 +129,74 @@ test("a canonical random/global execution still consumes the same official notic
     getLastRandomRecoveryResetAt(data, CALCULATION_AT, []),
     REGULAR_AT,
   );
+});
+
+test("an unobserved Tibo completion does not consume an active notice or change its probability override", () => {
+  const now = new Date("2026-10-23T22:05:00.000Z");
+  const notice = {
+    tweet_id: "2113490000000000001",
+    text: "I will reset all paid users between 9pm and 11pm UTC.",
+    tweet_url: "https://x.com/thsottiaux/status/2113490000000000001",
+    signal_type: "official_notice" as const,
+    confidence: 0.99,
+    tweet_created_at: "2026-10-23T15:00:00.000Z",
+    expires_at: "2026-10-24T01:00:00.000Z",
+    verification_status: "confirmed" as const,
+    classification_source: "manual" as const,
+    temporal_resolution_status: "resolved" as const,
+    ai_temporal_precision: "range" as const,
+    ai_temporal_timezone: "UTC",
+    expected_start_at: "2026-10-23T21:00:00.000Z",
+    expected_end_at: "2026-10-23T23:00:00.000Z",
+  };
+  const unobservedCompletion = {
+    tweet_id: "2113492187770175603",
+    text: "Usage limits have been reset.",
+    tweet_url: "https://x.com/thsottiaux/status/2113492187770175603",
+    signal_type: "reset_executed" as const,
+    confidence: 0.95,
+    tweet_created_at: "2026-10-23T22:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+    classification_source: "gemini" as const,
+    is_reply: false,
+  };
+  const nextCycleTeaser = {
+    tweet_id: "2113490000000000002",
+    text: "I might press the reset button again tomorrow.",
+    tweet_url: "https://x.com/thsottiaux/status/2113490000000000002",
+    signal_type: "teaser" as const,
+    confidence: 0.95,
+    teaser_strength: "strong" as const,
+    tweet_created_at: "2026-10-23T21:30:00.000Z",
+    expires_at: "2026-10-24T01:00:00.000Z",
+    verification_status: "auto_unverified" as const,
+  };
+  const withoutCompletion = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [notice, nextCycleTeaser],
+  });
+  const withUnobservedCompletion = getLocalRadarData({
+    calculationNow: now,
+    activeTiboSignals: [notice, nextCycleTeaser],
+    formalTiboResets: [unobservedCompletion],
+  });
+
+  assert.equal(getActiveOfficialNotice(withoutCompletion, null, now, [])?.id, notice.tweet_id);
+  assert.equal(getActiveOfficialNotice(withUnobservedCompletion, null, now, [])?.id, notice.tweet_id);
+  assert.equal(
+    getLocalProbabilityCalculation(withUnobservedCompletion, { now }).probability24h,
+    getLocalProbabilityCalculation(withoutCompletion, { now }).probability24h,
+  );
+  assert.equal(
+    getLocalProbabilityCalculation(withUnobservedCompletion, { now }).probability48h,
+    getLocalProbabilityCalculation(withoutCompletion, { now }).probability48h,
+  );
+  assert.equal(
+    getLastRandomRecoveryResetAt(withUnobservedCompletion, now),
+    getLastRandomRecoveryResetAt(withoutCompletion, now),
+  );
+  assert.equal(getLocalProbabilityCalculation(withoutCompletion, { now }).inputSnapshot.activeTeaserCount, 1);
+  assert.equal(getLocalProbabilityCalculation(withUnobservedCompletion, { now }).inputSnapshot.activeTeaserCount, 1);
 });
 
 test("regular-only boundary does not consume a deadline notice during grace", () => {
@@ -147,6 +217,7 @@ test("a random/global execution consumes a deadline notice during grace", () => 
     calculationNow: CALCULATION_AT,
     activeTiboSignals: [deadlineNotice()],
     formalTiboResets: [resetExecuted()],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([resetExecuted()]),
     regularResetEvents: [regularReset()],
   });
 

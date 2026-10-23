@@ -34,6 +34,7 @@ import {
 } from "../lib/radar/tiboHistory";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import type { ActiveTiboSignal, PublicRadarSnapshot, RadarData } from "../lib/radar/types";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 
 export type TiboScenarioExpected = {
   signalType?: ClassificationSignalType;
@@ -298,6 +299,7 @@ export function runTiboScenario(scenario: TiboScenario, now = getScenarioNow(sce
     activeTiboSignals: selected.signalType === "irrelevant" ? [] : [activeSignal],
     recentTiboSignals: recentSignals,
     formalTiboResets: formalAccepted ? [formalSignal] : [],
+    codexRecoveryObservations: formalAccepted ? monitorRecoveryObservationsFor([formalSignal]) : [],
     rejectedTiboResets: scenario.expected.shouldBeRejected
       ? [{ tweet_id: activeSignal.tweet_id, tweet_url: activeSignal.tweet_url, tweet_created_at: activeSignal.tweet_created_at }]
       : [],

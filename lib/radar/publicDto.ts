@@ -548,6 +548,10 @@ export function toPublicRadarSnapshot(
   );
   const consumedRecoveryObservationIds = getNoticeBackedRecoveryObservationIds(
     internal.reset_execution_estimates,
+    [
+      ...(internal.codex_recovery_observations ?? []),
+      ...(internal.codex_usage_recovery ? [internal.codex_usage_recovery] : []),
+    ],
   );
   const calculatedResetTeaserStatus = aggregateResetTeaserStatus(
     getTiboReadSideSignals(

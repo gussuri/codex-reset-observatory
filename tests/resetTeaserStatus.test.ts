@@ -12,6 +12,7 @@ import {
   interpretTiboSignalForUi,
 } from "../lib/radar/teaserStrength";
 import type { ActiveTiboSignal } from "../lib/radar/types";
+import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 
@@ -137,6 +138,7 @@ test("clears pre-reset strengths and keeps post-reset strengths", () => {
       signal("strong-before-reset", "2026-08-03T11:00:00.000Z", "strong"),
     ],
     formalTiboResets: [formalReset("2026-08-03T12:00:00.000Z")],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([formalReset("2026-08-03T12:00:00.000Z")]),
   });
   const afterReset = getLocalRadarData({
     calculationNow: NOW,
@@ -144,6 +146,7 @@ test("clears pre-reset strengths and keeps post-reset strengths", () => {
       signal("strong-after-reset", "2026-08-03T13:00:00.000Z", "strong"),
     ],
     formalTiboResets: [formalReset("2026-08-03T12:00:00.000Z")],
+    codexRecoveryObservations: monitorRecoveryObservationsFor([formalReset("2026-08-03T12:00:00.000Z")]),
   });
 
   assert.equal(toPublicRadarSnapshot(beforeReset, "ja", { calculationNow: NOW }).resetTeaserStatus, "none");
@@ -182,6 +185,7 @@ test("a later random reset consumes a teaser even after a regular boundary", () 
       calculationNow: NOW,
       regularResetEvents: [regular],
       formalTiboResets: [formalReset("2026-08-03T13:00:00.000Z")],
+      codexRecoveryObservations: monitorRecoveryObservationsFor([formalReset("2026-08-03T13:00:00.000Z")]),
       recentTiboSignals: [
         signal("before-both-resets", "2026-08-03T11:00:00.000Z", "strong", {
           text: "A reset hint before both boundaries.",

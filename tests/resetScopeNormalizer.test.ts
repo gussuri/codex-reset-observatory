@@ -120,7 +120,8 @@ test("static canonical history preserves separate regular and random scope taxon
     (item) => item.id === "local-codex-regular-reset-2026-08-08",
   );
   const randomScope = LOCAL_RESET_HISTORY.find(
-    (item) => item.details?.cycleType === "ランダムリセット" && item.recordKind === "confirmed_global",
+    (item) => item.details?.cycleType === "ランダムリセット" &&
+      item.recordKind === "confirmed_global" && item.scope === "全有料プラン",
   );
   const bankedScope = LOCAL_RESET_HISTORY.find(
     (item) => item.id === "personal-reset-credit-2026-06-11",
