@@ -395,6 +395,128 @@ test("reuses same-input successful metadata across prompt versions to protect co
   }
 });
 
+test("preserves successful metadata after a new-evidence failure and retries only after evidence changes", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  const oldEvidence = { ...monitorEvidence, fingerprint: "a".repeat(64) };
+  const failedEvidence = { ...monitorEvidence, fingerprint: "b".repeat(64) };
+  const nextEvidence = { ...monitorEvidence, fingerprint: "c".repeat(64) };
+  const oldInputHash = hashResetEventMetadataInput({
+    completedAt,
+    sourceContext,
+    fallbackReasonType: "詫びリセット",
+    fallbackScope: "全有料プラン",
+    evidenceFingerprint: oldEvidence.fingerprint,
+    model: "test-model",
+  });
+  const textFields = {
+    event_reason_type: "詫びリセット",
+    event_scope: "全有料プラン",
+    event_summary_ja: "以前の日本語要約",
+    event_summary_en: "Previous English summary",
+    event_summary_zh: "之前的中文摘要",
+    event_note_ja: "以前の日本語補足。",
+    event_note_en: "Previous English note.",
+    event_note_zh: "之前的中文补充。",
+  };
+  const existing = record({
+    manual_name_ja: "手動名を保持",
+    manual_name_en: "Keep this manual name",
+    manual_name_zh: "保留手动名称",
+    ai_name_ja: "以前のAI名",
+    ai_name_en: "Previous AI name",
+    ai_name_zh: "之前的AI名称",
+    event_metadata_status: "success",
+    event_metadata_input_hash: oldInputHash,
+    event_metadata_model: "test-model",
+    event_metadata_prompt_version: "previous-prompt-version",
+    event_metadata_flags: autoCopyFlags(textFields),
+    ...textFields,
+  });
+  const mock = setupStoreFetch(existing);
+  let generatedCalls = 0;
+
+  try {
+    const failedResult = await ensureMetadata(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      monitorEvidence: failedEvidence,
+      generatedAt: "2026-10-24T12:01:00.000Z",
+      generate: async () => {
+        generatedCalls += 1;
+        return {
+          ...generated,
+          reasonType: null,
+          scope: null,
+          summaryJa: null,
+          summaryEn: null,
+          summaryZh: null,
+          noteJa: null,
+          noteEn: null,
+          noteZh: null,
+          status: "api_error" as const,
+          flags: ["upstream_unavailable"],
+          model: "test-model",
+          latencyMs: 4,
+          httpStatus: 503,
+        };
+      },
+    });
+
+    assert.equal(failedResult.status, "generation_failed_preserved");
+    assert.equal(generatedCalls, 1);
+    const afterFailure = mock.storedRow();
+    assert.ok(afterFailure);
+    assert.equal(afterFailure.event_metadata_status, "success");
+    assert.equal(afterFailure.event_metadata_input_hash, oldInputHash);
+    assert.deepEqual(
+      Object.fromEntries(Object.keys(textFields).map((field) => [field, afterFailure[field as keyof ResetDisplayNameRecord]])),
+      textFields,
+    );
+    assert.equal(afterFailure.manual_name_ja, "手動名を保持");
+    assert.equal(afterFailure.manual_name_en, "Keep this manual name");
+    assert.equal(afterFailure.manual_name_zh, "保留手动名称");
+    assert.equal(mock.writes.length, 1);
+    assert.deepEqual(Object.keys(mock.writes[0]!).sort(), ["event_metadata_flags", "updated_at"]);
+
+    const repeatedFailure = await ensureMetadata(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      monitorEvidence: failedEvidence,
+      generate: async () => {
+        generatedCalls += 1;
+        return generated;
+      },
+    });
+    assert.equal(repeatedFailure.status, "previous_failure_preserved");
+    assert.equal(generatedCalls, 1, "the same failed evidence and generation contract are not retried");
+    assert.equal(mock.writes.length, 1);
+
+    const changedEvidenceResult = await ensureMetadata(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      monitorEvidence: nextEvidence,
+      generate: async () => {
+        generatedCalls += 1;
+        return generated;
+      },
+    });
+    assert.equal(changedEvidenceResult.status, "success");
+    assert.equal(generatedCalls, 2, "a different evidence fingerprint is eligible for a fresh generation attempt");
+  } finally {
+    mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 test("stores a failure audit without blocking callers or losing the event key", async () => {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -776,7 +898,8 @@ test("keeps prior successful metadata when regeneration fails", async () => {
 
     assert.equal(result.status, "generation_failed_preserved");
     assert.equal(result.wrote, false);
-    assert.equal(mock.writes.length, 0);
+    assert.equal(mock.writes.length, 1, "the failed attempt is recorded without replacing successful metadata");
+    assert.deepEqual(Object.keys(mock.writes[0]!).sort(), ["event_metadata_flags", "updated_at"]);
     assert.equal(mock.storedRow()?.event_summary_ja, "Previously generated summary");
   } finally {
     mock.restore();

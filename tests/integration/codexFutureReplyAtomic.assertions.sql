@@ -460,7 +460,9 @@ begin
   v_result := public.reconcile_codex_future_reply_notice(v_reply, v_proof);
   perform pg_temp.assert_true(v_result ->> 'status' = 'no_candidate', 'manual recovery observation exclusion is applied');
 
-  -- Positive reverse path verifies exact-window standalone estimate adoption.
+  -- Positive reverse path links only provenance to the exact-window
+  -- standalone estimate. Its canonical usage-reset identity and timing stay
+  -- unchanged so downstream history uses the persisted event key.
   perform pg_temp.clear_fixture();
   perform pg_temp.seed_state(v_prev, v_previous_resets);
   perform pg_temp.seed_notice(v_reply, v_parent);
@@ -470,36 +472,41 @@ begin
   perform pg_temp.seed_estimate(v_id1, v_prev, v_obs, 'usage-reset-' || v_id1);
   v_result := public.reconcile_codex_future_reply_notice(v_reply, v_proof);
   perform pg_temp.assert_true(v_result ->> 'status' = 'linked', 'one authoritative observation with exact estimate links: ' || v_result::text);
-  perform pg_temp.assert_true(v_result ->> 'reset_event_key' = 'tibo-reset-' || v_parent, 'monitor-first linking uses the verified parent event key');
+  perform pg_temp.assert_true(v_result ->> 'reset_event_key' = 'usage-reset-' || v_id1, 'monitor-first linking returns the existing usage-reset event key');
   perform pg_temp.assert_true(
-    (select reset_event_key = 'tibo-reset-' || v_parent and tibo_primary_tweet_id = v_reply
+    (select reset_event_key = 'usage-reset-' || v_id1 and tibo_primary_tweet_id = v_reply
+             and recovery_observation_id = v_id1
+             and execution_time_precision = 'approximate'
+             and display_execution_at = v_obs
+             and execution_window_start_at = v_prev
+             and execution_window_end_at = v_obs
        from public.reset_execution_estimates where recovery_observation_id = v_id1),
-    'monitor-first linking rekeys the persisted estimate to the verified parent'
+    'monitor-first linking preserves estimate identity and timing while adding Tibo provenance'
+  );
+  perform pg_temp.assert_true(
+    (select reset_event_key = 'usage-reset-' || v_id1 and reply_tweet_id = v_reply
+       from public.codex_usage_future_reply_claims where event_key = v_event),
+    'monitor-first claim stores the unchanged estimate event key'
   );
 
-  -- Rows linked by the earlier implementation may already carry a reply-key.
-  -- Replaying the same verified notice repairs both rows and requests cache
-  -- invalidation without producing a second claim.
-  update public.reset_execution_estimates
-     set reset_event_key = 'tibo-reset-' || v_reply
-   where recovery_observation_id = v_id1;
-  update public.codex_usage_future_reply_claims
-     set reset_event_key = 'tibo-reset-' || v_reply
-   where event_key = v_event;
+  -- Replaying the same verified notice keeps the original identity and
+  -- requests cache invalidation without producing a second claim.
   v_result := public.reconcile_codex_future_reply_notice(v_reply, v_proof);
   perform pg_temp.assert_true(v_result ->> 'status' = 'already_linked', 'replaying a linked verified notice remains idempotent');
-  perform pg_temp.assert_true(v_result ->> 'needs_cache_invalidation' = 'true', 'repairing an old event key requests cache invalidation');
-  perform pg_temp.assert_true(v_result ->> 'reset_event_key' = 'tibo-reset-' || v_parent, 'replayed claim returns the verified parent event key');
+  perform pg_temp.assert_true(v_result ->> 'needs_cache_invalidation' = 'true', 'linked claim requests pending cache invalidation');
+  perform pg_temp.assert_true(v_result ->> 'reset_event_key' = 'usage-reset-' || v_id1, 'replayed claim returns the original usage-reset event key');
   perform pg_temp.assert_true(
-    (select reset_event_key = 'tibo-reset-' || v_parent
+    (select reset_event_key = 'usage-reset-' || v_id1
        from public.reset_execution_estimates where recovery_observation_id = v_id1),
-    'replay repairs the estimate event key'
+    'replay preserves the estimate event key'
   );
   perform pg_temp.assert_true(
-    (select reset_event_key = 'tibo-reset-' || v_parent
+    (select reset_event_key = 'usage-reset-' || v_id1
        from public.codex_usage_future_reply_claims where event_key = v_event),
-    'replay repairs the persisted claim event key'
+    'replay preserves the persisted claim event key'
   );
+  select count(*) into v_claim_count from public.codex_usage_future_reply_claims where event_key = v_event;
+  perform pg_temp.assert_true(v_claim_count = 1, 'replay does not create a duplicate claim');
 
   raise notice 'codex future reply PostgreSQL assertions passed';
 end;

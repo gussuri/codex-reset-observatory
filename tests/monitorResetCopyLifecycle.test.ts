@@ -21,6 +21,10 @@ const ROOT_ID = "2115000000000000202";
 const PARENT_ID = "2115000000000000203";
 const REPLY_ID = "2115000000000000204";
 const REVISION = "a".repeat(64);
+const DAY17_PARENT_ID = "2113162277688070445";
+const DAY18_REPLY_ID = "2113162413008884099";
+const DAY17_PARENT_TEXT = "Day 17/ Bet you thought we forgot, but no, it’s reset day today.";
+const DAY18_REPLY_TEXT = "Lands tomorrow before 10am PST.";
 
 function observation(status: "observed" | "confirmed" = "confirmed"): CodexRecoveryObservation {
   return {
@@ -168,6 +172,55 @@ function validReplyRow(): MonitorResetCopySourceRow {
   });
 }
 
+function verifiedDay17FutureReplyRow(overrides: Partial<MonitorResetCopySourceRow> = {}): MonitorResetCopySourceRow {
+  return signalRow(
+    DAY18_REPLY_ID,
+    DAY18_REPLY_TEXT,
+    "official_notice",
+    "2026-10-22T06:55:54.000Z",
+    {
+      tweet_url: `https://x.com/thsottiaux/status/${DAY18_REPLY_ID}`,
+      confidence: 0.98,
+      verification_status: "auto_unverified",
+      classification_source: "gemini",
+      ai_signal_type: "official_notice",
+      ai_confidence: 0.98,
+      ai_classification_status: "success",
+      ai_temporal_direction: "future",
+      ai_notice_timing_status: "known",
+      ai_evidence_quote: DAY18_REPLY_TEXT,
+      ai_temporal_expression: "tomorrow before 10am PST",
+      ai_contextual_reset_assessment: "same_global_reset",
+      ai_contextual_reset_tweet_id: DAY17_PARENT_ID,
+      is_reply: true,
+      is_quote: false,
+      reply_to_handles: ["@thsottiaux"],
+      reply_context_text: DAY17_PARENT_TEXT,
+      source_context_snapshot: {
+        parent: {
+          tweetId: DAY17_PARENT_ID,
+          tweetUrl: `https://x.com/thsottiaux/status/${DAY17_PARENT_ID}`,
+          authorHandle: "@thsottiaux",
+          text: DAY17_PARENT_TEXT,
+        },
+      },
+      source_context_revision_hashes: [REVISION],
+      source_context_classified_revision_hashes: [REVISION],
+      source_context_generation: 1,
+      temporal_expression: "tomorrow before 10am PST",
+      temporal_kind: "deadline",
+      temporal_precision: "range",
+      temporal_timezone: "PST",
+      temporal_confidence: 0.95,
+      expected_start_at: "2026-10-22T15:00:00.000Z",
+      expected_end_at: "2026-10-22T18:00:00.000Z",
+      temporal_resolution_status: "resolved",
+      temporal_resolution_version: "tibo-temporal-v9-deadline-start-estimate",
+      ...overrides,
+    },
+  );
+}
+
 const sourceRows = [
   signalRow(
     NOTICE_ID,
@@ -258,6 +311,99 @@ test("Day18-style observed monitor recovery is eligible, while invalid observati
   assert.ok(context);
   assert.equal(context.sourceContext.includes("Changed after the reply proof was issued."), false);
   assert.equal(context.sourceContext.includes("The reset is finished."), false);
+});
+
+test("verified Day18 reply context includes and fingerprints only its validated Day17 parent", () => {
+  const observedAt = "2026-10-22T17:59:00.000Z";
+  const previousAt = "2026-10-22T17:54:00.000Z";
+  const futureObservation: CodexRecoveryObservation = {
+    ...observation(),
+    id: "recovery-day18-reply",
+    observedAt,
+    previousObservedAt: previousAt,
+    confirmedAt: "2026-10-22T18:00:00.000Z",
+    createdAt: observedAt,
+    updatedAt: "2026-10-22T18:00:00.000Z",
+    matchedTiboTweetId: DAY18_REPLY_ID,
+  };
+  const futureEstimate = estimate({
+    resetEventKey: `tibo-reset-${DAY17_PARENT_ID}`,
+    displayExecutionAt: observedAt,
+    executionWindowStartAt: previousAt,
+    executionWindowEndAt: observedAt,
+    recoveryObservationId: futureObservation.id,
+    recoveryPreviousObservedAt: previousAt,
+    recoveryObservedAt: observedAt,
+    tiboAnnouncedAt: "2026-10-22T06:55:54.000Z",
+    tiboPrimaryTweetId: DAY18_REPLY_ID,
+    tiboSourceTweetIds: [DAY18_REPLY_ID],
+    officialNoticeTweetId: DAY18_REPLY_ID,
+    officialNoticeAt: "2026-10-22T06:55:54.000Z",
+  });
+  const reply = verifiedDay17FutureReplyRow();
+  const context = buildMonitorConfirmedResetCopyContext({
+    estimate: futureEstimate,
+    recoveryObservation: futureObservation,
+    sourceRows: [reply],
+    now: new Date("2026-10-22T18:01:00.000Z"),
+  });
+
+  assert.ok(context);
+  assert.match(context.sourceContext, /\[Tibo verified reply notice \| tweet_id=2113162413008884099\]/);
+  assert.match(context.sourceContext, /\[Tibo verified reply parent \| tweet_id=2113162277688070445 author=@thsottiaux\]/);
+  assert.ok(context.sourceContext.includes(DAY17_PARENT_TEXT));
+  assert.ok(context.sourceContext.includes(DAY18_REPLY_TEXT));
+
+  const changedParentText = `${DAY17_PARENT_TEXT} Codex usage limits reset today.`;
+  const changedParent = verifiedDay17FutureReplyRow({
+    reply_context_text: changedParentText,
+    source_context_snapshot: {
+      parent: {
+        tweetId: DAY17_PARENT_ID,
+        tweetUrl: `https://x.com/thsottiaux/status/${DAY17_PARENT_ID}`,
+        authorHandle: "@thsottiaux",
+        text: changedParentText,
+      },
+    },
+  });
+  const changedParentContext = buildMonitorConfirmedResetCopyContext({
+    estimate: futureEstimate,
+    recoveryObservation: futureObservation,
+    sourceRows: [changedParent],
+    now: new Date("2026-10-22T18:01:00.000Z"),
+  });
+  const changedRevision = verifiedDay17FutureReplyRow({
+    source_context_revision_hashes: ["b".repeat(64)],
+    source_context_classified_revision_hashes: ["b".repeat(64)],
+  });
+  const changedRevisionContext = buildMonitorConfirmedResetCopyContext({
+    estimate: futureEstimate,
+    recoveryObservation: futureObservation,
+    sourceRows: [changedRevision],
+    now: new Date("2026-10-22T18:01:00.000Z"),
+  });
+  assert.ok(changedParentContext);
+  assert.ok(changedRevisionContext);
+  assert.notEqual(context.evidence.fingerprint, changedParentContext.evidence.fingerprint);
+  assert.notEqual(context.evidence.fingerprint, changedRevisionContext.evidence.fingerprint);
+
+  const incompleteProof = verifiedDay17FutureReplyRow({
+    tweet_id: "2113162413008884101",
+    tweet_url: "https://x.com/thsottiaux/status/2113162413008884101",
+    reply_context_text: "UNTRUSTED unrelated parent text about a reset.",
+    source_context_snapshot: null,
+    ai_contextual_reset_tweet_id: "2113162277688070446",
+  });
+  const incompleteText = "UNTRUSTED unrelated parent text about a reset.";
+  const incompleteContext = buildMonitorConfirmedResetCopyContext({
+    estimate: { ...futureEstimate, tiboSourceTweetIds: [DAY18_REPLY_ID, incompleteProof.tweet_id] },
+    recoveryObservation: futureObservation,
+    sourceRows: [reply, incompleteProof],
+    now: new Date("2026-10-22T18:01:00.000Z"),
+  });
+  assert.ok(incompleteContext);
+  assert.equal(incompleteContext.sourceContext.includes(incompleteText), false);
+  assert.equal(incompleteContext.sourceContext.includes(incompleteProof.tweet_id), false);
 });
 
 test("estimate without a recovery identity cannot authorize final copy", () => {

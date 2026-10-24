@@ -55,6 +55,7 @@ type UsableSource = {
   row: MonitorResetCopySourceRow;
   role: SourceRole;
   replyProof: TiboFormalReplyAdmissionProof | null;
+  replyParent: { tweetId: string; authorHandle: string; text: string } | null;
 };
 
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
@@ -133,6 +134,20 @@ function getRowReplyProof(row: MonitorResetCopySourceRow) {
   );
 }
 
+function getVerifiedReplyParent(row: MonitorResetCopySourceRow) {
+  const snapshot = row.source_context_snapshot;
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) return null;
+  const parent = (snapshot as Record<string, unknown>).parent;
+  if (!parent || typeof parent !== "object" || Array.isArray(parent)) return null;
+  const value = parent as Record<string, unknown>;
+  if (
+    typeof value.tweetId !== "string" ||
+    typeof value.authorHandle !== "string" ||
+    typeof value.text !== "string"
+  ) return null;
+  return { tweetId: value.tweetId, authorHandle: value.authorHandle, text: value.text };
+}
+
 function isSourceRowForCanonicalEvent(
   row: MonitorResetCopySourceRow,
   canonicalSourceTweetIds: ReadonlySet<string>,
@@ -160,7 +175,9 @@ function classifySourceRow(
       row.signal_type === "official_notice" &&
       isVerifiedTiboFutureReplyNoticeInExecutionWindow(row, executionWindow)
     ) {
-      return { row, role: "verified reply notice", replyProof: null };
+      const replyParent = getVerifiedReplyParent(row);
+      if (!replyParent) return null;
+      return { row, role: "verified reply notice", replyProof: null, replyParent };
     }
     if (row.signal_type !== "reset_executed") return null;
     const replyProof = getRowReplyProof(row);
@@ -170,15 +187,15 @@ function classifySourceRow(
       eventKey === `tibo-reset-${replyProof.contextualResetTweetId}`
     );
     if (!proofIsSameEvent) return null;
-    return { row, role: "verified reply completion", replyProof };
+    return { row, role: "verified reply completion", replyProof, replyParent: null };
   }
 
   if (row.is_quote === true) return null;
   if (row.signal_type === "official_notice" || row.signal_type === "teaser") {
-    return { row, role: "notice", replyProof: null };
+    return { row, role: "notice", replyProof: null, replyParent: null };
   }
   if (row.signal_type === "reset_executed") {
-    return { row, role: "completion", replyProof: null };
+    return { row, role: "completion", replyProof: null, replyParent: null };
   }
   return null;
 }
@@ -201,7 +218,7 @@ function normalizeHashList(value: string[] | null | undefined) {
 }
 
 function sourceRevision(source: UsableSource) {
-  const { row, replyProof } = source;
+  const { row, replyProof, replyParent } = source;
   return {
     tweetId: row.tweet_id.trim(),
     role: source.role,
@@ -214,6 +231,16 @@ function sourceRevision(source: UsableSource) {
     sourceContextRevisionHashes: normalizeHashList(row.source_context_revision_hashes),
     sourceContextClassifiedRevisionHashes: normalizeHashList(row.source_context_classified_revision_hashes),
     sourceContextGeneration: row.source_context_generation ?? null,
+    verifiedReplyParent: replyParent
+      ? {
+          tweetId: replyParent.tweetId,
+          authorHandle: replyParent.authorHandle,
+          textHash: textHash(replyParent.text),
+          sourceContextRevisionHashes: normalizeHashList(row.source_context_revision_hashes),
+          classifiedRevisionHashes: normalizeHashList(row.source_context_classified_revision_hashes),
+          sourceContextGeneration: row.source_context_generation ?? null,
+        }
+      : null,
     replyProof: replyProof
       ? {
           targetTweetId: replyProof.targetTweetId,
@@ -284,6 +311,13 @@ function buildSourceContext(
       source.row.text.trim(),
       `[End Tibo source ${index + 1}]`,
     );
+    if (source.replyParent) {
+      lines.push(
+        `[Tibo verified reply parent | tweet_id=${source.replyParent.tweetId} author=${source.replyParent.authorHandle}]`,
+        source.replyParent.text.trim(),
+        `[End Tibo verified reply parent ${index + 1}]`,
+      );
+    }
   }
   const context = lines.join("\n");
   return context.length <= 25_000 ? context : null;

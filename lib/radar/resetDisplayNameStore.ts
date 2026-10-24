@@ -25,6 +25,10 @@ import {
   type MonitorResetCopyEvidence,
 } from "./monitorResetCopyLifecycle";
 import {
+  hasResetCopyGenerationFailure,
+  recordResetCopyGenerationFailure,
+} from "./resetCopyGenerationFailures";
+import {
   getResetDisplayNameSourceTweetId,
   isSafeStoredAiResetName,
 } from "./resetDisplayNames";
@@ -684,6 +688,26 @@ async function writeResetDisplayNameCompareAndSet(
   return Boolean(result.data);
 }
 
+async function writeResetDisplayNameFailureMarker(
+  supabase: SupabaseClient,
+  existing: ResetDisplayNameRecord,
+  inputHash: string,
+  updatedAt: string,
+) {
+  let query = supabase.from("reset_display_names")
+    .update({
+      event_metadata_flags: recordResetCopyGenerationFailure(existing.event_metadata_flags, inputHash),
+      updated_at: updatedAt,
+    })
+    .eq("event_key", existing.event_key);
+  query = existing.updated_at
+    ? query.eq("updated_at", existing.updated_at)
+    : query.is("updated_at", null);
+  const { data, error } = await query.select("event_key").maybeSingle();
+  if (error) throw new Error("Reset display-name failure marker write failed");
+  return Boolean(data);
+}
+
 export async function ensureResetDisplayNameForEvent(
   item: WindowEventLike,
   options: {
@@ -792,6 +816,18 @@ export async function ensureResetDisplayNameForEvent(
       skipped: true,
     };
   }
+  if (
+    existing?.ai_status === "accepted" &&
+    hasResetCopyGenerationFailure(existing.event_metadata_flags, inputHash)
+  ) {
+    return {
+      eventKey,
+      status: "previous_failure_preserved",
+      displayName: existing.ai_name_ja,
+      inputMode,
+      skipped: true,
+    };
+  }
 
   let result: RandomResetNameGenerationResult;
   try {
@@ -830,9 +866,19 @@ export async function ensureResetDisplayNameForEvent(
 
   // A failed regeneration never hides an already accepted name.
   if (freshExisting?.ai_status === "accepted" && acceptance.status !== "accepted") {
+    try {
+      await writeResetDisplayNameFailureMarker(
+        supabase,
+        freshExisting,
+        inputHash,
+        new Date().toISOString(),
+      );
+    } catch {
+      // Keep the accepted name intact if attempt bookkeeping is unavailable.
+    }
     return {
       eventKey,
-      status: acceptance.status,
+      status: "generation_failed_preserved",
       displayName: freshExisting.ai_name_ja,
       inputMode,
       skipped: true,

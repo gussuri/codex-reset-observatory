@@ -46,6 +46,7 @@ import {
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
 import { generateMonitorResetCopyFromPersistedEvent } from "@/lib/radar/monitorResetCopyGeneration";
+import { claimTiboFormalAdoption } from "@/lib/radar/tiboFormalAdoptionStore";
 import { PERSISTENT_OFFICIAL_NOTICE_IDS } from "@/lib/radar/officialNoticePolicy";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 import { buildBankedGrantObservationWrite } from "@/lib/codexUsageBankedGrant";
@@ -919,6 +920,30 @@ async function processCodexUsageSnapshot(
 
   if (executionEstimate && persistedObservationId) {
     try {
+      if (matchingTibo.tweetId && matchingTibo.needsPromotion) {
+        const resetEventKey = executionEstimate.reset_event_key;
+        const sourceTweetIds = executionEstimate.tibo_source_tweet_ids ?? [matchingTibo.tweetId];
+        const primaryTweetId = executionEstimate.tibo_primary_tweet_id ?? matchingTibo.tweetId;
+        const adoption = await claimTiboFormalAdoption(client, {
+          logicalPostId: primaryTweetId,
+          logicalPostTweetIds: [primaryTweetId],
+          resetEventKey,
+          representativeTweetId: primaryTweetId,
+          sourceTweetIds,
+          claimSource: "new_adoption",
+          identitySource: "none",
+          adoptedAt: receivedAt,
+          claimedAt: receivedAt,
+        });
+        if (
+          adoption.status === "error" ||
+          adoption.status === "conflict" ||
+          adoption.record?.resetEventKey !== resetEventKey
+        ) {
+          throw new Error("Formal adoption identity was not confirmed");
+        }
+      }
+
       const generation = await generateMonitorResetCopyFromPersistedEvent(client, {
         recoveryObservationId: persistedObservationId,
       });

@@ -3124,7 +3124,11 @@ test("quoted BANKED distribution context is not promoted to a public grant assoc
   }
 });
 
-test("atomic promotion defers copy until the persisted monitor rows can be read", async () => {
+for (const formalAdoption of [
+  { status: "claimed_new" as const, resetEventKey: "canonical", expectedEstimateRead: true },
+  { status: "conflict" as const, resetEventKey: "wrong-event-key", expectedEstimateRead: false },
+]) {
+test(`atomic promotion ${formalAdoption.status === "conflict" ? "blocks copy on identity conflict" : "claims formal identity before copy generation"}`, async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
     SUPABASE_URL: "https://example.supabase.co",
@@ -3183,6 +3187,27 @@ test("atomic promotion defers copy until the persisted monitor rows can be read"
     if (method === "GET" && url.includes("reset_execution_estimates")) {
       return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
     }
+    if (method === "POST" && url.includes("/rpc/claim_tibo_formal_adoption")) {
+      const claimedEventKey = formalAdoption.resetEventKey === "canonical"
+        ? String(body?.p_reset_event_key)
+        : formalAdoption.resetEventKey;
+      return new Response(JSON.stringify({
+        status: formalAdoption.status,
+        record: {
+          id: "adoption-rec-1",
+          logical_post_id: deferredTweetId,
+          logical_post_tweet_ids: [deferredTweetId],
+          reset_event_key: claimedEventKey,
+          representative_tweet_id: deferredTweetId,
+          source_tweet_ids: [deferredTweetId],
+          claim_source: "new_adoption",
+          adopted_at: observedAt,
+          claimed_at: observedAt,
+          created_at: observedAt,
+          updated_at: observedAt,
+        },
+      }), { status: 200 });
+    }
     return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
   };
 
@@ -3203,11 +3228,16 @@ test("atomic promotion defers copy until the persisted monitor rows can be read"
     assert.ok(plan.promotion, "Atomic write plan must include promotion");
     assert.equal((plan.promotion as { tweet_id: string }).tweet_id, deferredTweetId);
 
-    assert.equal(
-      requests.some((req) => req.url.includes("/rpc/claim_tibo_formal_adoption")),
-      false,
-      "The promotion is already part of the atomic monitor write plan",
+    const formalClaim = requests.find((req) => req.url.includes("/rpc/claim_tibo_formal_adoption"));
+    assert.ok(formalClaim, "A promoted reset must claim its formal identity after the atomic monitor write");
+    assert.equal(formalClaim!.body?.p_reset_event_key, `tibo-reset-${deferredTweetId}`);
+    assert.equal(formalClaim!.body?.p_claim_source, "new_adoption");
+    const atomicWriteIndex = requests.findIndex((req) => req.url.includes(ATOMIC_RPC_PATH));
+    const postAtomicEstimateReads = requests.slice(atomicWriteIndex + 1).filter((req) =>
+      req.method === "GET" && req.url.includes("reset_execution_estimates"),
     );
+    assert.equal(postAtomicEstimateReads.length > 0, formalAdoption.expectedEstimateRead,
+      "A failed or mismatched formal claim must stop persisted-event copy generation");
     assert.equal(requests.some((req) => req.url.includes("generativelanguage.googleapis.com")), false);
     assert.equal(requests.some((req) => req.url.includes("reset_display_names") && req.method !== "GET"), false);
   } finally {
@@ -3215,6 +3245,7 @@ test("atomic promotion defers copy until the persisted monitor rows can be read"
     restore();
   }
 });
+}
 
 test("Tibo-first recovery generates copy from the persisted canonical monitor event", async () => {
   const restore = withEnvironment({
@@ -3446,6 +3477,7 @@ for (const arrivalOrder of ["monitor-first", "day17-reply-first"] as const) {
     const geminiPrompts: string[] = [];
     let sourceReady = arrivalOrder === "day17-reply-first";
     let persistedEstimate: Record<string, unknown> | null = null;
+    let originalEstimateEventKey: string | null = null;
     let persistedObservation: Record<string, unknown> | null = null;
     let displayName: Record<string, unknown> | null = null;
     const getPersistedEstimate = (): Record<string, unknown> | null => persistedEstimate;
@@ -3464,8 +3496,13 @@ for (const arrivalOrder of ["monitor-first", "day17-reply-first"] as const) {
         const estimate = plan?.execution_estimate;
         const observation = plan?.observation;
         if (estimate && typeof estimate === "object") {
+          const initiallyPersistedEventKey = plan?.future_reply_claim
+            ? String((estimate as Record<string, unknown>).reset_event_key)
+            : "usage-reset-route-observation-id";
+          originalEstimateEventKey = initiallyPersistedEventKey;
           persistedEstimate = {
             ...(estimate as Record<string, unknown>),
+            reset_event_key: initiallyPersistedEventKey,
             id: "route-estimate-id",
             recovery_observation_id: "route-observation-id",
           };
@@ -3492,7 +3529,6 @@ for (const arrivalOrder of ["monitor-first", "day17-reply-first"] as const) {
         }
         persistedEstimate = {
           ...persistedEstimate,
-          reset_event_key: canonicalEventKey,
           execution_window_start_at: previousObservedAt,
           execution_window_end_at: recoveryObservedAt,
           tibo_announced_at: reply.tweet_created_at,
@@ -3503,7 +3539,7 @@ for (const arrivalOrder of ["monitor-first", "day17-reply-first"] as const) {
         };
         return new Response(JSON.stringify({
           status: "linked",
-          reset_event_key: canonicalEventKey,
+          reset_event_key: persistedEstimate.reset_event_key,
           needs_cache_invalidation: false,
         }), { status: 200 });
       }
@@ -3530,6 +3566,31 @@ for (const arrivalOrder of ["monitor-first", "day17-reply-first"] as const) {
               nameZh: null,
               reason: "The canonical notice and monitor observation identify the event.",
             };
+        if (prompt.includes("Canonical related Tibo posts:")) {
+          displayName = {
+            ...(displayName ?? {}),
+            manual_name_ja: "手動で決めた名前",
+            manual_name_en: "Manually chosen name",
+            manual_name_zh: "人工确定的名称",
+            ai_name_ja: "以前のAI名を維持",
+            ai_name_en: "Keep the previous AI name",
+            ai_name_zh: "保留以前的AI名称",
+            ai_status: "accepted",
+            ai_prompt_version: "previous-name-prompt",
+            input_hash: "previous-name-input-hash",
+            event_reason_type: "詫びリセット",
+            event_scope: "全有料プラン",
+            event_summary_ja: "人手で直した日本語要約",
+            event_summary_en: "Human edited English summary",
+            event_summary_zh: "人工修订的中文摘要",
+            event_note_ja: "人手で直した日本語補足。",
+            event_note_en: "Human edited English note.",
+            event_note_zh: "人工修订的中文补充。",
+            event_metadata_status: "success",
+            event_metadata_input_hash: "previous-success-hash",
+            event_metadata_flags: [],
+          };
+        }
         return new Response(JSON.stringify({
           candidates: [{ content: { parts: [{ text: JSON.stringify(result) }] } }],
         }), { status: 200, headers: { "content-type": "application/json" } });
@@ -3645,14 +3706,37 @@ for (const arrivalOrder of ["monitor-first", "day17-reply-first"] as const) {
 
       const linkedEstimate = getPersistedEstimate();
       assert.ok(linkedEstimate);
-      assert.equal(linkedEstimate.reset_event_key, canonicalEventKey);
+      assert.equal(originalEstimateEventKey, arrivalOrder === "monitor-first"
+        ? "usage-reset-route-observation-id"
+        : canonicalEventKey);
+      assert.equal(linkedEstimate.reset_event_key, originalEstimateEventKey, "reply reconciliation preserves the estimate's original event key");
       assert.equal(linkedEstimate.official_notice_tweet_id, replyId);
-      assert.ok(geminiPrompts.length >= 1, "One of the two handlers must generate after the canonical monitor event exists");
+      assert.equal(geminiPrompts.length, 2, "Both copy generators run after the persisted monitor event is linked");
       const metadataPrompt = geminiPrompts.find((prompt) => prompt.includes("Canonical related Tibo posts:"));
       assert.ok(metadataPrompt, "The metadata generator receives persisted Tibo source context");
-      assert.ok(metadataPrompt!.includes("verified reply notice"));
-      assert.ok(metadataPrompt!.includes(String(reply.text)));
+      const namePrompt = geminiPrompts.find((prompt) => !prompt.includes("Canonical related Tibo posts:"));
+      assert.ok(namePrompt, "The display-name generator receives persisted Tibo source context");
+      const parentText = "Day 17/ Bet you thought we forgot, but no, it’s reset day today.";
+      for (const prompt of [metadataPrompt!, namePrompt!]) {
+        assert.ok(prompt.includes("verified reply notice"));
+        assert.ok(prompt.includes("verified reply parent"));
+        assert.ok(prompt.includes(String(reply.text)));
+        assert.ok(prompt.includes(parentText));
+        assert.ok(prompt.includes(parentId));
+      }
       assert.equal(getDisplayName()?.event_metadata_status, "success");
+      assert.equal(getDisplayName()?.manual_name_ja, "手動で決めた名前");
+      assert.equal(getDisplayName()?.manual_name_en, "Manually chosen name");
+      assert.equal(getDisplayName()?.manual_name_zh, "人工确定的名称");
+      assert.equal(getDisplayName()?.ai_name_ja, "以前のAI名を維持");
+      assert.equal(getDisplayName()?.ai_name_en, "Keep the previous AI name");
+      assert.equal(getDisplayName()?.ai_name_zh, "保留以前的AI名称");
+      assert.equal(getDisplayName()?.event_summary_ja, "人手で直した日本語要約");
+      assert.equal(getDisplayName()?.event_summary_en, "Human edited English summary");
+      assert.equal(getDisplayName()?.event_summary_zh, "人工修订的中文摘要");
+      assert.equal(getDisplayName()?.event_note_ja, "人手で直した日本語補足。");
+      assert.equal(getDisplayName()?.event_note_en, "Human edited English note.");
+      assert.equal(getDisplayName()?.event_note_zh, "人工修订的中文补充。");
     } finally {
       globalThis.fetch = originalFetch;
       restore();

@@ -15,6 +15,11 @@ import {
   isResetCopyGenerationEvidenceValid,
   type MonitorResetCopyEvidence,
 } from "./monitorResetCopyLifecycle";
+import {
+  hasResetCopyGenerationFailure,
+  preserveResetCopyGenerationFailureFlags,
+  recordResetCopyGenerationFailure,
+} from "./resetCopyGenerationFailures";
 import { normalizeResetScope } from "./resetScope";
 import type { ResetDisplayNameRecord, WindowEventLike } from "./types";
 
@@ -175,7 +180,10 @@ function mergeMetadataCopy(
     }
   }
 
-  const flags = (result.flags ?? []).filter((flag) => !flag.startsWith(AUTO_COPY_HASHES_FLAG));
+  const flags = preserveResetCopyGenerationFailureFlags(
+    (result.flags ?? []).filter((flag) => !flag.startsWith(AUTO_COPY_HASHES_FLAG)),
+    existing?.event_metadata_flags,
+  );
   if (Object.keys(nextHashes).length > 0) {
     flags.push(`${AUTO_COPY_HASHES_FLAG}${JSON.stringify(nextHashes)}`);
   }
@@ -252,6 +260,29 @@ async function writeMetadata(
   throw new Error("Reset event metadata write failed");
 }
 
+async function writeMetadataFailureMarker(
+  supabase: SupabaseClient,
+  existing: ResetDisplayNameRecord,
+  inputHash: string,
+  updatedAt: string,
+) {
+  let query = supabase.from("reset_display_names")
+    .update({
+      event_metadata_flags: recordResetCopyGenerationFailure(existing.event_metadata_flags, inputHash),
+      updated_at: updatedAt,
+    })
+    .eq("event_key", existing.event_key);
+  query = existing.updated_at
+    ? query.eq("updated_at", existing.updated_at)
+    : query.is("updated_at", null);
+  const { data, error } = await query.select("event_key").maybeSingle();
+  if (error) {
+    if (isMissingMetadataColumnsError(error)) return false;
+    throw new Error("Reset event metadata failure marker write failed");
+  }
+  return Boolean(data);
+}
+
 export async function ensureResetEventMetadataForEvent(
   item: WindowEventLike,
   options: ResetEventMetadataStoreOptions,
@@ -316,6 +347,18 @@ export async function ensureResetEventMetadataForEvent(
       skipped: true,
     };
   }
+  if (
+    existing?.event_metadata_status === "success" &&
+    hasResetCopyGenerationFailure(existing.event_metadata_flags, inputHash)
+  ) {
+    return {
+      eventKey,
+      status: "previous_failure_preserved",
+      wrote: false,
+      skipped: true,
+      record: existing,
+    };
+  }
 
   const existingHashes = getAutoCopyHashes(existing);
   const hasWritableCopyField = AUTO_COPY_FIELDS.some((field) => {
@@ -369,6 +412,16 @@ export async function ensureResetEventMetadataForEvent(
   }
 
   if (result.status !== "success" && freshExisting?.event_metadata_status === "success") {
+    try {
+      await writeMetadataFailureMarker(
+        supabase,
+        freshExisting,
+        inputHash,
+        options.generatedAt ?? new Date().toISOString(),
+      );
+    } catch {
+      // Keep the successful event copy intact if attempt bookkeeping is unavailable.
+    }
     return { eventKey, status: "generation_failed_preserved", wrote: false, skipped: true, record: freshExisting };
   }
 
