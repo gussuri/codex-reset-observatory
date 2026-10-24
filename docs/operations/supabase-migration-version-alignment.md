@@ -20,4 +20,6 @@ Review every pending version. Apply only after the dry-run matches the intended 
 
 ## Reconcile an already-applied migration
 
+The version mapping in this runbook reflects the Production migration catalog inspected for this repository. For another project or environment, inspect that environment's `supabase_migrations.schema_migrations` catalog and compare its recorded migration SQL with the local file before taking action. If it records an older version, handle that environment against its own catalog; do not rename by assumption, repair history, or replay SQL unconditionally.
+
 If a migration was applied through MCP or another tool and its recorded version differs from the local filename, first compare the local SQL with the SQL associated with that remote version. When they are the same migration, rename the local file to the recorded version while preserving its SQL bytes. If the SQL differs, create a new migration instead. Do not replay the SQL, fabricate a history row, or mark unapplied SQL as applied to make the versions appear aligned.
