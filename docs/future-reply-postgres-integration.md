@@ -13,7 +13,7 @@ $env:POSTGRES_BIN = 'C:\path\to\postgresql-17\bin'
 pnpm test:future-reply:postgres
 ```
 
-The runner initializes a temporary cluster with trust authentication, binds only to `127.0.0.1`, loads the minimal schema in `tests/integration/codexFutureReplyAtomic.schema.sql`, and removes the cluster when it exits. It fails if the configured `pg_ctl` is not PostgreSQL 17.
+The runner initializes a temporary cluster with trust authentication, binds only to `127.0.0.1`, and loads the minimal schema in `tests/integration/codexFutureReplyAtomic.schema.sql`. It removes only the resolved directory created for that run, and only after PostgreSQL stops successfully. If stopping the server fails, it preserves the data directory and reports its path. It fails if the configured `pg_ctl` is not PostgreSQL 17.
 
 ## Coverage
 

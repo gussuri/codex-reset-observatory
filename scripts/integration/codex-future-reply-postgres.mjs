@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import net from "node:net";
 
@@ -20,7 +20,7 @@ for (const path of [initdb, pgCtl, psql]) {
   if (!existsSync(path)) throw new Error(`Missing PostgreSQL executable: ${path}`);
 }
 
-const versionResult = spawnSync(pgCtl, ["--version"], { encoding: "utf8" });
+const versionResult = spawnSync(pgCtl, ["--version"], { encoding: "utf8", windowsHide: true });
 if (versionResult.status !== 0) throw new Error(versionResult.stderr || "Could not read pg_ctl version");
 const version = `${versionResult.stdout}${versionResult.stderr}`.trim();
 if (!/PostgreSQL\)?\s*17\./i.test(version)) {
@@ -48,7 +48,7 @@ const actualFunctions = [
 ].join("\n\n");
 
 function run(file, args, options = {}) {
-  const result = spawnSync(file, args, { encoding: "utf8", ...options });
+  const result = spawnSync(file, args, { encoding: "utf8", windowsHide: true, ...options });
   if (result.status !== 0) {
     const details = [result.stdout, result.stderr].filter(Boolean).join("\n");
     throw new Error(`${file} exited with ${result.status ?? result.signal}:\n${details}`);
@@ -229,7 +229,10 @@ async function waitForExit(child) {
   });
 }
 
-const tempRoot = mkdtempSync(join(tmpdir(), "codex-future-reply-pg17-"));
+const tempPrefix = "codex-future-reply-pg17-";
+const tempParent = realpathSync(tmpdir());
+const tempRoot = mkdtempSync(join(tempParent, tempPrefix));
+const createdTempRoot = realpathSync(tempRoot);
 const dataDir = join(tempRoot, "data");
 const port = await reserveLoopbackPort();
 let serverStarted = false;
@@ -243,7 +246,7 @@ try {
     "-l", join(tempRoot, "postgres.log"),
     "-o", `-p ${port} -h 127.0.0.1 -c listen_addresses=127.0.0.1`,
     "-w", "start",
-  ], { stdio: "ignore" });
+  ], { stdio: "ignore", windowsHide: true });
   if (startResult.status !== 0) throw new Error(`pg_ctl start failed (${startResult.status ?? startResult.signal})`);
   serverStarted = true;
   process.stdout.write("loading actual v1/v2 functions and future-reply migration\n");
@@ -270,7 +273,10 @@ try {
     "select pg_catalog.pg_sleep(1.5);",
     "commit;",
   ].join("\n"), "utf8");
-  lockHolder = spawn(psql, psqlArgs(port, ["-f", holderFile]), { stdio: ["ignore", "pipe", "pipe"] });
+  lockHolder = spawn(psql, psqlArgs(port, ["-f", holderFile]), {
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
   process.stdout.write("checking two-session v2 serialization\n");
   await waitForMarker(lockHolder, "FUTURE_REPLY_SOURCE_LOCK_HELD");
 
@@ -316,7 +322,10 @@ try {
     "set lock_timeout = '250ms';",
     `select public.apply_codex_usage_webhook_write_v2('${concurrentPlan.replaceAll("'", "''")}'::jsonb);`,
   ].join("\n"), "utf8");
-  const contended = spawnSync(psql, psqlArgs(port, ["-f", contentionFile]), { encoding: "utf8" });
+  const contended = spawnSync(psql, psqlArgs(port, ["-f", contentionFile]), {
+    encoding: "utf8",
+    windowsHide: true,
+  });
   const contentionOutput = `${contended.stdout ?? ""}${contended.stderr ?? ""}`;
   assert.notEqual(contended.status, 0, `v2 unexpectedly bypassed the active monitor lock:\n${contentionOutput}`);
   assert.match(contentionOutput, /lock timeout/i, `expected v2 to wait on the actual v1 monitor lock:\n${contentionOutput}`);
@@ -341,8 +350,34 @@ try {
     await waitForExit(lockHolder).catch(() => undefined);
   }
   if (serverStarted) {
-    const stop = spawnSync(pgCtl, ["-D", dataDir, "-m", "fast", "-w", "stop"], { encoding: "utf8" });
-    if (stop.status !== 0) process.stderr.write(`${stop.stderr ?? stop.stdout ?? "Could not stop temporary PostgreSQL"}\n`);
+    const stop = spawnSync(pgCtl, ["-D", dataDir, "-m", "fast", "-w", "stop"], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    if (stop.status !== 0) {
+      const details = `${stop.stderr ?? stop.stdout ?? "Could not stop temporary PostgreSQL"}`.trim();
+      throw new Error(`Temporary PostgreSQL could not be stopped; its data directory is preserved at ${tempRoot}. ${details}`);
+    }
+    serverStarted = false;
   }
-  rmSync(tempRoot, { recursive: true, force: true });
+
+  const rootStat = lstatSync(tempRoot);
+  const resolvedCleanupTarget = realpathSync(tempRoot);
+  const relativeToTempParent = relative(tempParent, resolvedCleanupTarget);
+  const isDirectTempChild = relativeToTempParent !== "" &&
+    relativeToTempParent !== "." &&
+    !isAbsolute(relativeToTempParent) &&
+    !relativeToTempParent.startsWith(`..${sep}`) &&
+    !relativeToTempParent.includes(sep);
+  const sameAsCreatedDirectory = process.platform === "win32"
+    ? resolve(resolvedCleanupTarget).toLowerCase() === resolve(createdTempRoot).toLowerCase()
+    : resolve(resolvedCleanupTarget) === resolve(createdTempRoot);
+  if (
+    rootStat.isSymbolicLink() || !rootStat.isDirectory() ||
+    !sameAsCreatedDirectory || !isDirectTempChild ||
+    !basename(resolvedCleanupTarget).startsWith(tempPrefix)
+  ) {
+    throw new Error(`Refusing to remove an unexpected temporary PostgreSQL path: ${resolvedCleanupTarget}`);
+  }
+  rmSync(resolvedCleanupTarget, { recursive: true, force: false });
 }
