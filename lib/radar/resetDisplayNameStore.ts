@@ -21,7 +21,7 @@ import {
   isAutoNameableCanonicalEvent,
 } from "./resetDisplayNameEligibility";
 import {
-  isMonitorConfirmedResetCopyEvidence,
+  isResetCopyGenerationEvidenceValid,
   type MonitorResetCopyEvidence,
 } from "./monitorResetCopyLifecycle";
 import {
@@ -477,7 +477,7 @@ export function shouldReuseResetDisplayNameResult(
       record.input_hash === inputHash &&
       record.ai_model === model &&
       record.ai_prompt_version === RANDOM_RESET_NAME_PROMPT_VERSION &&
-      ["accepted", "null", "review_required"].includes(record.ai_status ?? ""),
+      ["accepted", "null", "review_required", "api_error", "rate_limited", "invalid_response"].includes(record.ai_status ?? ""),
   );
 }
 
@@ -707,7 +707,7 @@ export async function ensureResetDisplayNameForEvent(
     !eventKey ||
     completedAt === null ||
     !isAutoNameableCanonicalEvent(item, now) ||
-    !isMonitorConfirmedResetCopyEvidence(item, options.monitorEvidence, now)
+    !isResetCopyGenerationEvidenceValid(item, options.monitorEvidence, now)
   ) {
     return { eventKey, status: "skipped", displayName: null, inputMode: null, skipped: true };
   }
@@ -793,11 +793,31 @@ export async function ensureResetDisplayNameForEvent(
     };
   }
 
-  const result = await generateRandomResetName(input, {
-    apiKey: options.apiKey,
-    model: options.model ?? RANDOM_RESET_NAME_MODEL,
-    timeoutMs: options.timeoutMs,
-  });
+  let result: RandomResetNameGenerationResult;
+  try {
+    result = await generateRandomResetName(input, {
+      apiKey: options.apiKey,
+      model: options.model ?? RANDOM_RESET_NAME_MODEL,
+      timeoutMs: options.timeoutMs,
+    });
+  } catch {
+    result = {
+      name: null,
+      nameEn: null,
+      nameZh: null,
+      confidence: null,
+      evidence: null,
+      reason: null,
+      evidenceGrounded: false,
+      flags: ["generation_exception"],
+      status: "api_error",
+      model: options.model ?? RANDOM_RESET_NAME_MODEL,
+      promptVersion: RANDOM_RESET_NAME_PROMPT_VERSION,
+      latencyMs: 0,
+      httpStatus: null,
+      retryAfterSeconds: null,
+    };
+  }
   const acceptance = assessRandomResetNameResult(result);
 
   let freshExisting: ResetDisplayNameRecord | null;

@@ -4,6 +4,7 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 
 import { POST } from "../app/api/webhook/codex-usage/route";
+import { POST as POSTTibo } from "../app/api/webhook/tibo/route";
 import { shouldCreateNoticeBackedEstimate } from "../lib/codexUsageRecovery";
 import { NOTICE_LOOKBACK_MS } from "../lib/radar/tiboHistory";
 
@@ -1843,7 +1844,7 @@ test("a future-dated teaser is not used to corroborate an earlier monitor recove
     }));
 
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "observed_unconfirmed" });
     assertUsageWebhookQueryBounds(requests, "2026-08-25T00:04:00.000Z");
     const estimate = getAtomicPlanPart(requests, "execution_estimate");
     assert.equal(estimate?.reset_event_key, "usage-reset-pending");
@@ -2491,7 +2492,7 @@ test("a strict future reply can corroborate only the bounded matching recovery q
     const response = await POST(buildRequest(requestBody));
 
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "observed_unconfirmed" });
     const estimate = getAtomicPlanPart(requests, "execution_estimate");
     assert.equal(estimate?.official_notice_tweet_id, "2113162413008884099");
     assert.equal(estimate?.official_notice_at, "2026-10-22T06:55:54.000Z");
@@ -2664,7 +2665,7 @@ test("same-parent strict reply edit variants remain one corroborating event", as
     assert.equal(response.status, 200);
     const plan = getAtomicPlanFromRequests(requests);
     const estimate = getAtomicPlanPart(requests, "execution_estimate");
-    assert.equal(estimate?.reset_event_key, `tibo-reset-${firstReplyId}`);
+    assert.equal(estimate?.reset_event_key, "tibo-reset-2113162277688070445");
     assert.equal((estimate?.tibo_source_tweet_ids as string[]).length, 2);
     assert.equal((plan.future_reply_claim as Record<string, unknown>)?.event_key, "2113162277688070445");
   } finally {
@@ -2734,7 +2735,7 @@ test("protocol v2 strict validation: rejects invalid monitorProtocolVersion with
   }
 });
 
-test("Test A: protocol v2 confirmed recovery (recovery_candidate) creates execution estimate and updates state", async () => {
+test("Test A: protocol v2 observed recovery (recovery_candidate) creates execution estimate and updates state", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
     SUPABASE_URL: "https://example.supabase.co",
@@ -2754,7 +2755,7 @@ test("Test A: protocol v2 confirmed recovery (recovery_candidate) creates execut
       postReason: "recovery_candidate",
     }));
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "observed_unconfirmed" });
     const executionEstimate = getAtomicPlanPart(requests, "execution_estimate");
     const observation = getAtomicPlanPart(requests, "observation");
     const state = getAtomicPlanPart(requests, "state");
@@ -3012,7 +3013,7 @@ test("Test I: legacy protocol v1 compatibility allows fallback evaluation withou
       resetsAt: currentResetsAt,
     }));
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "observed_unconfirmed" });
     const plan = getAtomicPlanFromRequests(requests);
     assert.ok(plan.execution_estimate, "Legacy client arithmetic recovery accepted for zero-downtime deploy");
 
@@ -3123,7 +3124,7 @@ test("quoted BANKED distribution context is not promoted to a public grant assoc
   }
 });
 
-test("promoted deferred Tibo reset defers copy until its persisted monitor rows can be read", async () => {
+test("atomic promotion defers copy until the persisted monitor rows can be read", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
     SUPABASE_URL: "https://example.supabase.co",
@@ -3182,24 +3183,6 @@ test("promoted deferred Tibo reset defers copy until its persisted monitor rows 
     if (method === "GET" && url.includes("reset_execution_estimates")) {
       return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
     }
-    if (method === "POST" && url.includes("/rpc/claim_tibo_formal_adoption")) {
-      return new Response(JSON.stringify({
-        status: "claimed_new",
-        record: {
-          id: "adoption-rec-1",
-          logical_post_id: deferredTweetId,
-          logical_post_tweet_ids: [deferredTweetId],
-          reset_event_key: `tibo-reset-${deferredTweetId}`,
-          representative_tweet_id: deferredTweetId,
-          source_tweet_ids: [deferredTweetId],
-          claim_source: "new_adoption",
-          adopted_at: "2026-08-26T01:15:05.000Z",
-          claimed_at: "2026-08-26T01:15:05.000Z",
-          created_at: "2026-08-26T01:15:05.000Z",
-          updated_at: "2026-08-26T01:15:05.000Z",
-        },
-      }), { status: 200 });
-    }
     return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
   };
 
@@ -3220,10 +3203,11 @@ test("promoted deferred Tibo reset defers copy until its persisted monitor rows 
     assert.ok(plan.promotion, "Atomic write plan must include promotion");
     assert.equal((plan.promotion as { tweet_id: string }).tweet_id, deferredTweetId);
 
-    const formalClaim = requests.find((req) => req.url.includes("/rpc/claim_tibo_formal_adoption"));
-    assert.ok(formalClaim, "Must call claim_tibo_formal_adoption RPC");
-    assert.equal(formalClaim.body?.p_reset_event_key, `tibo-reset-${deferredTweetId}`);
-    assert.equal(formalClaim.body?.p_claim_source, "new_adoption");
+    assert.equal(
+      requests.some((req) => req.url.includes("/rpc/claim_tibo_formal_adoption")),
+      false,
+      "The promotion is already part of the atomic monitor write plan",
+    );
     assert.equal(requests.some((req) => req.url.includes("generativelanguage.googleapis.com")), false);
     assert.equal(requests.some((req) => req.url.includes("reset_display_names") && req.method !== "GET"), false);
   } finally {
@@ -3359,7 +3343,11 @@ test("Tibo-first recovery generates copy from the persisted canonical monitor ev
     }
     if (method === "GET" && table === "reset_execution_estimates") {
       const eventFilter = parsed.searchParams.get("reset_event_key");
-      const estimateRow = persistedEstimate && eventFilter === `eq.${persistedEstimate.reset_event_key}`
+      const recoveryObservationFilter = parsed.searchParams.get("recovery_observation_id");
+      const estimateRow = persistedEstimate && (
+        eventFilter === `eq.${persistedEstimate.reset_event_key}` ||
+        recoveryObservationFilter === `eq.${persistedEstimate.recovery_observation_id}`
+      )
         ? persistedEstimate
         : null;
       return new Response(JSON.stringify(estimateRow ?? []), { status: 200 });
@@ -3434,6 +3422,247 @@ test("Tibo-first recovery generates copy from the persisted canonical monitor ev
     restore();
   }
 });
+
+for (const arrivalOrder of ["monitor-first", "day17-reply-first"] as const) {
+  test(`${arrivalOrder} webhook arrival order generates copy only from the linked persisted event`, async () => {
+    const restore = withEnvironment({
+      CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+    });
+    const originalFetch = globalThis.fetch;
+    const previousTiboSecret = process.env.TIBO_WEBHOOK_SECRET;
+    const previousGeminiKey = process.env.GEMINI_API_KEY;
+    process.env.TIBO_WEBHOOK_SECRET = "tibo-test-secret";
+    process.env.GEMINI_API_KEY = "test-gemini-key";
+
+    const reply = verifiedFutureReplyRow();
+    const replyId = String(reply.tweet_id);
+    const parentId = "2113162277688070445";
+    const recoveryObservedAt = "2026-10-22T17:59:00.000Z";
+    const previousObservedAt = "2026-10-22T17:54:00.000Z";
+    const canonicalEventKey = `tibo-reset-${parentId}`;
+    const requests: MockRequest[] = [];
+    const geminiPrompts: string[] = [];
+    let sourceReady = arrivalOrder === "day17-reply-first";
+    let persistedEstimate: Record<string, unknown> | null = null;
+    let persistedObservation: Record<string, unknown> | null = null;
+    let displayName: Record<string, unknown> | null = null;
+    const getPersistedEstimate = (): Record<string, unknown> | null => persistedEstimate;
+    const getDisplayName = (): Record<string, unknown> | null => displayName;
+
+    globalThis.fetch = async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+      const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+      requests.push({ url, method, body });
+      const parsed = new URL(url);
+      const table = parsed.pathname.split("/").pop() ?? "";
+
+      if (method === "POST" && (url.includes(ATOMIC_RPC_PATH) || url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH))) {
+        const plan = getAtomicPlan(body);
+        const estimate = plan?.execution_estimate;
+        const observation = plan?.observation;
+        if (estimate && typeof estimate === "object") {
+          persistedEstimate = {
+            ...(estimate as Record<string, unknown>),
+            id: "route-estimate-id",
+            recovery_observation_id: "route-observation-id",
+          };
+        }
+        if (observation && typeof observation === "object") {
+          persistedObservation = {
+            ...(observation as Record<string, unknown>),
+            id: "route-observation-id",
+            created_at: recoveryObservedAt,
+            updated_at: recoveryObservedAt,
+          };
+        }
+        return respondToAtomicRpc(body);
+      }
+
+      if (method === "POST" && url.includes("/rpc/merge_tibo_source_context_enrichment")) {
+        sourceReady = true;
+        return new Response(JSON.stringify({ status: "duplicate" }), { status: 200 });
+      }
+
+      if (method === "POST" && url.includes("/rpc/reconcile_codex_future_reply_notice")) {
+        if (!persistedEstimate) {
+          return new Response(JSON.stringify({ status: "not_linked" }), { status: 200 });
+        }
+        persistedEstimate = {
+          ...persistedEstimate,
+          reset_event_key: canonicalEventKey,
+          execution_window_start_at: previousObservedAt,
+          execution_window_end_at: recoveryObservedAt,
+          tibo_announced_at: reply.tweet_created_at,
+          tibo_primary_tweet_id: replyId,
+          tibo_source_tweet_ids: [replyId],
+          official_notice_tweet_id: replyId,
+          official_notice_at: reply.tweet_created_at,
+        };
+        return new Response(JSON.stringify({
+          status: "linked",
+          reset_event_key: canonicalEventKey,
+          needs_cache_invalidation: false,
+        }), { status: 200 });
+      }
+
+      if (url.includes("generativelanguage.googleapis.com")) {
+        const prompt = JSON.stringify(body);
+        geminiPrompts.push(prompt);
+        const result = prompt.includes("Canonical related Tibo posts:")
+          ? {
+              reasonType: "ご祝儀リセット",
+              scope: null,
+              scopeEvidence: null,
+              summaryJa: "Day 17の投稿に続く返信で期限が案内され、利用枠の回復が観測されました。",
+              summaryEn: "A reply to the Day 17 post gave a deadline, and the usage recovery was observed.",
+              summaryZh: "Day 17帖子的回复说明了期限，之后观测到额度恢复。",
+              noteJa: "Day 17の投稿と同じリセットについて、続く返信で期限が案内されました。",
+              noteEn: "A follow-up reply gave a deadline for the same reset described in the Day 17 post.",
+              noteZh: "后续回复说明了 Day 17 帖子中同一重置的期限。",
+              reasonJa: "明示的な詫び根拠がないため、ご祝儀を運用カテゴリとして適用しました。これは祝賀や原因を示す事実ではありません。",
+            }
+          : {
+              nameJa: null,
+              nameEn: null,
+              nameZh: null,
+              reason: "The canonical notice and monitor observation identify the event.",
+            };
+        return new Response(JSON.stringify({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(result) }] } }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+
+      if (method === "GET" && table === "codex_usage_monitor_state") {
+        return new Response(JSON.stringify({
+          source_key: "local-codex-app-server",
+          observed_at: previousObservedAt,
+          received_at: "2026-10-22T17:54:01.000Z",
+          limit_id: "codex",
+          plan_type: "plus",
+          used_percent: 60,
+          window_duration_mins: 10080,
+          resets_at: Math.floor(Date.parse("2026-10-23T03:55:00.000Z") / 1000),
+          coverage_started_at: "2026-10-22T16:00:00.000Z",
+          banked_reset_available_count: 1,
+          last_banked_grant_at: null,
+          updated_at: "2026-10-22T17:54:01.000Z",
+        }), { status: 200 });
+      }
+
+      if (method === "GET" && table === "tibo_signals") {
+        return new Response(JSON.stringify(sourceReady ? [reply] : []), { status: 200 });
+      }
+
+      if (method === "GET" && table === "regular_reset_events") {
+        return new Response("[]", { status: 200 });
+      }
+
+      if (method === "GET" && table === "reset_execution_estimates") {
+        const eventKey = parsed.searchParams.get("reset_event_key");
+        const observationId = parsed.searchParams.get("recovery_observation_id");
+        const estimate = persistedEstimate && (
+          eventKey === `eq.${persistedEstimate.reset_event_key}` ||
+          observationId === `eq.${persistedEstimate.recovery_observation_id}`
+        ) ? persistedEstimate : null;
+        return new Response(JSON.stringify(estimate ?? []), { status: 200 });
+      }
+
+      if (method === "GET" && table === "codex_recovery_observations") {
+        const observationId = parsed.searchParams.get("id");
+        return new Response(JSON.stringify(
+          persistedObservation && observationId === "eq.route-observation-id" ? persistedObservation : [],
+        ), { status: 200 });
+      }
+
+      if (method === "GET" && table === "reset_display_names") {
+        return new Response(JSON.stringify(displayName ? [displayName] : []), { status: 200 });
+      }
+
+      if ((method === "POST" || method === "PATCH") && table === "reset_display_names") {
+        const value = body && Array.isArray(body) ? body[0] : body;
+        displayName = { ...(displayName ?? {}), ...(value ?? {}) };
+        return new Response(JSON.stringify([displayName]), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    };
+
+    const postVerifiedReplyContext = async () => POSTTibo(new NextRequest("http://localhost/api/webhook/tibo", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer tibo-test-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        kind: "source_context_enrichment",
+        tweetId: replyId,
+        text: reply.text,
+        tweetUrl: reply.tweet_url,
+        tweetCreatedAt: reply.tweet_created_at,
+        isReply: true,
+        replyToHandles: ["@thsottiaux"],
+        replyParentTweetId: parentId,
+        replyParentTweetUrl: `https://x.com/thsottiaux/status/${parentId}`,
+        replyContextText: "Day 17/ Bet you thought we forgot, but no, it’s reset day today.",
+      }),
+    }));
+
+    try {
+      if (arrivalOrder === "monitor-first") {
+        const monitorResponse = await POST(buildRequest({
+          observedAt: recoveryObservedAt,
+          usedPercent: 0,
+          resetsAt: Math.floor(Date.parse("2026-10-30T03:55:00.000Z") / 1000),
+          monitorProtocolVersion: 2,
+          postReason: "recovery_candidate",
+        }));
+        assert.equal(monitorResponse.status, 200);
+        assert.deepEqual(await monitorResponse.json(), { accepted: true, recovery: "observed_unconfirmed" });
+        assert.equal(geminiPrompts.length, 0, "A pending monitor estimate cannot generate before its reply link exists");
+      }
+
+      const tiboResponse = await postVerifiedReplyContext();
+      assert.equal(tiboResponse.status, 200);
+      assert.deepEqual(await tiboResponse.json(), { success: true, status: "duplicate" });
+      if (arrivalOrder === "day17-reply-first") {
+        assert.equal(geminiPrompts.length, 0, "The notice alone cannot generate reset copy");
+      }
+
+      if (arrivalOrder === "day17-reply-first") {
+        const monitorResponse = await POST(buildRequest({
+          observedAt: recoveryObservedAt,
+          usedPercent: 0,
+          resetsAt: Math.floor(Date.parse("2026-10-30T03:55:00.000Z") / 1000),
+          monitorProtocolVersion: 2,
+          postReason: "recovery_candidate",
+        }));
+        assert.equal(monitorResponse.status, 200);
+        assert.deepEqual(await monitorResponse.json(), { accepted: true, recovery: "observed_unconfirmed" });
+      }
+
+      const linkedEstimate = getPersistedEstimate();
+      assert.ok(linkedEstimate);
+      assert.equal(linkedEstimate.reset_event_key, canonicalEventKey);
+      assert.equal(linkedEstimate.official_notice_tweet_id, replyId);
+      assert.ok(geminiPrompts.length >= 1, "One of the two handlers must generate after the canonical monitor event exists");
+      const metadataPrompt = geminiPrompts.find((prompt) => prompt.includes("Canonical related Tibo posts:"));
+      assert.ok(metadataPrompt, "The metadata generator receives persisted Tibo source context");
+      assert.ok(metadataPrompt!.includes("verified reply notice"));
+      assert.ok(metadataPrompt!.includes(String(reply.text)));
+      assert.equal(getDisplayName()?.event_metadata_status, "success");
+    } finally {
+      globalThis.fetch = originalFetch;
+      restore();
+      if (previousTiboSecret === undefined) delete process.env.TIBO_WEBHOOK_SECRET;
+      else process.env.TIBO_WEBHOOK_SECRET = previousTiboSecret;
+      if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+      else process.env.GEMINI_API_KEY = previousGeminiKey;
+    }
+  });
+}
 
 test("partial error on notice lookup writes fallback observation and executes cache invalidation path", async () => {
   const restore = withEnvironment({

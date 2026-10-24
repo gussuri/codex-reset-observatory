@@ -35,7 +35,7 @@ function observation(status: "observed" | "confirmed" = "confirmed"): CodexRecov
     cycleHint: "unexpected",
     confidence: "strong",
     status,
-    matchedTiboTweetId: REPLY_ID,
+    matchedTiboTweetId: status === "confirmed" ? REPLY_ID : null,
     confirmedAt: status === "confirmed" ? CONFIRMED_AT : null,
     createdAt: OBSERVED_AT,
     updatedAt: CONFIRMED_AT,
@@ -216,13 +216,29 @@ test("monitor-first and Tibo-first evidence order produce one canonical event an
   assert.match(first.sourceContext, /status=confirmed/);
 });
 
-test("unconfirmed monitor observation and stale or ordinary replies cannot supply final copy evidence", () => {
-  const beforeCompletion = buildMonitorConfirmedResetCopyContext({
+test("Day18-style observed monitor recovery is eligible, while invalid observations and stale replies are not", () => {
+  const observedRecovery = buildMonitorConfirmedResetCopyContext({
     estimate: estimate(),
     recoveryObservation: observation("observed"),
     sourceRows,
   });
-  assert.equal(beforeCompletion, null);
+  assert.ok(observedRecovery);
+  assert.equal(observedRecovery.evidence.recoveryStatus, "observed");
+  assert.equal(observedRecovery.evidence.recoveryConfirmedAt, null);
+  assert.equal(observedRecovery.evidence.recoveryMatchedTiboTweetId, null);
+
+  const weakRecovery = buildMonitorConfirmedResetCopyContext({
+    estimate: estimate(),
+    recoveryObservation: { ...observation("observed"), confidence: "medium" },
+    sourceRows,
+  });
+  const regularRecovery = buildMonitorConfirmedResetCopyContext({
+    estimate: estimate(),
+    recoveryObservation: { ...observation("observed"), cycleHint: "regular" },
+    sourceRows,
+  });
+  assert.equal(weakRecovery, null);
+  assert.equal(regularRecovery, null);
 
   const staleReply = validReplyRow();
   staleReply.text = "Changed after the reply proof was issued.";

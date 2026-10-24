@@ -39,6 +39,7 @@ function functionDefinition(sql, name) {
 
 const atomicMigration = readFileSync(join(repositoryRoot, "supabase/migrations/20261008102302_separate_banked_observations_and_associations.sql"), "utf8");
 const futureReplyMigration = readFileSync(join(repositoryRoot, "supabase/migrations/20261024100000_add_codex_future_reply_claim_guard.sql"), "utf8");
+const parentResetEventKeyMigration = readFileSync(join(repositoryRoot, "supabase/migrations/20261024130000_link_future_reply_estimate_to_parent_reset_event.sql"), "utf8");
 const schema = readFileSync(join(repositoryRoot, "tests/integration/codexFutureReplyAtomic.schema.sql"), "utf8");
 const assertions = readFileSync(join(repositoryRoot, "tests/integration/codexFutureReplyAtomic.assertions.sql"), "utf8");
 const twoSessionSeed = readFileSync(join(repositoryRoot, "tests/integration/codexFutureReplyAtomic.twoSessionSeed.sql"), "utf8");
@@ -252,7 +253,7 @@ try {
   process.stdout.write("loading actual v1/v2 functions and future-reply migration\n");
 
   const setupFile = join(tempRoot, "setup-and-assert.sql");
-  writeFileSync(setupFile, [schema, actualFunctions, futureReplyMigration, assertions].join("\n\n"), "utf8");
+  writeFileSync(setupFile, [schema, actualFunctions, futureReplyMigration, parentResetEventKeyMigration, assertions].join("\n\n"), "utf8");
   const twoSessionSeedFile = join(tempRoot, "two-session-seed.sql");
   writeFileSync(twoSessionSeedFile, twoSessionSeed, "utf8");
   const integrationOutput = run(psql, psqlArgs(port, ["-f", setupFile]));

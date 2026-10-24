@@ -40,6 +40,8 @@ const USAGE_FIX_COMPENSATION_PATTERN =
   /(?:usage\s+(?:limits?|allowances?)|rate\s+limits?|quotas?|allowances?|codex\s+(?:usage\s+)?limits?|chatgpt\s+work\s+(?:usage\s+)?limits?)[\s\S]{0,240}\b(?:fix(?:es|ed)?|issue(?:s)?|problem(?:s)?|over[- ]?consum(?:e|ed|ption)|excess(?:ive)?\s+usage)\b|\b(?:fix(?:es|ed)?|issue(?:s)?|problem(?:s)?|over[- ]?consum(?:e|ed|ption)|excess(?:ive)?\s+usage)\b[\s\S]{0,240}(?:usage\s+(?:limits?|allowances?)|rate\s+limits?|quotas?|allowances?|codex\s+(?:usage\s+)?limits?|chatgpt\s+work\s+(?:usage\s+)?limits?)/i;
 const PERSONAL_RESET_PATTERN =
   /任意|manual\s+reset|banked\s+reset|reset\s+credit|referral|account[- ]specific|招待|个人/i;
+const RESET_EVENT_PATTERN =
+  /\b(?:reset(?:s|ting|ted)?|quotas?|usage\s+limits?|rate\s+limits?|allowances?)\b|リセット|利用枠.{0,24}(?:復旧|更新|変更)|额度.{0,24}(?:重置|恢复|更新)/i;
 
 function getContextText(input: ResetReasonContext) {
   return [
@@ -70,6 +72,17 @@ function hasCompensationEvidence(input: ResetReasonContext) {
 
 function hasUsageFixCompensationEvidence(input: ResetReasonContext) {
   return USAGE_FIX_COMPENSATION_PATTERN.test(getContextText(input));
+}
+
+function isNonRegularResetEventContext(input: ResetReasonContext) {
+  const explicitCycleType = input.cycleType ?? input.details?.cycleType;
+  return Boolean(
+    explicitCycleType === "ランダムリセット" ||
+      explicitCycleType === "個人別リセット" ||
+      input.recordKind === "confirmed_global" ||
+      input.recordKind === "banked_distribution" ||
+      RESET_EVENT_PATTERN.test(getContextText(input)),
+  );
 }
 
 export const USER_COUNT_CELEBRATION_PATTERN =
@@ -128,5 +141,5 @@ export function normalizeResetReasonType(input: ResetReasonContext): ResetReason
     return "ご祝儀リセット";
   }
 
-  return undefined;
+  return isNonRegularResetEventContext(input) ? "ご祝儀リセット" : undefined;
 }

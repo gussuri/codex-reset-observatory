@@ -359,6 +359,8 @@ test("hasManualResetDisplayName recognizes manual names across all locales and p
       resetItem({
         completed_at: "2026-08-31T00:00:00.000Z",
         closed_at: "2026-08-31T00:00:00.000Z",
+        status: "closed",
+        kind: "reset_completed",
         recordKind: "confirmed_global",
         presentation: "notice_backed_recovery",
         recoveryObservationId: "recovery-manual-localized-test",
@@ -381,6 +383,7 @@ test("hasManualResetDisplayName recognizes manual names across all locales and p
           recoveryStatus: "confirmed",
           recoveryObservedAt: "2026-08-31T00:00:00.000Z",
           recoveryConfirmedAt: "2026-08-31T00:01:00.000Z",
+          recoveryMatchedTiboTweetId: "2115000000000000201",
           fingerprint: "a".repeat(64),
         },
         apiKey: "test-gemini-key",
@@ -416,6 +419,8 @@ test("preserves a human-approved AI title when confirmed completion evidence cha
       resetItem({
         completed_at: observedAt,
         closed_at: observedAt,
+        status: "closed",
+        kind: "reset_completed",
         recordKind: "confirmed_global",
         presentation: "notice_backed_recovery",
         recoveryObservationId,
@@ -442,6 +447,7 @@ test("preserves a human-approved AI title when confirmed completion evidence cha
           recoveryStatus: "confirmed",
           recoveryObservedAt: observedAt,
           recoveryConfirmedAt: "2026-08-31T00:01:00.000Z",
+          recoveryMatchedTiboTweetId: "2115000000000000201",
           fingerprint: "f".repeat(64),
         },
         apiKey: "test-gemini-key",

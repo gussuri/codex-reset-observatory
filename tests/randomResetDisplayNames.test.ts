@@ -353,7 +353,7 @@ test("input hashes and stored result reuse are idempotent", () => {
   });
   assert.equal(shouldReuseResetDisplayNameResult(record, hash, "gemini-3.5-flash-lite"), true);
   assert.equal(shouldReuseResetDisplayNameResult(record, "different", "gemini-3.5-flash-lite"), false);
-  assert.equal(shouldReuseResetDisplayNameResult({ ...record, ai_status: "api_error" }, hash, "gemini-3.5-flash-lite"), false);
+  assert.equal(shouldReuseResetDisplayNameResult({ ...record, ai_status: "api_error" }, hash, "gemini-3.5-flash-lite"), true);
 });
 
 test("existing accepted v1 names are preserved and source-less events skip Gemini", () => {

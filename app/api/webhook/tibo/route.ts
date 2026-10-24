@@ -31,7 +31,6 @@ import {
   upsertResetExecutionEstimate,
 } from "@/lib/codexUsageRecoveryStore";
 import { USAGE_TIBO_MATCH_WINDOW_MS, type CodexRecoveryObservation } from "@/lib/codexUsageRecovery";
-import type { ResetExecutionEstimate } from "@/lib/radar/resetExecution";
 import { getUsageMonitorCoverageAtEvent } from "@/lib/codexUsageMonitorCoverage";
 import {
   buildFormalAdoptionResult,
@@ -81,16 +80,7 @@ import {
   isTiboTranslationValid,
   normalizeTiboTranslationValue,
 } from "@/lib/radar/tiboTranslationValidation";
-import {
-  ensureResetDisplayNameForEvent,
-} from "@/lib/radar/resetDisplayNameStore";
-import { ensureResetEventMetadataForEvent } from "@/lib/radar/resetEventMetadataStore";
-import { RANDOM_RESET_NAME_MODEL } from "@/lib/radar/randomResetNaming";
-import {
-  buildMonitorConfirmedResetCopyContext,
-  fetchMonitorResetCopySourceRows,
-  type MonitorResetCopySourceRow,
-} from "@/lib/radar/monitorResetCopyLifecycle";
+import { generateMonitorResetCopyFromPersistedEvent } from "@/lib/radar/monitorResetCopyGeneration";
 import { isBearerAuthorizationValid } from "@/lib/security/bearerAuth";
 import {
   getTemporalNoticeExpiry,
@@ -436,19 +426,28 @@ async function reconcileVerifiedFutureReply(
   tweetId: string,
 ) {
   const { proof, error: proofError } = await loadVerifiedFutureReplyProof(client, tweetId);
-  if (proofError) return { pendingCacheInvalidation: null, error: proofError };
-  if (!proof) return { pendingCacheInvalidation: null, error: null };
+  if (proofError) return { pendingCacheInvalidation: null, canonicalEventKey: null, error: proofError };
+  if (!proof) return { pendingCacheInvalidation: null, canonicalEventKey: null, error: null };
 
   const response = await client.rpc("reconcile_codex_future_reply_notice", {
     p_tweet_id: tweetId,
     p_expected_proof: proof,
   });
-  if (response.error) return { pendingCacheInvalidation: null, error: response.error };
+  if (response.error) return { pendingCacheInvalidation: null, canonicalEventKey: null, error: response.error };
   const result = response.data && typeof response.data === "object" && !Array.isArray(response.data)
     ? response.data as Record<string, unknown>
     : null;
-  if (!result) return { pendingCacheInvalidation: null, error: new Error("Future reply reconciliation returned an invalid result") };
-  if (result.needs_cache_invalidation !== true) return { pendingCacheInvalidation: null, error: null };
+  if (!result) return { pendingCacheInvalidation: null, canonicalEventKey: null, error: new Error("Future reply reconciliation returned an invalid result") };
+  const linked = result.status === "linked" || result.status === "already_linked";
+  const canonicalEventKey = linked && typeof result.reset_event_key === "string" && result.reset_event_key.trim()
+    ? result.reset_event_key.trim()
+    : null;
+  if (linked && !canonicalEventKey) {
+    return { pendingCacheInvalidation: null, canonicalEventKey: null, error: new Error("Future reply reconciliation omitted its persisted event key") };
+  }
+  if (result.needs_cache_invalidation !== true) {
+    return { pendingCacheInvalidation: null, canonicalEventKey, error: null };
+  }
 
   const pending = {
     event_key: result.event_key,
@@ -457,9 +456,27 @@ async function reconcileVerifiedFutureReply(
     reset_event_key: result.reset_event_key,
   };
   if (Object.values(pending).some((value) => typeof value !== "string" || !value)) {
-    return { pendingCacheInvalidation: null, error: new Error("Future reply cache retry identity was incomplete") };
+    return { pendingCacheInvalidation: null, canonicalEventKey, error: new Error("Future reply cache retry identity was incomplete") };
   }
-  return { pendingCacheInvalidation: pending as FutureReplyCacheInvalidation, error: null };
+  return { pendingCacheInvalidation: pending as FutureReplyCacheInvalidation, canonicalEventKey, error: null };
+}
+
+async function generateMonitorResetCopyBestEffort(
+  client: ReturnType<typeof getSupabaseServiceClient>,
+  identity: { recoveryObservationId: string } | { canonicalEventKey: string },
+) {
+  try {
+    const generation = await generateMonitorResetCopyFromPersistedEvent(client, identity);
+    if (generation.status === "deferred") {
+      console.info("[Webhook] Monitor-backed reset copy generation deferred", {
+        reason: generation.reason,
+      });
+    }
+  } catch {
+    console.warn("[Webhook Warning] Monitor-backed reset copy generation skipped", {
+      reason: "best_effort_failed",
+    });
+  }
 }
 
 async function serializeTiboEvidenceContext(
@@ -763,6 +780,11 @@ async function handleTiboWebhookPost(
                   reason: "reconciliation_failed",
                 });
                 return NextResponse.json({ error: "Future reply reconciliation unavailable" }, { status: 503 });
+              }
+              if (reconciliation.canonicalEventKey) {
+                await generateMonitorResetCopyBestEffort(supabase, {
+                  canonicalEventKey: reconciliation.canonicalEventKey,
+                });
               }
               if (reconciliation.pendingCacheInvalidation &&
                 !await finishFutureReplyCacheInvalidation(
@@ -1657,7 +1679,6 @@ async function handleTiboWebhookPost(
     let formalFlowCluster: Awaited<ReturnType<typeof findFormalTiboResetCluster>> | null = null;
     let formalFlowSourceTweetIds: string[] = [];
     let formalEnrichmentFailed = false;
-    let monitorCompletionEstimate: ResetExecutionEstimate | null = null;
     let monitorCompletionObservation: CodexRecoveryObservation | null = null;
 
     if (shouldResolveFormalFlow && !editIdentityFlowBlocked) {
@@ -2015,77 +2036,11 @@ async function handleTiboWebhookPost(
                 console.warn("[Tibo Warning] Reset execution estimate write failed", {
                   reason: "database_error",
                 });
-              } else {
-                monitorCompletionEstimate = estimateResult.estimate;
               }
             }
           }
         }
 
-        if (!formalEnrichmentFailed) {
-          try {
-            const displayNameSourceTweetIds = Array.from(new Set([
-              ...(adoptionResolution?.logicalPostTweetIds ?? []),
-              ...(formalFlowCluster?.sourceTweetIds ?? []),
-            ]));
-            const sourceRowsResult = await fetchMonitorResetCopySourceRows(
-              supabase,
-              displayNameSourceTweetIds,
-            );
-            if (sourceRowsResult.error) {
-              console.warn("[Webhook Warning] Canonical Tibo naming context lookup failed", {
-                reason: "lookup_failed",
-              });
-            } else if (monitorCompletionEstimate && monitorCompletionObservation) {
-              const completionContext = buildMonitorConfirmedResetCopyContext({
-                estimate: monitorCompletionEstimate,
-                recoveryObservation: monitorCompletionObservation,
-                sourceRows: sourceRowsResult.rows,
-                candidate: effectiveFormalCandidate as unknown as MonitorResetCopySourceRow,
-              });
-              if (!completionContext) {
-                console.info("[Webhook] Reset copy generation deferred until verified event context is available", {
-                  reason: "insufficient_monitor_source_evidence",
-                });
-              } else {
-                const generationOptions = {
-                  canonicalEventKey: completionContext.evidence.eventKey,
-                  sourcePostText: completionContext.sourceContext,
-                  sourceTweetId: completionContext.sourceTweetId,
-                  monitorEvidence: completionContext.evidence,
-                  apiKey: process.env.GEMINI_API_KEY?.trim() || null,
-                  model: RANDOM_RESET_NAME_MODEL,
-                  timeoutMs: 8_000,
-                };
-                const displayNameResult = await ensureResetDisplayNameForEvent(
-                  completionContext.item,
-                  generationOptions,
-                );
-                if (["api_error", "read_error", "write_conflict"].includes(displayNameResult.status)) {
-                  console.warn("[Webhook Warning] Reset display-name generation skipped", {
-                    reason: "best_effort_failed",
-                    status: displayNameResult.status,
-                  });
-                }
-
-                const eventMetadataResult = await ensureResetEventMetadataForEvent(
-                  completionContext.item,
-                  generationOptions,
-                );
-                if (["api_error", "read_error", "write_error", "write_conflict", "generation_error"].includes(eventMetadataResult.status)) {
-                  console.warn("[Webhook Warning] Reset event metadata generation skipped", {
-                    reason: "best_effort_failed",
-                    status: eventMetadataResult.status,
-                  });
-                }
-              }
-            }
-          } catch {
-            console.warn("[Webhook Warning] Reset display-name generation skipped", {
-              reason: "best_effort_failed",
-            });
-          }
-        }
       } catch {
         formalEnrichmentFailed = true;
         console.warn("[Tibo Warning] Codex recovery reconciliation unavailable", {
@@ -2163,6 +2118,17 @@ async function handleTiboWebhookPost(
         return NextResponse.json({ error: "Future reply reconciliation unavailable" }, { status: 503 });
       }
       futureReplyCacheInvalidation = reconciliation.pendingCacheInvalidation;
+      if (reconciliation.canonicalEventKey) {
+        await generateMonitorResetCopyBestEffort(supabase, {
+          canonicalEventKey: reconciliation.canonicalEventKey,
+        });
+      }
+    }
+
+    if (monitorCompletionObservation?.id) {
+      await generateMonitorResetCopyBestEffort(supabase, {
+        recoveryObservationId: monitorCompletionObservation.id,
+      });
     }
 
     const newlyAdopted = adoptionClaim?.status === "claimed_new";

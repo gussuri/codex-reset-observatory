@@ -244,14 +244,14 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
     assert.ok(event.sourceTweetIds?.includes("2087706104814023111"));
   });
 
-  it("未知のnotice-backed eventはreasonTypeをご祝儀リセットへfallbackする", () => {
+  it("未知のnotice-backed reset event uses the ご祝儀 operational reason default", () => {
     const events = findNoticeBackedRecoveryEvents(
       [sampleNotice],
       [sampleRecovery],
       [{ ...sampleEstimate, resetEventKey: "tibo-reset-unknown" }],
     );
     assert.equal(events.length, 1);
-    assert.equal(events[0].details?.reasonType, undefined);
+    assert.equal(events[0].details?.reasonType, "ご祝儀リセット");
   });
 
   it("rate-limit compensation notice uses its explicit title and reason", () => {

@@ -38,7 +38,7 @@ source facts
 | --- | --- | --- | --- |
 | `recordKind` | event record の種類 | 型で `confirmed_global`、`banked_distribution`、`reference`、`regular_completed` を持つ。既知値は保持し、`getHistoryRecordKind()` の未知値 fallback は `reference`。 | `recordKind` は cycle/reason の別名ではない。BANKED、reference、regular occurrence の扱いを保つ。 |
 | `cycleType` | リセットの周期・イベント種別 | canonical 値は `ランダムリセット`、`定期リセット`、`個人別リセット`。regular context、personal/banked context、または明示値から `inferResetCycleType()` が決める。 | cycle は reason ではない。random であることだけから祝賀理由を作らない。 |
-| `reasonType` | なぜ行われたか | canonical 値は `ご祝儀リセット`、`詫びリセット`、`定期更新`。`normalizeResetReasonType()` の意味は後述。 | reason が未確認なら空/unknown 相当を許容し、reason 表示を省略できる。 |
+| `reasonType` | なぜ行われたか | canonical 値は `ご祝儀リセット`、`詫びリセット`、`定期更新`。非定期 reset event に明示的な詫び理由がない場合、`ご祝儀リセット` は運用上の既定カテゴリ。 | 既定カテゴリだけから祝賀・milestone・原因を公開文面へ加えない。reset event context 自体がない場合は reason を未設定にできる。 |
 | `resetMethod` | どの仕組みで利用枠を変更したか | 既存値は `強制リセット`、`任意リセット権配布`、`利用上限更新`、`リセット実施`。 | forced reset と BANKED credit distribution を混同しない。 |
 | `scope` | 実際に reset/credit が適用される対象 | 通常の global random reset は canonical/internal では原則 `全有料プラン`。限定配布は明示された限定対象を保持する。 | `全有料プラン` は default scope としてUIの「対象」行を隠す。特殊 scope だけ表示する。 |
 | `noticeType` | notice/teaser の有無と種類 | `公式予告あり`、`公式告知あり`、`告知投稿あり`、`匂わせ投稿あり`、`予告あり`、`予告なし`、`なし` 等の既存値を保持し、presentation では announcement/teaser/none にまとめる。 | notice の存在は execution time や scope の代用品ではない。 |
@@ -72,7 +72,7 @@ notice-to-execution は notice と execution の差を人間向けに表す deri
 ### Canonical meaning
 
 - **`詫びリセット`**: 障害、不具合、品質劣化、誤った制限、過剰消費、補償、incident 対応などへの reset。
-- **`ご祝儀リセット`**: milestone、記念、祝賀、キャンペーン、サービス施策などの reset。
+- **`ご祝儀リセット`**: milestone、記念、祝賀、キャンペーン、サービス施策などが明示された reset。これらの根拠がない非定期 reset event では、別の原因を意味しない運用上の既定カテゴリとして使う。
 - **`定期更新`**: 通常の weekly/regular cycle。
 
 ### 現在の実装順序
@@ -82,12 +82,13 @@ notice-to-execution は notice と execution の差を人間向けに表す deri
 1. regular context または legacy の `通常更新` を `定期更新` にする。
 2. canonical な明示 reason を保持する。
 3. incident/compensation または usage-limit fix の evidence を `詫びリセット` にする。
-4. celebration/milestone 等の evidence を `ご祝儀リセット` にする。
-5. 根拠がなければ `undefined` を返す。
+4. celebration/milestone 等の明示 evidence を `ご祝儀リセット` にする。
+5. それ以外でも、明示 cycle、canonical reset record kind、または reset event の文脈があれば `ご祝儀リセット` を運用上の既定カテゴリとして返す。
+6. reset event の文脈もない場合は `undefined` を返す。
 
-明示された legacy input の `reasonType = ランダムリセット` または `その他` は、既存 compatibility とテストのため現在 `ご祝儀リセット` へ normalize されます。これは「根拠のない reason を常にご祝儀へ fallback する」規則ではありません。新しい分類で根拠不足を埋めるためにこの例外を拡張してはいけません。
+明示された legacy input の `reasonType = ランダムリセット` または `その他` も `ご祝儀リセット` へ normalize されます。非定期 reset event に対する既定カテゴリは internal taxonomy と表示ラベルの分類であり、公開 summary/note で祝賀や原因を主張する根拠にはなりません。生成 metadata は source-grounded な説明と内部 audit rationale を分けて保存します。
 
-根拠不足の場合は、無理に `ご祝儀リセット` を作らず、reason を unknown 相当にして公開 reason 行を省略できる設計にします。自動生成 Tibo history では event 自体を保持しつつ reason が空になる場合があり、`tests/tiboFormalHistory.test.ts` の保守的な scope/reason test がこの境界を示します。
+入力に reset event context がまったくない場合だけ `undefined` を返します。自動生成 Tibo history では、event 自体を保持しながら reset event の文脈がない場合に限り reason を未設定にできます。
 
 ## 4. Scope normalization と presentation
 
@@ -136,7 +137,7 @@ Production の 2026-09-12 record では、notice tweet `2098612714704891959` と
 - notice-backed recovery は public-valid execution estimate と recovery observation を確認し、notice は provenance/説明の evidence として使う。
 - `resolveTiboResetEventIdentity()` の identity evidence は、ledger、estimate、static history、dynamic event を照合する。resolver 内の match priority は概ね ledger `500`、estimate `400/300`、static history `200`、dynamic `100` であり、これは event key の関連付け用で、reason の総合証拠順位ではない。
 - AI の display name や reason-like text は canonical event key や execution time を単独で決めない。
-- generic fallback は未分類を confirmed history に昇格させない。unknown record は `reference`、reason 不足は undefined となる既存 fallback を維持する。
+- generic fallback は未分類を confirmed history に昇格させない。unknown record は `reference` のままにする。reset event context が存在するときの運用上の既定 reason は `ご祝儀リセット` だが、context がない場合は未設定にする。
 
 新しい処理では、AI 解釈だけを authoritative execution の代用にしないこと、notice だけで completed event を作らないことを守ります。
 
@@ -154,6 +155,8 @@ monitor observation の `matchedTiboTweetId` は、実行済み投稿との一�
 AI confidence、`verification_status = confirmed`、manual execution-time override、adoption ledger、完了を示す投稿文だけではこの gate を通過しません。手動 estimate は monitor observation がない限り公開 completed history・確率境界へ入りません。invalid estimate の重複が先に届いても、後続の valid copy を捨てず、retry/duplicate delivery の順序で canonical event を変えません。
 
 この gate は formal history の生成前に適用し、history 表示だけでなく共通 canonical history を使う probability boundary と public recovery projection に反映します。既存の `data/resetHistory.ts` にある static archive は legacy authority として維持し、遡及的な backfill / rewrite は行いません。static archive に入っていない legacy AI-confirmed signal を、AI確認済みという理由だけで例外扱いしません。regular reset と BANKED distribution はそれぞれ既存の専用経路を維持します。
+
+reset title/summary/note の生成は formal Tibo completion の admission とは別の gate です。既に保存された canonical monitor event、execution estimate、`observed` または `confirmed` の recovery observation が整合する場合に生成できます。`observed` は観測済みという意味で、`confirmedAt` や matched Tibo completion ID を要求しません。これだけで Tibo 投稿を formal completion へ昇格させることはありません。厳密に検証され、execution window と重なる将来の verified reply notice は source context として含められます。通常 reply、quote、古い proof、別 event の投稿は含めません。BANKED title/metadata は canonical grant-backed event とその official notice を別の authority として使い、global reset の monitor gate を置き換えません。
 
 monitor gate 導入前に公開済みだった announcement-fallback 履歴のうち、健康かつ非staleの公開API snapshot（`checkedAt=2026-10-23T11:00:01.004Z`）に存在し、従来の `data/resetHistory.ts` に含まれていなかった次の3件だけを、元のevent keyと公開内容を保つ static archive row として追加します。時刻は公開済みの announcement fallback のまま `executionTimePrecision = announcement_fallback` とし、monitor観測時刻へ読み替えません。各行の notice/completion tweet ID、元の signal/window、source URL、空のscope、JA/EN/ZHのtitle・summary・noteを同snapshotに固定します。
 
@@ -265,7 +268,7 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 ## 10. やってはいけないこと
 
 - `Hi Astra users` だけを根拠に `scope = Astraユーザー` とする。
-- completion tweet に reason がないから自動で `ご祝儀リセット` にする。
+- 運用上の既定 `ご祝儀リセット` だけから祝賀、milestone、release との関係、または具体的な原因を公開文面へ書く。
 - AI display name から `reasonType`、`cycleType`、scope を逆算する。
 - note/summary の文章を canonical reason として扱う。
 - default scope `全有料プラン` を毎回公開UIに表示する。内部値を消すことも同様に誤り。
@@ -280,12 +283,12 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 
 現行コードには、legacy input normalization、unknown record の `reference` fallback、static history の個別 correction など、互換性を守るための個別ルールがあります。random/Tibo scope labelは入力互換のために `全有料プラン`、`一部ユーザー`、または空へ正規化し、regular scopeは `全有料プラン`、`任意リセット未使用アカウント`、または空へ正規化します。これらは一つの理想的な evidence order に置き換えず、各 helper と既存テストを正本として扱います。
 
-今回追加するのは、Day N 見出しを時間根拠にしない Gemini 指示と temporal guard、日時を省く将来 summary / note の生成・検証ルール、versioned proof による reply 完了投稿の正式履歴 admission、および上述の monitor recovery gate です。migration は repository に含めますが、適用はしません。
+今回追加するのは、Day N 見出しを時間根拠にしない Gemini 指示と temporal guard、日時を省く将来 summary / note の生成・検証ルール、versioned proof による reply 完了投稿の正式履歴 admission、monitor recovery gate と、非定期 reset event に対する運用上の既定 reason です。migration は repository に含めますが、適用はしません。
 
 次は変更しません。
 
 - Production data、Supabase の本番 DB、過去履歴の backfill/relabel/rewrite
-- Tibo classification の既存 safety conditions、reason inference、proof のない投稿の採否
+- Tibo classification の既存 safety conditions、明示的な apology/compensation reason inference、proof のない投稿の採否。非定期 reset event の reason fallback は上記のとおり運用既定へ更新します。
 - BANKED/conditional semantics と probability eligibility。BANKED/conditional completion は reply proof でも forced-reset 履歴へ変換しない
 - public UI の既存フィールド構成、canonical reason/scope の表示ルール、履歴レイアウト（上記の将来 summary / note の日時表記ルールを除く）
 - probability formula、public-v1 schema、regular/BANKED の recovery source semantics

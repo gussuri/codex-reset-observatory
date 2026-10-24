@@ -117,7 +117,7 @@ test("invalid or incomplete metadata never becomes public history metadata", () 
     .recentHistory.find((historyItem) => historyItem.key === eventKey);
 
   assert.ok(item);
-  assert.equal(item.details?.reasonType, "");
+  assert.equal(item.details?.reasonType, "ご祝儀リセット");
   assert.equal(item.details?.scope, "");
   assert.notEqual(item.summary, "品質問題への対応リセット");
 });

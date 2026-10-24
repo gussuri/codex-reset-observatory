@@ -470,6 +470,36 @@ begin
   perform pg_temp.seed_estimate(v_id1, v_prev, v_obs, 'usage-reset-' || v_id1);
   v_result := public.reconcile_codex_future_reply_notice(v_reply, v_proof);
   perform pg_temp.assert_true(v_result ->> 'status' = 'linked', 'one authoritative observation with exact estimate links: ' || v_result::text);
+  perform pg_temp.assert_true(v_result ->> 'reset_event_key' = 'tibo-reset-' || v_parent, 'monitor-first linking uses the verified parent event key');
+  perform pg_temp.assert_true(
+    (select reset_event_key = 'tibo-reset-' || v_parent and tibo_primary_tweet_id = v_reply
+       from public.reset_execution_estimates where recovery_observation_id = v_id1),
+    'monitor-first linking rekeys the persisted estimate to the verified parent'
+  );
+
+  -- Rows linked by the earlier implementation may already carry a reply-key.
+  -- Replaying the same verified notice repairs both rows and requests cache
+  -- invalidation without producing a second claim.
+  update public.reset_execution_estimates
+     set reset_event_key = 'tibo-reset-' || v_reply
+   where recovery_observation_id = v_id1;
+  update public.codex_usage_future_reply_claims
+     set reset_event_key = 'tibo-reset-' || v_reply
+   where event_key = v_event;
+  v_result := public.reconcile_codex_future_reply_notice(v_reply, v_proof);
+  perform pg_temp.assert_true(v_result ->> 'status' = 'already_linked', 'replaying a linked verified notice remains idempotent');
+  perform pg_temp.assert_true(v_result ->> 'needs_cache_invalidation' = 'true', 'repairing an old event key requests cache invalidation');
+  perform pg_temp.assert_true(v_result ->> 'reset_event_key' = 'tibo-reset-' || v_parent, 'replayed claim returns the verified parent event key');
+  perform pg_temp.assert_true(
+    (select reset_event_key = 'tibo-reset-' || v_parent
+       from public.reset_execution_estimates where recovery_observation_id = v_id1),
+    'replay repairs the estimate event key'
+  );
+  perform pg_temp.assert_true(
+    (select reset_event_key = 'tibo-reset-' || v_parent
+       from public.codex_usage_future_reply_claims where event_key = v_event),
+    'replay repairs the persisted claim event key'
+  );
 
   raise notice 'codex future reply PostgreSQL assertions passed';
 end;

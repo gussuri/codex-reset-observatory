@@ -18,9 +18,7 @@ import {
   findBankedEstimateByExactObservation,
   findLatestBankedGrant,
   findRecentFormalTiboReset,
-  readCodexRecoveryObservationById,
   readCodexUsageMonitorState,
-  readResetExecutionEstimateByEventKey,
 } from "@/lib/codexUsageRecoveryStore";
 import {
   applyCodexUsageAtomicWrite,
@@ -47,14 +45,7 @@ import {
   NOTICE_LOOKBACK_MS,
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
-import { claimTiboFormalAdoption } from "@/lib/radar/tiboFormalAdoptionStore";
-import { ensureResetDisplayNameForEvent } from "@/lib/radar/resetDisplayNameStore";
-import { ensureResetEventMetadataForEvent } from "@/lib/radar/resetEventMetadataStore";
-import { RANDOM_RESET_NAME_MODEL } from "@/lib/radar/randomResetNaming";
-import {
-  buildMonitorConfirmedResetCopyContext,
-  fetchMonitorResetCopySourceRows,
-} from "@/lib/radar/monitorResetCopyLifecycle";
+import { generateMonitorResetCopyFromPersistedEvent } from "@/lib/radar/monitorResetCopyGeneration";
 import { PERSISTENT_OFFICIAL_NOTICE_IDS } from "@/lib/radar/officialNoticePolicy";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 import { buildBankedGrantObservationWrite } from "@/lib/codexUsageBankedGrant";
@@ -421,6 +412,7 @@ async function applyAtomicPlanOrRetry(
   now: Date,
   retryCount: number,
   onBankedAssociation?: (status: "accepted" | "pending" | "conflict" | "stale" | "failed") => void,
+  onPersistedObservationId?: (observationId: string) => void,
 ): Promise<NextResponse | null> {
   const result = plan.future_reply_claim
     ? await applyCodexUsageFutureReplyAtomicWrite(client, plan)
@@ -448,6 +440,7 @@ async function applyAtomicPlanOrRetry(
       onBankedAssociation?.(association.status);
     }
   }
+  if (result.result?.observationId) onPersistedObservationId?.(result.result.observationId);
   return null;
 }
 
@@ -547,6 +540,7 @@ async function processCodexUsageSnapshot(
   let bankedAssociationStatus: "none" | "accepted" | "pending" | "conflict" | "stale" | "failed" = "none";
   const applyPlan = (
     plan: ReturnType<typeof buildCodexUsageAtomicWritePlan>,
+    onPersistedObservationId?: (observationId: string) => void,
   ) => applyAtomicPlanOrRetry(
     client,
     plan,
@@ -554,6 +548,7 @@ async function processCodexUsageSnapshot(
     now,
     retryCount,
     (status) => { bankedAssociationStatus = status; },
+    onPersistedObservationId,
   );
   const hasBankedObservation = Boolean(bankedGrantObservationWrite);
   const invalidateBankedProjection = async () => {
@@ -808,8 +803,9 @@ async function processCodexUsageSnapshot(
         : [toTiboNoticeSignal(noticeSignal)];
       const representativeNotice = selectRepresentativeTiboNotice(normalizedRelatedNoticeSignals)!;
       const firstAnnouncement = normalizedRelatedNoticeSignals[0] ?? representativeNotice;
+      const eventAnchorTweetId = recoveryNotice.futureReplyClaim?.eventKey || firstAnnouncement.tweet_id;
       const estimate = buildResetExecutionEstimate({
-        resetEventKey: `tibo-reset-${firstAnnouncement.tweet_id}`,
+        resetEventKey: `tibo-reset-${eventAnchorTweetId}`,
         tiboAnnouncedAt: firstAnnouncement.tweet_created_at,
         tiboPrimaryTweetId: representativeNotice.tweet_id,
         tiboSourceTweetIds: normalizedRelatedNoticeSignals.map((relatedNotice) => relatedNotice.tweet_id),
@@ -915,86 +911,26 @@ async function processCodexUsageSnapshot(
       { monitorObserved: true },
     );
   }
-  const atomicResponse = await applyPlan(plan);
+  let persistedObservationId: string | null = null;
+  const atomicResponse = await applyPlan(plan, (observationId) => {
+    persistedObservationId = observationId;
+  });
   if (atomicResponse) return atomicResponse;
 
-  if (matchingTibo.tweetId && executionEstimate) {
+  if (executionEstimate && persistedObservationId) {
     try {
-      const resetEventKey = executionEstimate.reset_event_key;
-      const sourceTweetIds = executionEstimate.tibo_source_tweet_ids ?? [matchingTibo.tweetId];
-      const primaryTweetId = executionEstimate.tibo_primary_tweet_id ?? matchingTibo.tweetId;
-      if (matchingTibo.needsPromotion) {
-        const adoption = await claimTiboFormalAdoption(client, {
-          logicalPostId: primaryTweetId,
-          logicalPostTweetIds: [primaryTweetId],
-          resetEventKey,
-          representativeTweetId: primaryTweetId,
-          sourceTweetIds,
-          claimSource: "new_adoption",
-          identitySource: "none",
-          adoptedAt: receivedAt,
-          claimedAt: receivedAt,
-        });
-        if (adoption.status === "error" || adoption.status === "conflict" ||
-          adoption.record?.resetEventKey !== resetEventKey) {
-          throw new Error("Formal adoption identity was not confirmed");
-        }
-      }
-
-      // The generation input must be a canonical history event reconstructed
-      // from the persisted monitor estimate and its confirmed observation.
-      const estimateResult = await readResetExecutionEstimateByEventKey(client, resetEventKey);
-      if (estimateResult.error || !estimateResult.estimate?.recoveryObservationId) {
-        throw new Error("Persisted monitor execution estimate unavailable");
-      }
-      const recoveryResult = await readCodexRecoveryObservationById(
-        client,
-        estimateResult.estimate.recoveryObservationId,
-      );
-      if (recoveryResult.error || !recoveryResult.observation) {
-        throw new Error("Persisted monitor recovery observation unavailable");
-      }
-      const sourceResult = await fetchMonitorResetCopySourceRows(
-        client,
-        [
-          ...estimateResult.estimate.tiboSourceTweetIds,
-          ...(estimateResult.estimate.officialNoticeTweetId
-            ? [estimateResult.estimate.officialNoticeTweetId]
-            : []),
-        ],
-      );
-      if (sourceResult.error) {
-        throw new Error("Canonical Tibo source rows unavailable");
-      }
-      const completionContext = buildMonitorConfirmedResetCopyContext({
-        estimate: estimateResult.estimate,
-        recoveryObservation: recoveryResult.observation,
-        sourceRows: sourceResult.rows,
+      const generation = await generateMonitorResetCopyFromPersistedEvent(client, {
+        recoveryObservationId: persistedObservationId,
       });
-      if (!completionContext) {
-        console.info("[Codex usage] Reset copy generation deferred", {
-          reason: "insufficient_monitor_source_evidence",
-        });
-      } else {
-        const generationOptions = {
-          canonicalEventKey: completionContext.evidence.eventKey,
-          sourcePostText: completionContext.sourceContext,
-          sourceTweetId: completionContext.sourceTweetId,
-          monitorEvidence: completionContext.evidence,
-          apiKey: process.env.GEMINI_API_KEY?.trim() || null,
-          model: RANDOM_RESET_NAME_MODEL,
-          timeoutMs: 8_000,
-        };
-        await ensureResetDisplayNameForEvent(completionContext.item, generationOptions);
-        await ensureResetEventMetadataForEvent(completionContext.item, {
-          ...generationOptions,
-          supabase: client,
+      if (generation.status === "deferred") {
+        console.info("[Codex usage] Monitor-backed reset copy generation deferred", {
+          reason: generation.reason,
         });
       }
-    } catch (promotionError) {
-      console.warn("[Codex usage] Monitor-confirmed reset copy generation deferred", {
+    } catch (generationError) {
+      console.warn("[Codex usage] Monitor-backed reset copy generation deferred", {
         reason: "best_effort_failed",
-        error: promotionError instanceof Error ? promotionError.message : String(promotionError),
+        error: generationError instanceof Error ? generationError.message : String(generationError),
       });
     }
   }
@@ -1020,9 +956,7 @@ async function processCodexUsageSnapshot(
       ? "confirmed"
       : teaserEstimateObserved
         ? "teaser_corroborated"
-        : estimateObserved
-          ? "confirmed"
-          : "observed_unconfirmed",
+        : "observed_unconfirmed",
   );
 }
 

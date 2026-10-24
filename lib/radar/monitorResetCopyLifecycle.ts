@@ -26,6 +26,7 @@ import {
   type FormalTiboResetSignal,
   type TiboNoticeSignal,
 } from "./tiboHistory";
+import { isVerifiedTiboFutureReplyNoticeInExecutionWindow } from "./tiboFutureReplyNotice";
 import type { ResetDisplayNameSourceRow } from "./resetDisplayNameSourceContext";
 import type { WindowEventLike } from "./types";
 
@@ -34,9 +35,10 @@ export type MonitorResetCopySourceRow = ResetDisplayNameSourceRow;
 export type MonitorResetCopyEvidence = {
   eventKey: string;
   recoveryObservationId: string;
-  recoveryStatus: "confirmed";
+  recoveryStatus: "observed" | "confirmed";
   recoveryObservedAt: string;
-  recoveryConfirmedAt: string;
+  recoveryConfirmedAt: string | null;
+  recoveryMatchedTiboTweetId: string | null;
   fingerprint: string;
 };
 
@@ -47,7 +49,7 @@ export type MonitorConfirmedResetCopyContext = {
   evidence: MonitorResetCopyEvidence;
 };
 
-type SourceRole = "notice" | "completion" | "verified reply completion";
+type SourceRole = "notice" | "completion" | "verified reply notice" | "verified reply completion";
 
 type UsableSource = {
   row: MonitorResetCopySourceRow;
@@ -56,7 +58,7 @@ type UsableSource = {
 };
 
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
-const LIFECYCLE_CONTRACT = "monitor-confirmed-reset-copy-v1";
+const LIFECYCLE_CONTRACT = "monitor-backed-reset-copy-v2";
 
 function isMissingReplyProofColumnsError(error: unknown) {
   if (!error || typeof error !== "object") return false;
@@ -65,7 +67,7 @@ function isMissingReplyProofColumnsError(error: unknown) {
     .filter((item): item is string => typeof item === "string")
     .join(" ");
   return (value.code === "PGRST204" || value.code === "42703" || /column|schema cache|does not exist/i.test(message)) &&
-    /formal_reply_admission_proof|source_context_|ai_contextual_reset_|ai_temporal_|ai_signal_type|ai_confidence|ai_classification_status|ai_evidence_quote|classification_source/i.test(message);
+    /formal_reply_admission_proof|source_context_|ai_contextual_reset_|ai_temporal_|ai_notice_timing_status|ai_signal_type|ai_confidence|ai_classification_status|ai_evidence_quote|classification_source|reply_to_handles|reply_context_text|expected_(?:start|end)_at|temporal_(?:expression|kind|precision|timezone|confidence|resolution_status|resolution_version)/i.test(message);
 }
 
 export async function fetchMonitorResetCopySourceRows(
@@ -75,7 +77,7 @@ export async function fetchMonitorResetCopySourceRows(
   const ids = Array.from(new Set(sourceTweetIds.map((id) => id.trim()).filter(Boolean)));
   if (ids.length === 0) return { rows: [], error: null };
 
-  const fullColumns = "tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,is_reply,is_quote,classification_source,ai_signal_type,ai_confidence,ai_classification_status,ai_temporal_direction,ai_evidence_quote,source_context_revision_hashes,source_context_classified_revision_hashes,source_context_generation,formal_reply_admission_proof,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source";
+  const fullColumns = "tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,is_reply,is_quote,classification_source,ai_signal_type,ai_confidence,ai_classification_status,ai_temporal_direction,ai_notice_timing_status,ai_evidence_quote,ai_temporal_expression,ai_contextual_reset_assessment,ai_contextual_reset_tweet_id,reply_to_handles,reply_context_text,quote_context_text,quote_tweet_url,quote_author_handle,source_context_snapshot,source_context_revision_hashes,source_context_classified_revision_hashes,source_context_generation,formal_reply_admission_proof,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,expected_start_at,expected_end_at,temporal_resolution_status,temporal_resolution_version,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source";
   let result: { data: any; error: any } = await supabase
     .from("tibo_signals")
     .select(fullColumns)
@@ -87,7 +89,6 @@ export async function fetchMonitorResetCopySourceRows(
       .from("tibo_signals")
       .select("tweet_id,text,tweet_url,tweet_created_at,signal_type,confidence,verification_status,is_reply,is_quote")
       .in("tweet_id", ids)
-      .eq("is_reply", false)
       .limit(32);
   }
   if (result.error) return { rows: [], error: result.error };
@@ -149,11 +150,19 @@ function classifySourceRow(
   row: MonitorResetCopySourceRow,
   canonicalSourceTweetIds: ReadonlySet<string>,
   eventKey: string,
+  executionWindow: { executionWindowStartAt: string | null; executionWindowEndAt: string | null },
 ): UsableSource | null {
   if (!isSourceRowForCanonicalEvent(row, canonicalSourceTweetIds)) return null;
 
   if (row.is_reply === true) {
-    if (row.is_quote === true || row.signal_type !== "reset_executed") return null;
+    if (row.is_quote === true) return null;
+    if (
+      row.signal_type === "official_notice" &&
+      isVerifiedTiboFutureReplyNoticeInExecutionWindow(row, executionWindow)
+    ) {
+      return { row, role: "verified reply notice", replyProof: null };
+    }
+    if (row.signal_type !== "reset_executed") return null;
     const replyProof = getRowReplyProof(row);
     if (!replyProof) return null;
     const proofIsSameEvent = replyProof.targetTweetId === row.tweet_id && (
@@ -164,6 +173,7 @@ function classifySourceRow(
     return { row, role: "verified reply completion", replyProof };
   }
 
+  if (row.is_quote === true) return null;
   if (row.signal_type === "official_notice" || row.signal_type === "teaser") {
     return { row, role: "notice", replyProof: null };
   }
@@ -240,6 +250,14 @@ function buildFingerprint(
         status: observation.status,
         confirmedAt: observation.confirmedAt,
         observedAt: observation.observedAt,
+        matchedTiboTweetId: observation.matchedTiboTweetId,
+        previousObservedAt: observation.previousObservedAt,
+        previousUsedPercent: observation.previousUsedPercent,
+        currentUsedPercent: observation.currentUsedPercent,
+        previousResetsAt: observation.previousResetsAt,
+        currentResetsAt: observation.currentResetsAt,
+        cycleHint: observation.cycleHint,
+        confidence: observation.confidence,
       },
       completionAt: estimate.displayExecutionAt,
       sources: normalizedSources,
@@ -253,7 +271,7 @@ function buildSourceContext(
   sources: readonly UsableSource[],
 ) {
   const lines = [
-    `[Usage Monitor recovery | event_key=${event.id} recovery_observation_id=${observation.id} status=${observation.status} observed_at=${observation.observedAt} confirmed_at=${observation.confirmedAt}]`,
+    `[Usage Monitor recovery | event_key=${event.id} recovery_observation_id=${observation.id} status=${observation.status} observed_at=${observation.observedAt} confirmed_at=${observation.confirmedAt ?? "none"}]`,
   ];
   for (let index = 0; index < sources.length; index += 1) {
     const source = sources[index]!;
@@ -281,18 +299,55 @@ export function isMonitorConfirmedResetCopyEvidence(
   const eventCompletedAt = parseTime(item.completed_at ?? item.closed_at ?? item.date);
   const observedAt = parseTime(evidence.recoveryObservedAt);
   const confirmedAt = parseTime(evidence.recoveryConfirmedAt);
+  const monitorStatusIsValid = evidence.recoveryStatus === "observed"
+    ? evidence.recoveryConfirmedAt === null && evidence.recoveryMatchedTiboTweetId === null
+    : evidence.recoveryStatus === "confirmed" &&
+      confirmedAt !== null &&
+      Boolean(evidence.recoveryMatchedTiboTweetId?.trim());
   return Boolean(
     item.recordKind === "confirmed_global" &&
+      item.kind === "reset_completed" &&
+      item.status?.trim().toLowerCase() === "closed" &&
+      item.details?.cycleType === "ランダムリセット" &&
       item.status?.trim().toLowerCase() !== "rejected" &&
       eventKey && eventKey === evidence.eventKey &&
       item.recoveryObservationId === evidence.recoveryObservationId &&
-      evidence.recoveryStatus === "confirmed" &&
+      monitorStatusIsValid &&
       observedAt !== null &&
       eventCompletedAt === observedAt &&
-      confirmedAt !== null &&
-      confirmedAt <= now.getTime() &&
+      (confirmedAt === null || confirmedAt <= now.getTime()) &&
       HASH_PATTERN.test(evidence.fingerprint),
   );
+}
+
+function hasBankedGrantAndNoticeAuthority(item: WindowEventLike) {
+  const eventKey = item.id?.trim() || item.guid?.trim() || "";
+  const sourceIds = new Set((item.sourceTweetIds ?? []).map((id) => id.trim()).filter(Boolean));
+  return Boolean(
+    item.recordKind === "banked_distribution" &&
+      item.kind === "reset_completed" &&
+      item.status?.trim().toLowerCase() === "closed" &&
+      item.details?.cycleType === "ランダムリセット" &&
+      item.details?.resetMethod === "任意リセット権配布" &&
+      item.details?.noticeType === "公式予告あり" &&
+      typeof item.officialNoticeTweetId === "string" &&
+      sourceIds.has(item.officialNoticeTweetId) &&
+      eventKey.length > 0 &&
+      !eventKey.includes("pending"),
+  );
+}
+
+/** BANKED copy has its own authority: an accepted canonical grant event with
+ * its linked official notice. Global events still require monitor evidence. */
+export function isResetCopyGenerationEvidenceValid(
+  item: WindowEventLike,
+  evidence: MonitorResetCopyEvidence | null | undefined,
+  now: Date = new Date(),
+) {
+  if (item.recordKind === "banked_distribution") {
+    return !evidence && hasBankedGrantAndNoticeAuthority(item);
+  }
+  return isMonitorConfirmedResetCopyEvidence(item, evidence, now);
 }
 
 export function buildMonitorConfirmedResetCopyContext(input: {
@@ -307,10 +362,21 @@ export function buildMonitorConfirmedResetCopyContext(input: {
     !estimate.resetEventKey.trim() ||
     !estimate.recoveryObservationId ||
     estimate.recoveryObservationId !== recoveryObservation.id ||
-    recoveryObservation.status !== "confirmed" ||
-    !recoveryObservation.confirmedAt ||
-    parseTime(recoveryObservation.confirmedAt) === null ||
+    (recoveryObservation.status !== "observed" && recoveryObservation.status !== "confirmed") ||
+    (recoveryObservation.status === "confirmed" && (
+      !recoveryObservation.confirmedAt ||
+      parseTime(recoveryObservation.confirmedAt) === null ||
+      !recoveryObservation.matchedTiboTweetId?.trim()
+    )) ||
+    (recoveryObservation.status === "observed" && (
+      recoveryObservation.confirmedAt != null ||
+      recoveryObservation.matchedTiboTweetId != null
+    )) ||
     parseTime(recoveryObservation.observedAt) === null ||
+    parseTime(recoveryObservation.previousObservedAt) === null ||
+    recoveryObservation.previousObservedAt! >= recoveryObservation.observedAt ||
+    recoveryObservation.confidence !== "strong" ||
+    recoveryObservation.cycleHint !== "unexpected" ||
     estimate.displayExecutionAt !== recoveryObservation.observedAt ||
     (estimate.manualOverrideAt || estimate.manualExecutionAt)
   ) {
@@ -330,7 +396,10 @@ export function buildMonitorConfirmedResetCopyContext(input: {
   ].map((tweetId) => tweetId.trim()).filter(Boolean));
   const sources = Array.from(uniqueRows.values())
     .flatMap((row) => {
-      const source = classifySourceRow(row, sourceTweetIds, estimate.resetEventKey);
+      const source = classifySourceRow(row, sourceTweetIds, estimate.resetEventKey, {
+        executionWindowStartAt: estimate.executionWindowStartAt ?? null,
+        executionWindowEndAt: estimate.executionWindowEndAt ?? null,
+      });
       return source ? [source] : [];
     })
     .sort(compareSources);
@@ -382,9 +451,10 @@ export function buildMonitorConfirmedResetCopyContext(input: {
   const evidence: MonitorResetCopyEvidence = {
     eventKey: estimate.resetEventKey,
     recoveryObservationId: recoveryObservation.id,
-    recoveryStatus: "confirmed",
+    recoveryStatus: recoveryObservation.status as "observed" | "confirmed",
     recoveryObservedAt: recoveryObservation.observedAt,
-    recoveryConfirmedAt: recoveryObservation.confirmedAt!,
+    recoveryConfirmedAt: recoveryObservation.confirmedAt ?? null,
+    recoveryMatchedTiboTweetId: recoveryObservation.matchedTiboTweetId ?? null,
     fingerprint,
   };
   if (!isMonitorConfirmedResetCopyEvidence(item, evidence, input.now ?? new Date())) return null;

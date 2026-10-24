@@ -6,7 +6,10 @@ import {
   ensureResetEventMetadataForEvent,
   hashResetEventMetadataInput,
 } from "../lib/radar/resetEventMetadataStore";
-import { RESET_EVENT_METADATA_PROMPT_VERSION } from "../lib/radar/resetEventMetadata";
+import {
+  RESET_EVENT_METADATA_PROMPT_VERSION,
+  type ResetEventMetadataResult,
+} from "../lib/radar/resetEventMetadata";
 import type { ResetDisplayNameRecord, WindowEventLike } from "../lib/radar/types";
 
 const eventKey = "tibo-reset-event-metadata-store";
@@ -27,6 +30,7 @@ const monitorEvidence = {
   recoveryStatus: "confirmed" as const,
   recoveryObservedAt: completedAt,
   recoveryConfirmedAt: "2026-09-13T00:02:00.000Z",
+  recoveryMatchedTiboTweetId: "completion-1",
   fingerprint: "a".repeat(64),
 };
 
@@ -52,7 +56,25 @@ const item: WindowEventLike = {
   },
 };
 
-const generated = {
+test("a notice-only global event cannot generate metadata without monitor authority", async () => {
+  let generatedCalls = 0;
+  const result = await ensureResetEventMetadataForEvent(item, {
+    canonicalEventKey: eventKey,
+    sourcePostText: sourceContext,
+    apiKey: "test-gemini-key",
+    now,
+    generate: async () => {
+      generatedCalls += 1;
+      return generated;
+    },
+  });
+
+  assert.equal(result.status, "skipped");
+  assert.equal(result.wrote, false);
+  assert.equal(generatedCalls, 0);
+});
+
+const generated: ResetEventMetadataResult = {
   reasonType: "詫びリセット" as const,
   scope: "全有料プラン" as const,
   summaryJa: "品質問題修正に伴うリセット",
@@ -63,6 +85,13 @@ const generated = {
   noteZh: "记录的原因是修复质量问题。",
   reasonJa: "品質問題への対応が明示されています。",
   scopeEvidence: "reset limits for all paid plans tonight",
+  status: "success",
+  flags: [],
+  model: "test-model",
+  promptVersion: RESET_EVENT_METADATA_PROMPT_VERSION,
+  latencyMs: 0,
+  httpStatus: 200,
+  retryAfterSeconds: null,
 };
 
 function record(overrides: Partial<ResetDisplayNameRecord> = {}): ResetDisplayNameRecord {
@@ -135,7 +164,9 @@ function ensureMetadata(
 ) {
   return ensureResetEventMetadataForEvent(event, {
     ...options,
-    monitorEvidence: options.monitorEvidence ?? monitorEvidence,
+    monitorEvidence: options.monitorEvidence ?? (
+      event.recordKind === "banked_distribution" ? undefined : monitorEvidence
+    ),
     now,
     model: options.model ?? "test-model",
   });
@@ -245,6 +276,49 @@ test("reuses a successful same-input row without a duplicate metadata generation
     });
 
     assert.equal(result.status, "reused");
+    assert.equal(result.wrote, false);
+    assert.equal(generatedCalls, 0);
+    assert.equal(mock.writes.length, 0);
+  } finally {
+    mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("does not retry Gemini for a failed same-input metadata fingerprint", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  const inputHash = hashResetEventMetadataInput({
+    completedAt,
+    sourceContext,
+    fallbackReasonType: "詫びリセット",
+    fallbackScope: "全有料プラン",
+    evidenceFingerprint: monitorEvidence.fingerprint,
+    model: "test-model",
+  });
+  const mock = setupStoreFetch(record({
+    event_metadata_status: "api_error",
+    event_metadata_input_hash: inputHash,
+  }));
+  let generatedCalls = 0;
+
+  try {
+    const result = await ensureMetadata(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      generate: async () => {
+        generatedCalls += 1;
+        return generated;
+      },
+    });
+
+    assert.equal(result.status, "previous_failure_reused");
     assert.equal(result.wrote, false);
     assert.equal(generatedCalls, 0);
     assert.equal(mock.writes.length, 0);
@@ -412,18 +486,21 @@ test("does not generate metadata for reference or regular history records", asyn
   assert.equal(generatedCalls, 0);
 });
 
-test("preserves BANKED conditional scope without changing its event kind", async () => {
+test("generates metadata for a canonical grant-backed BANKED event", async () => {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   process.env.SUPABASE_URL = "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
   const mock = setupStoreFetch();
-  const bankedItem: WindowEventLike = {
+  const bankedItem: WindowEventLike & { officialNoticeTweetId: string } = {
     ...item,
     recordKind: "banked_distribution",
     scope: "一部ユーザー",
+    officialNoticeTweetId: "notice-1",
     details: {
       ...item.details!,
+      resetMethod: "任意リセット権配布",
+      noticeType: "公式予告あり",
       scope: "一部ユーザー",
     },
   };
@@ -456,13 +533,13 @@ test("preserves BANKED conditional scope without changing its event kind", async
       },
     });
 
-    assert.equal(result.status, "skipped");
-    assert.equal(result.wrote, false);
+    assert.equal(result.status, "success");
+    assert.equal(result.wrote, true);
     assert.equal(bankedItem.recordKind, "banked_distribution");
     assert.equal(bankedItem.details?.scope, "一部ユーザー");
-    assert.equal(capturedFallbackScope, undefined);
-    assert.equal(generatedCalls, 0);
-    assert.equal(mock.writes.length, 0);
+    assert.equal(capturedFallbackScope, "一部ユーザー");
+    assert.equal(generatedCalls, 1);
+    assert.equal(mock.writes.length, 1);
   } finally {
     mock.restore();
     if (previousUrl === undefined) delete process.env.SUPABASE_URL;

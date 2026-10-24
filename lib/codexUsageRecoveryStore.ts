@@ -1496,6 +1496,21 @@ export async function readResetExecutionEstimateByEventKey(
   };
 }
 
+export async function readResetExecutionEstimateByRecoveryObservationId(
+  client: SupabaseClient<any>,
+  observationId: string,
+) {
+  const result = await client
+    .from("reset_execution_estimates")
+    .select(EXECUTION_ESTIMATE_COLUMNS)
+    .eq("recovery_observation_id", observationId)
+    .maybeSingle();
+  return {
+    estimate: toResetExecutionEstimate(result.data as ResetExecutionEstimateRow | null),
+    error: result.error,
+  };
+}
+
 export async function readCodexRecoveryObservationById(
   client: SupabaseClient<any>,
   observationId: string,

@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getCompletedResetTimestamp } from "./probability";
 import {
   generateResetEventMetadata,
+  RESET_EVENT_METADATA_MODEL,
   RESET_EVENT_METADATA_PROMPT_VERSION,
   type GeneratedResetReasonType,
   type ResetEventMetadataResult,
@@ -11,7 +12,7 @@ import {
 import { fetchResetDisplayNameByKey } from "./resetDisplayNameStore";
 import { getCanonicalResetDisplayNameEventKey, isAutoMetadataEligibleCanonicalEvent } from "./resetDisplayNameEligibility";
 import {
-  isMonitorConfirmedResetCopyEvidence,
+  isResetCopyGenerationEvidenceValid,
   type MonitorResetCopyEvidence,
 } from "./monitorResetCopyLifecycle";
 import { normalizeResetScope } from "./resetScope";
@@ -96,7 +97,9 @@ export function hashResetEventMetadataInput(input: {
 
 function getFallbackReasonType(item: WindowEventLike): GeneratedResetReasonType | null {
   const reason = item.details?.reasonType;
-  return reason === "詫びリセット" || reason === "ご祝儀リセット" ? reason : null;
+  return reason === "詫びリセット" || reason === "ご祝儀リセット"
+    ? reason
+    : "ご祝儀リセット";
 }
 
 function getFallbackScope(item: WindowEventLike) {
@@ -260,7 +263,7 @@ export async function ensureResetEventMetadataForEvent(
     !eventKey ||
     completedAtMs === null ||
     !isAutoMetadataEligibleCanonicalEvent(item, now) ||
-    !isMonitorConfirmedResetCopyEvidence(item, options.monitorEvidence, now)
+    !isResetCopyGenerationEvidenceValid(item, options.monitorEvidence, now)
   ) {
     return { eventKey, status: "skipped", wrote: false, skipped: true };
   }
@@ -303,10 +306,15 @@ export async function ensureResetEventMetadataForEvent(
   // Successful same-input metadata may contain human-edited summaries or notes.
   // A prompt upgrade alone must not overwrite that event-level correction.
   if (
-    existing?.event_metadata_status === "success" &&
+    existing?.event_metadata_status &&
     existing.event_metadata_input_hash === inputHash
   ) {
-    return { eventKey, status: "reused", wrote: false, skipped: true };
+    return {
+      eventKey,
+      status: existing.event_metadata_status === "success" ? "reused" : "previous_failure_reused",
+      wrote: false,
+      skipped: true,
+    };
   }
 
   const existingHashes = getAutoCopyHashes(existing);
@@ -331,7 +339,25 @@ export async function ensureResetEventMetadataForEvent(
       timeoutMs: options.timeoutMs,
     });
   } catch {
-    return { eventKey, status: "generation_error", wrote: false, skipped: true };
+    result = {
+      reasonType: null,
+      scope: null,
+      summaryJa: null,
+      summaryEn: null,
+      summaryZh: null,
+      noteJa: null,
+      noteEn: null,
+      noteZh: null,
+      reasonJa: null,
+      scopeEvidence: null,
+      status: "api_error",
+      flags: ["generation_exception"],
+      model: options.model ?? RESET_EVENT_METADATA_MODEL,
+      promptVersion: RESET_EVENT_METADATA_PROMPT_VERSION,
+      latencyMs: 0,
+      httpStatus: null,
+      retryAfterSeconds: null,
+    };
   }
 
   let freshExisting: ResetDisplayNameRecord | null;
