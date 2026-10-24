@@ -46,6 +46,7 @@
     "models:registry:check": "tsx scripts/generate-probability-model-registry.ts --check",
     "check": "pnpm test && pnpm run lint && pnpm run typecheck",
     "typecheck": "tsc --noEmit --pretty false",
+    "test:future-reply:postgres": "node scripts/integration/codex-future-reply-postgres.mjs",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {

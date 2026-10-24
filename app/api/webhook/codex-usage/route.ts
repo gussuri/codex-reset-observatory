@@ -157,7 +157,7 @@ type OfficialNoticeLookup = {
   noticeSignals: TiboNoticeSignal[];
   teaserSignal: ActiveTiboSignal | null;
   allSignals: ActiveTiboSignal[];
-  futureReplyClaim: { eventKey: string; replyTweetId: string } | null;
+  futureReplyClaim: { eventKey: string; replyTweetId: string; replyProof: Record<string, unknown> } | null;
   error: unknown;
 };
 
@@ -343,6 +343,12 @@ async function hasActiveOfficialNotice(
   const selectedFutureReply = activeNotice
     ? recoverySignals.find((signal) => signal.tweet_id === activeNotice.id && signal.is_reply === true)
     : undefined;
+  const futureReplyProof = selectedFutureReply
+    ? Object.fromEntries(NOTICE_COLUMNS.split(",").map((column) => [
+        column,
+        (selectedFutureReply as unknown as Record<string, unknown>)[column] ?? null,
+      ]))
+    : null;
   return {
     active: Boolean(activeNotice),
     noticeSignal: activeNotice ?? null,
@@ -350,7 +356,11 @@ async function hasActiveOfficialNotice(
     teaserSignal,
     allSignals: bankedAssociationSignals.signals,
     futureReplyClaim: selectedFutureReply?.ai_contextual_reset_tweet_id
-      ? { eventKey: selectedFutureReply.ai_contextual_reset_tweet_id, replyTweetId: selectedFutureReply.tweet_id }
+      ? {
+          eventKey: selectedFutureReply.ai_contextual_reset_tweet_id,
+          replyTweetId: selectedFutureReply.tweet_id,
+          replyProof: futureReplyProof!,
+        }
       : null,
     error: null,
   };
@@ -893,6 +903,7 @@ async function processCodexUsageSnapshot(
       reply_tweet_id: recoveryNotice.futureReplyClaim.replyTweetId,
       recovery_observed_at: snapshot.observedAt,
       reset_event_key: executionEstimate.reset_event_key,
+      reply_proof: recoveryNotice.futureReplyClaim.replyProof,
     };
     plan.future_reply_fallback_execution_estimate = buildResetExecutionEstimateWrite(
       fallbackEstimate,

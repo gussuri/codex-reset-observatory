@@ -117,6 +117,7 @@ export type CodexUsageAtomicWritePlan = {
     reply_tweet_id: string;
     recovery_observed_at: string;
     reset_event_key: string;
+    reply_proof: Record<string, unknown>;
   };
   future_reply_fallback_execution_estimate?: CodexUsageAtomicEstimateWrite;
   promotion?: CodexUsageAtomicPromotion;

@@ -20,15 +20,20 @@ set search_path = pg_catalog, public, extensions
 as $function$
 declare
   v_claim jsonb;
+  v_reply_proof jsonb;
   v_fallback_estimate jsonb;
   v_plan jsonb;
   v_event_key text;
   v_reply_tweet_id text;
   v_recovery_observed_at timestamptz;
   v_reset_event_key text;
+  v_signal public.tibo_signals%rowtype;
+  v_proof_row public.tibo_signals%rowtype;
+  v_monitor_state public.codex_usage_monitor_state%rowtype;
   v_existing public.codex_usage_future_reply_claims%rowtype;
   v_existing_found boolean := false;
   v_reuse_blocked boolean := false;
+  v_proof_changed boolean := true;
   v_result jsonb;
 begin
   if p_plan is null or jsonb_typeof(p_plan) <> 'object' then
@@ -36,6 +41,7 @@ begin
   end if;
 
   v_claim := p_plan -> 'future_reply_claim';
+  v_reply_proof := v_claim -> 'reply_proof';
   v_fallback_estimate := p_plan -> 'future_reply_fallback_execution_estimate';
   if v_claim is null or jsonb_typeof(v_claim) <> 'object' or
      v_fallback_estimate is null or jsonb_typeof(v_fallback_estimate) <> 'object' or
@@ -60,6 +66,107 @@ begin
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtext('codex-usage-future-reply:' || v_event_key)
   );
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtext('codex-usage-webhook:local-codex-app-server')
+  );
+  select * into v_monitor_state
+    from public.codex_usage_monitor_state
+   where source_key = 'local-codex-app-server'
+   for update;
+
+  if jsonb_typeof(v_reply_proof) = 'object' and
+     v_reply_proof ?& array[
+       'tweet_id', 'text', 'tweet_url', 'tweet_created_at', 'expires_at', 'signal_type',
+       'confidence', 'verification_status', 'classification_source', 'is_reply', 'is_quote',
+       'quote_context_text', 'quote_tweet_url', 'quote_author_handle', 'reply_to_handles',
+       'reply_context_text', 'source_context_snapshot', 'source_context_revision_hashes',
+       'source_context_classified_revision_hashes', 'source_context_generation', 'ai_confidence',
+       'ai_signal_type', 'ai_classification_status', 'ai_temporal_expression', 'ai_temporal_kind',
+       'ai_temporal_direction', 'ai_notice_timing_status', 'ai_evidence_quote',
+       'ai_contextual_reset_assessment', 'ai_contextual_reset_tweet_id', 'ai_temporal_precision',
+       'ai_temporal_timezone', 'ai_temporal_confidence', 'temporal_expression', 'temporal_kind',
+       'temporal_precision', 'temporal_timezone', 'temporal_confidence', 'temporal_resolution_source',
+       'temporal_resolution_version', 'expected_start_at', 'expected_end_at',
+       'temporal_resolution_status', 'logical_post_id', 'edit_history_tweet_ids', 'edit_version',
+       'edit_metadata_source'
+     ] then
+    select * into v_signal
+      from public.tibo_signals
+     where tweet_id = v_reply_tweet_id
+     for update;
+    if found then
+      begin
+        v_proof_row := pg_catalog.jsonb_populate_record(null::public.tibo_signals, v_reply_proof);
+        v_proof_changed :=
+          v_signal.tweet_id is distinct from v_proof_row.tweet_id or
+          v_signal.text is distinct from v_proof_row.text or
+          v_signal.tweet_url is distinct from v_proof_row.tweet_url or
+          v_signal.tweet_created_at is distinct from v_proof_row.tweet_created_at or
+          v_signal.expires_at is distinct from v_proof_row.expires_at or
+          v_signal.signal_type is distinct from v_proof_row.signal_type or
+          v_signal.confidence is distinct from v_proof_row.confidence or
+          v_signal.verification_status is distinct from v_proof_row.verification_status or
+          v_signal.classification_source is distinct from v_proof_row.classification_source or
+          v_signal.is_reply is distinct from v_proof_row.is_reply or
+          v_signal.is_quote is distinct from v_proof_row.is_quote or
+          v_signal.quote_context_text is distinct from v_proof_row.quote_context_text or
+          v_signal.quote_tweet_url is distinct from v_proof_row.quote_tweet_url or
+          v_signal.quote_author_handle is distinct from v_proof_row.quote_author_handle or
+          v_signal.reply_to_handles is distinct from v_proof_row.reply_to_handles or
+          v_signal.reply_context_text is distinct from v_proof_row.reply_context_text or
+          v_signal.source_context_snapshot is distinct from v_proof_row.source_context_snapshot or
+          v_signal.source_context_revision_hashes is distinct from v_proof_row.source_context_revision_hashes or
+          v_signal.source_context_classified_revision_hashes is distinct from v_proof_row.source_context_classified_revision_hashes or
+          v_signal.source_context_generation is distinct from v_proof_row.source_context_generation or
+          v_signal.ai_confidence is distinct from v_proof_row.ai_confidence or
+          v_signal.ai_signal_type is distinct from v_proof_row.ai_signal_type or
+          v_signal.ai_classification_status is distinct from v_proof_row.ai_classification_status or
+          v_signal.ai_temporal_expression is distinct from v_proof_row.ai_temporal_expression or
+          v_signal.ai_temporal_kind is distinct from v_proof_row.ai_temporal_kind or
+          v_signal.ai_temporal_direction is distinct from v_proof_row.ai_temporal_direction or
+          v_signal.ai_notice_timing_status is distinct from v_proof_row.ai_notice_timing_status or
+          v_signal.ai_evidence_quote is distinct from v_proof_row.ai_evidence_quote or
+          v_signal.ai_contextual_reset_assessment is distinct from v_proof_row.ai_contextual_reset_assessment or
+          v_signal.ai_contextual_reset_tweet_id is distinct from v_proof_row.ai_contextual_reset_tweet_id or
+          v_signal.ai_temporal_precision is distinct from v_proof_row.ai_temporal_precision or
+          v_signal.ai_temporal_timezone is distinct from v_proof_row.ai_temporal_timezone or
+          v_signal.ai_temporal_confidence is distinct from v_proof_row.ai_temporal_confidence or
+          v_signal.temporal_expression is distinct from v_proof_row.temporal_expression or
+          v_signal.temporal_kind is distinct from v_proof_row.temporal_kind or
+          v_signal.temporal_precision is distinct from v_proof_row.temporal_precision or
+          v_signal.temporal_timezone is distinct from v_proof_row.temporal_timezone or
+          v_signal.temporal_confidence is distinct from v_proof_row.temporal_confidence or
+          v_signal.temporal_resolution_source is distinct from v_proof_row.temporal_resolution_source or
+          v_signal.temporal_resolution_version is distinct from v_proof_row.temporal_resolution_version or
+          v_signal.expected_start_at is distinct from v_proof_row.expected_start_at or
+          v_signal.expected_end_at is distinct from v_proof_row.expected_end_at or
+          v_signal.temporal_resolution_status is distinct from v_proof_row.temporal_resolution_status or
+          v_signal.logical_post_id is distinct from v_proof_row.logical_post_id or
+          v_signal.edit_history_tweet_ids is distinct from v_proof_row.edit_history_tweet_ids or
+          v_signal.edit_version is distinct from v_proof_row.edit_version or
+          v_signal.edit_metadata_source is distinct from v_proof_row.edit_metadata_source;
+        v_proof_changed := v_proof_changed or
+          v_signal.tweet_id is distinct from v_reply_tweet_id or
+          v_signal.ai_contextual_reset_tweet_id is distinct from v_event_key or
+          v_signal.signal_type is distinct from 'official_notice' or
+          v_signal.verification_status is distinct from 'auto_unverified' or
+          v_signal.classification_source is distinct from 'gemini' or
+          v_signal.ai_signal_type is distinct from 'official_notice' or
+          v_signal.ai_classification_status is distinct from 'success' or
+          v_signal.ai_temporal_direction is distinct from 'future' or
+          v_signal.ai_notice_timing_status is distinct from 'known' or
+          v_signal.ai_contextual_reset_assessment is distinct from 'same_global_reset' or
+          v_signal.is_reply is distinct from true or v_signal.is_quote is distinct from false or
+          not coalesce(v_signal.confidence between 0.95 and 1, false) or
+          not coalesce(v_signal.ai_confidence between 0.95 and 1, false) or
+          not coalesce(v_signal.tweet_created_at <= v_recovery_observed_at, false) or
+          not coalesce(v_signal.expires_at > v_recovery_observed_at, false);
+      exception when others then
+        v_proof_changed := true;
+      end;
+    end if;
+  end if;
+
   select * into v_existing
     from public.codex_usage_future_reply_claims
    where event_key = v_event_key;
@@ -72,16 +179,19 @@ begin
   );
 
   v_plan := p_plan - 'future_reply_claim' - 'future_reply_fallback_execution_estimate';
-  if v_reuse_blocked then
+  if v_reuse_blocked or v_proof_changed then
     v_plan := pg_catalog.jsonb_set(v_plan, '{execution_estimate}', v_fallback_estimate, true);
   end if;
 
   v_result := public.apply_codex_usage_webhook_write_v2(v_plan);
   if v_result ->> 'status' <> 'applied' then
-    return v_result || pg_catalog.jsonb_build_object('future_reply_reuse_blocked', v_reuse_blocked);
+    return v_result || pg_catalog.jsonb_build_object(
+      'future_reply_reuse_blocked', v_reuse_blocked,
+      'future_reply_proof_changed', v_proof_changed
+    );
   end if;
 
-  if not v_existing_found then
+  if not v_existing_found and not v_proof_changed then
     insert into public.codex_usage_future_reply_claims (
       event_key,
       reply_tweet_id,
@@ -97,7 +207,10 @@ begin
     );
   end if;
 
-  return v_result || pg_catalog.jsonb_build_object('future_reply_reuse_blocked', v_reuse_blocked);
+  return v_result || pg_catalog.jsonb_build_object(
+    'future_reply_reuse_blocked', v_reuse_blocked,
+    'future_reply_proof_changed', v_proof_changed
+  );
 end;
 $function$;
 
@@ -125,7 +238,6 @@ declare
   v_candidate record;
   v_candidate_count integer := 0;
   v_candidate_observation_id uuid;
-  v_candidate_estimate_id uuid;
   v_monitor_state_found boolean := false;
   v_claim_found boolean := false;
   v_revision_count integer := 0;
@@ -162,6 +274,9 @@ begin
   -- monitor, observation, estimate, or claim row locks.
   perform pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtext('codex-usage-future-reply:' || v_event_key)
+  );
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtext('codex-usage-webhook:local-codex-app-server')
   );
 
   select * into v_monitor_state
@@ -254,6 +369,9 @@ begin
      v_signal.ai_contextual_reset_assessment is distinct from 'same_global_reset' or
      v_signal.is_reply is distinct from true or v_signal.is_quote is distinct from false or
      v_signal.confidence < 0.95 or v_signal.ai_confidence < 0.95 or
+     not pg_catalog.isfinite(v_signal.tweet_created_at) or
+     not pg_catalog.isfinite(v_signal.expected_start_at) or
+     not pg_catalog.isfinite(v_signal.expected_end_at) or
      v_signal.tweet_url is null or
      pg_catalog.btrim(coalesce(v_signal.text, '')) = '' or
      pg_catalog.btrim(coalesce(v_signal.ai_evidence_quote, '')) = '' or
@@ -321,60 +439,39 @@ begin
     return pg_catalog.jsonb_build_object('status', 'proof_changed', 'needs_cache_invalidation', false);
   end if;
 
-  -- Count a bounded candidate set and fail closed unless there is exactly one.
+  -- Count authoritative observations across the entire reply window before
+  -- inspecting estimates. An assigned or missing estimate still makes the
+  -- evidence ambiguous, matching the monitor's read-side candidate gate.
   for v_candidate in
-    select o.id as observation_id, e.id as estimate_id
+    select o.id as observation_id
       from public.codex_recovery_observations as o
-      join public.reset_execution_estimates as e
-        on e.recovery_observation_id = o.id
      where o.source_key = 'local-codex-app-server'
-       and o.status = 'observed'
+       and o.status in ('observed', 'confirmed')
        and o.confidence = 'strong'
        and o.cycle_hint = 'unexpected'
-       and o.matched_tibo_tweet_id is null
+       and o.id <> '512a8b31-e43e-4f91-b5e6-7023b87e80ec'::uuid
        and o.previous_observed_at is not null
+       and pg_catalog.isfinite(o.previous_observed_at)
+       and pg_catalog.isfinite(o.observed_at)
        and o.previous_observed_at < o.observed_at
        and o.observed_at - o.previous_observed_at <= interval '10 minutes'
-       and e.estimator_version = 'usage-execution-monitor-v1'
-       and e.execution_time_source = 'usage_observation'
-       and e.execution_time_confidence = 'high'
-       and e.execution_time_precision = 'approximate'
-       and e.recovery_previous_observed_at = o.previous_observed_at
-       and e.recovery_observed_at = o.observed_at
-       and e.execution_window_start_at is not null
-       and e.execution_window_end_at is not null
-       and e.execution_window_start_at < e.execution_window_end_at
-       and e.display_execution_at = e.execution_window_end_at
-       and (
-         (
-           e.tibo_announced_at is null
-           and e.tibo_primary_tweet_id is null
-           and coalesce(e.tibo_source_tweet_ids, '{}'::text[]) = '{}'::text[]
-           and e.official_notice_tweet_id is null
-           and e.official_notice_at is null
-         ) or (
-           e.tibo_announced_at = v_signal.tweet_created_at
-           and e.tibo_primary_tweet_id = p_tweet_id
-           and e.tibo_source_tweet_ids = array[p_tweet_id]::text[]
-           and e.official_notice_tweet_id = p_tweet_id
-           and e.official_notice_at = v_signal.tweet_created_at
-         )
-       )
-       and e.manual_override_at is null
-       and e.manual_override_by is null
-       and e.manual_override_reason is null
-       and e.manual_execution_at is null
-       and e.manual_execution_precision is null
-       and v_signal.tweet_created_at <= e.execution_window_start_at
-       and v_signal.expected_start_at < e.execution_window_end_at
-       and v_signal.expected_end_at > e.execution_window_start_at
+       and o.previous_used_percent::text not in ('NaN', 'Infinity', '-Infinity')
+       and o.current_used_percent::text not in ('NaN', 'Infinity', '-Infinity')
+       and o.previous_used_percent between 0 and 100
+       and o.current_used_percent between 0 and 100
+       and o.previous_used_percent - o.current_used_percent >= 1
+       and o.previous_resets_at > 0
+       and o.current_resets_at > 0
+       and o.current_resets_at - o.previous_resets_at >= 3600
+       and v_signal.tweet_created_at <= o.previous_observed_at
+       and v_signal.expected_start_at < o.observed_at
+       and v_signal.expected_end_at > o.previous_observed_at
      order by o.observed_at, o.id
      limit 51
   loop
     v_candidate_count := v_candidate_count + 1;
     if v_candidate_count = 1 then
       v_candidate_observation_id := v_candidate.observation_id;
-      v_candidate_estimate_id := v_candidate.estimate_id;
     end if;
   end loop;
 
@@ -395,33 +492,63 @@ begin
 
   select * into v_estimate
     from public.reset_execution_estimates
-   where id = v_candidate_estimate_id
+   where recovery_observation_id = v_observation.id
    for update;
   if not found or
-     v_estimate.recovery_observation_id is distinct from v_observation.id or
      v_observation.source_key is distinct from 'local-codex-app-server' or
-     v_observation.status is distinct from 'observed' or
+     v_observation.status not in ('observed', 'confirmed') or
      v_observation.confidence is distinct from 'strong' or
      v_observation.cycle_hint is distinct from 'unexpected' or
-     v_observation.matched_tibo_tweet_id is not null or
+     v_observation.id = '512a8b31-e43e-4f91-b5e6-7023b87e80ec'::uuid or
+     (v_observation.matched_tibo_tweet_id is not null and
+      v_observation.matched_tibo_tweet_id is distinct from p_tweet_id) or
      v_observation.previous_observed_at is null or
+     not pg_catalog.isfinite(v_observation.previous_observed_at) or
+     not pg_catalog.isfinite(v_observation.observed_at) or
      v_observation.previous_observed_at >= v_observation.observed_at or
      v_observation.observed_at - v_observation.previous_observed_at > interval '10 minutes' or
+     v_observation.previous_used_percent::text in ('NaN', 'Infinity', '-Infinity') or
+     v_observation.current_used_percent::text in ('NaN', 'Infinity', '-Infinity') or
+     v_observation.previous_used_percent < 0 or v_observation.previous_used_percent > 100 or
+     v_observation.current_used_percent < 0 or v_observation.current_used_percent > 100 or
+     v_observation.previous_used_percent - v_observation.current_used_percent < 1 or
+     v_observation.previous_resets_at <= 0 or v_observation.current_resets_at <= 0 or
+     v_observation.current_resets_at - v_observation.previous_resets_at < 3600 or
      v_estimate.estimator_version is distinct from 'usage-execution-monitor-v1' or
      v_estimate.execution_time_source is distinct from 'usage_observation' or
      v_estimate.execution_time_confidence is distinct from 'high' or
      v_estimate.execution_time_precision is distinct from 'approximate' or
+     v_estimate.reset_event_key = 'usage-reset-512a8b31-e43e-4f91-b5e6-7023b87e80ec' or
      v_estimate.recovery_previous_observed_at is distinct from v_observation.previous_observed_at or
      v_estimate.recovery_observed_at is distinct from v_observation.observed_at or
      v_estimate.execution_window_start_at is null or v_estimate.execution_window_end_at is null or
+     not pg_catalog.isfinite(v_estimate.execution_window_start_at) or
+     not pg_catalog.isfinite(v_estimate.execution_window_end_at) or
+     not pg_catalog.isfinite(v_estimate.display_execution_at) or
      v_estimate.execution_window_start_at >= v_estimate.execution_window_end_at or
-     v_estimate.display_execution_at is distinct from v_estimate.execution_window_end_at or
-     v_signal.tweet_created_at > v_estimate.execution_window_start_at or
-     v_signal.expected_start_at >= v_estimate.execution_window_end_at or
-     v_signal.expected_end_at <= v_estimate.execution_window_start_at or
+     v_estimate.execution_window_start_at is distinct from v_observation.previous_observed_at or
+     v_estimate.execution_window_end_at is distinct from v_observation.observed_at or
+     v_estimate.display_execution_at is distinct from v_observation.observed_at or
+     v_signal.tweet_created_at > v_observation.previous_observed_at or
+     v_signal.expected_start_at >= v_observation.observed_at or
+     v_signal.expected_end_at <= v_observation.previous_observed_at or
      v_estimate.manual_override_at is not null or v_estimate.manual_override_by is not null or
      v_estimate.manual_override_reason is not null or v_estimate.manual_execution_at is not null or
-     v_estimate.manual_execution_precision is not null then
+     v_estimate.manual_execution_precision is not null or
+     not (
+       (
+         v_estimate.tibo_announced_at is null and
+         v_estimate.tibo_primary_tweet_id is null and
+         coalesce(v_estimate.tibo_source_tweet_ids, '{}'::text[]) = '{}'::text[] and
+         v_estimate.official_notice_tweet_id is null and v_estimate.official_notice_at is null
+       ) or (
+         v_estimate.tibo_announced_at = v_signal.tweet_created_at and
+         v_estimate.tibo_primary_tweet_id = p_tweet_id and
+         v_estimate.tibo_source_tweet_ids = array[p_tweet_id]::text[] and
+         v_estimate.official_notice_tweet_id = p_tweet_id and
+         v_estimate.official_notice_at = v_signal.tweet_created_at
+       )
+     ) then
     return pg_catalog.jsonb_build_object('status', 'no_candidate', 'needs_cache_invalidation', false);
   end if;
 

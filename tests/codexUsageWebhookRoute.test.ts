@@ -117,10 +117,15 @@ function verifiedFutureReplyRow(overrides: Record<string, unknown> = {}) {
     temporal_precision: "range",
     temporal_timezone: "PST",
     temporal_confidence: 0.95,
+    temporal_resolution_source: null,
     temporal_resolution_status: "resolved",
     temporal_resolution_version: "tibo-temporal-v9-deadline-start-estimate",
     expected_start_at: "2026-10-22T15:00:00.000Z",
     expected_end_at: "2026-10-22T18:00:00.000Z",
+    logical_post_id: replyId,
+    edit_history_tweet_ids: [replyId],
+    edit_version: 1,
+    edit_metadata_source: "none",
     ...overrides,
   };
 }
@@ -2492,6 +2497,11 @@ test("a strict future reply can corroborate only the bounded matching recovery q
     assert.equal(estimate?.official_notice_at, "2026-10-22T06:55:54.000Z");
     const plan = getAtomicPlanFromRequests(requests);
     assert.equal(plan.future_reply_claim && (plan.future_reply_claim as Record<string, unknown>).event_key, "2113162277688070445");
+    assert.deepEqual(
+      (plan.future_reply_claim as Record<string, unknown>)?.reply_proof,
+      verifiedFutureReplyRow(),
+      "the forward RPC must receive the exact full row snapshot that passed the JS validator",
+    );
     const fallbackEstimate = plan.future_reply_fallback_execution_estimate as Record<string, unknown> | undefined;
     assert.equal(fallbackEstimate?.reset_event_key, "usage-reset-pending");
     assert.equal(fallbackEstimate?.is_monitor_observed, true);
