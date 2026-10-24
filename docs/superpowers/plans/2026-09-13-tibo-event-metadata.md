@@ -89,7 +89,7 @@ Add an explicit priority rule: causal/incident/milestone facts from any canonica
 ### Task 3: Persist generated event metadata on the event-keyed row
 
 **Files:**
-- Create: `supabase/migrations/20260913000100_add_reset_event_metadata.sql`
+- Create: `supabase/migrations/20260913135157_add_reset_event_metadata.sql`
 - Create: `lib/radar/resetEventMetadataStore.ts`
 - Modify: `lib/radar/types.ts`
 - Modify: `lib/radar/resetDisplayNameStore.ts`

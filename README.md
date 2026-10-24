@@ -137,6 +137,7 @@ The development server normally starts at `http://localhost:3000`. To try dynami
 - [Gemini classification modes and environment variables (Japanese)](docs/gemini-classification.md)
 - [AI classification comparison and audit SQL (Japanese)](docs/ai-classification-audit.md)
 - [Tibo monitoring and reset history operations and recovery runbook (Japanese)](docs/operations/tibo-monitor-runbook.md)
+- [Supabase migration version alignment and deployment dry-run (Japanese)](docs/operations/supabase-migration-version-alignment.md)
 - [Tibo X feed research (Japanese)](docs/tibo-x-feed-research.md)
 - [Monitoring extension README (Japanese)](extension/tibo-monitor/README.md)
 

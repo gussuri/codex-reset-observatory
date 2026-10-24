@@ -42,7 +42,7 @@ Chrome起動時の再読み込みは通常のContent Script初回DOMスキャン
 
 このリリースの拡張機能バージョンは `1.0.7`、Content Scriptの診断selector markerは `v1.14-current-timeline-diagnostics` です。監視後の診断にこのmarkerが出ていれば、新しいContent Scriptが実行されたことを確認できます。
 
-返信本文の通常取込とタイムライン診断は既存Webhookと `last_scan_summary` JSONBを使うため、追加migrationはありません。source-context enrichmentの既存migrationは従来どおり [`supabase/migrations/20261018034219_tibo_source_context_enrichment.sql`](../../supabase/migrations/20261018034219_tibo_source_context_enrichment.sql) を参照してください。この手順の変更だけでは本番DBへの適用やデプロイは行われません。
+返信本文の通常取込とタイムライン診断は既存Webhookと `last_scan_summary` JSONBを使うため、追加migrationはありません。source-context enrichmentの既存migrationは従来どおり [`supabase/migrations/20261018073539_tibo_source_context_enrichment.sql`](../../supabase/migrations/20261018073539_tibo_source_context_enrichment.sql) を参照してください。この手順の変更だけでは本番DBへの適用やデプロイは行われません。
 
 ## 3. プロフィールまたは返信タブを閉じていた場合
 

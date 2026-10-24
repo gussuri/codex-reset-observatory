@@ -4,7 +4,7 @@ import test from "node:test";
 
 test("candidate migration declares the identity and lifecycle contract", () => {
   const sql = readFileSync(
-    "supabase/migrations/20260908123000_create_reset_display_name_candidates.sql",
+    "supabase/migrations/20260908163049_create_reset_display_name_candidates.sql",
     "utf8",
   );
 
@@ -37,7 +37,7 @@ test("candidate migration declares the identity and lifecycle contract", () => {
 
 test("candidate seed serialization uses stable official notice identity", () => {
   const sql = readFileSync(
-    "supabase/migrations/20260908123000_create_reset_display_name_candidates.sql",
+    "supabase/migrations/20260908163049_create_reset_display_name_candidates.sql",
     "utf8",
   );
   const lockStatement = sql.match(
@@ -64,7 +64,7 @@ test("candidate seed serialization uses stable official notice identity", () => 
 
 test("candidate promotion RPC is service-role-only and transaction-scoped", () => {
   const sql = readFileSync(
-    "supabase/migrations/20260908124500_create_promote_reset_display_name_candidate.sql",
+    "supabase/migrations/20260908163121_create_promote_reset_display_name_candidate.sql",
     "utf8",
   );
   assert.match(sql, /create or replace function public\.promote_reset_display_name_candidate/i);
@@ -92,7 +92,7 @@ test("candidate promotion RPC is service-role-only and transaction-scoped", () =
 
 test("candidate promotion RPC mirrors public-valid execution estimate semantics", () => {
   const sql = readFileSync(
-    "supabase/migrations/20260908124500_create_promote_reset_display_name_candidate.sql",
+    "supabase/migrations/20260908163121_create_promote_reset_display_name_candidate.sql",
     "utf8",
   );
   assert.match(sql, /execution_time_source\s*=\s*'usage_observation'/i);
@@ -144,7 +144,7 @@ test("current RPC migration allows only exact notice-linked v2 BANKED observatio
 
 test("candidate promotion replaces nonaccepted canonical AI fields consistently", () => {
   const sql = readFileSync(
-    "supabase/migrations/20260908124500_create_promote_reset_display_name_candidate.sql",
+    "supabase/migrations/20260908163121_create_promote_reset_display_name_candidate.sql",
     "utf8",
   );
   assert.match(sql, /ai_name_ja\s*=\s*v_candidate\.ai_name_ja/i);
