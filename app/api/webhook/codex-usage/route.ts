@@ -18,7 +18,9 @@ import {
   findBankedEstimateByExactObservation,
   findLatestBankedGrant,
   findRecentFormalTiboReset,
+  readCodexRecoveryObservationById,
   readCodexUsageMonitorState,
+  readResetExecutionEstimateByEventKey,
 } from "@/lib/codexUsageRecoveryStore";
 import {
   applyCodexUsageAtomicWrite,
@@ -40,16 +42,19 @@ import {
 import { buildResetExecutionEstimate } from "@/lib/radar/resetExecution";
 import {
   collectOfficialTiboNoticeSignals,
-  convertTiboResetSignalToHistoryEvent,
   findRelatedTiboNoticeCluster,
   selectRepresentativeTiboNotice,
   NOTICE_LOOKBACK_MS,
-  type FormalTiboResetSignal,
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
 import { claimTiboFormalAdoption } from "@/lib/radar/tiboFormalAdoptionStore";
+import { ensureResetDisplayNameForEvent } from "@/lib/radar/resetDisplayNameStore";
 import { ensureResetEventMetadataForEvent } from "@/lib/radar/resetEventMetadataStore";
 import { RANDOM_RESET_NAME_MODEL } from "@/lib/radar/randomResetNaming";
+import {
+  buildMonitorConfirmedResetCopyContext,
+  fetchMonitorResetCopySourceRows,
+} from "@/lib/radar/monitorResetCopyLifecycle";
 import { PERSISTENT_OFFICIAL_NOTICE_IDS } from "@/lib/radar/officialNoticePolicy";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 import { buildBankedGrantObservationWrite } from "@/lib/codexUsageBankedGrant";
@@ -913,54 +918,81 @@ async function processCodexUsageSnapshot(
   const atomicResponse = await applyPlan(plan);
   if (atomicResponse) return atomicResponse;
 
-  if (matchingTibo.tweetId && matchingTibo.needsPromotion && executionEstimate) {
+  if (matchingTibo.tweetId && executionEstimate) {
     try {
       const resetEventKey = executionEstimate.reset_event_key;
       const sourceTweetIds = executionEstimate.tibo_source_tweet_ids ?? [matchingTibo.tweetId];
       const primaryTweetId = executionEstimate.tibo_primary_tweet_id ?? matchingTibo.tweetId;
-      await claimTiboFormalAdoption(client, {
-        logicalPostId: primaryTweetId,
-        logicalPostTweetIds: [primaryTweetId],
-        resetEventKey,
-        representativeTweetId: primaryTweetId,
-        sourceTweetIds,
-        claimSource: "new_adoption",
-        identitySource: "none",
-        adoptedAt: receivedAt,
-        claimedAt: receivedAt,
-      });
+      if (matchingTibo.needsPromotion) {
+        const adoption = await claimTiboFormalAdoption(client, {
+          logicalPostId: primaryTweetId,
+          logicalPostTweetIds: [primaryTweetId],
+          resetEventKey,
+          representativeTweetId: primaryTweetId,
+          sourceTweetIds,
+          claimSource: "new_adoption",
+          identitySource: "none",
+          adoptedAt: receivedAt,
+          claimedAt: receivedAt,
+        });
+        if (adoption.status === "error" || adoption.status === "conflict" ||
+          adoption.record?.resetEventKey !== resetEventKey) {
+          throw new Error("Formal adoption identity was not confirmed");
+        }
+      }
 
-      const formalSignal: FormalTiboResetSignal = {
-        tweet_id: matchingTibo.tweetId,
-        text: matchingTibo.text ?? "",
-        tweet_url: matchingTibo.tweetUrl ?? `https://x.com/thsottiaux/status/${matchingTibo.tweetId}`,
-        tweet_created_at: matchingTibo.tweetCreatedAt ?? snapshot.observedAt,
-        detected_at: receivedAt,
-        signal_type: "reset_executed",
-        confidence: matchingTibo.confidence ?? 0.95,
-        verification_status: "confirmed",
-        classification_source: "gemini",
-      };
-      const displayNameItem = {
-        ...convertTiboResetSignalToHistoryEvent(formalSignal),
-        id: resetEventKey,
-        source_url: formalSignal.tweet_url,
-        sourceTweetIds,
-      };
-      await ensureResetEventMetadataForEvent(
-        displayNameItem,
-        {
-          canonicalEventKey: resetEventKey,
-          sourcePostText: formalSignal.text,
-          sourceTweetId: formalSignal.tweet_id,
+      // The generation input must be a canonical history event reconstructed
+      // from the persisted monitor estimate and its confirmed observation.
+      const estimateResult = await readResetExecutionEstimateByEventKey(client, resetEventKey);
+      if (estimateResult.error || !estimateResult.estimate?.recoveryObservationId) {
+        throw new Error("Persisted monitor execution estimate unavailable");
+      }
+      const recoveryResult = await readCodexRecoveryObservationById(
+        client,
+        estimateResult.estimate.recoveryObservationId,
+      );
+      if (recoveryResult.error || !recoveryResult.observation) {
+        throw new Error("Persisted monitor recovery observation unavailable");
+      }
+      const sourceResult = await fetchMonitorResetCopySourceRows(
+        client,
+        [
+          ...estimateResult.estimate.tiboSourceTweetIds,
+          ...(estimateResult.estimate.officialNoticeTweetId
+            ? [estimateResult.estimate.officialNoticeTweetId]
+            : []),
+        ],
+      );
+      if (sourceResult.error) {
+        throw new Error("Canonical Tibo source rows unavailable");
+      }
+      const completionContext = buildMonitorConfirmedResetCopyContext({
+        estimate: estimateResult.estimate,
+        recoveryObservation: recoveryResult.observation,
+        sourceRows: sourceResult.rows,
+      });
+      if (!completionContext) {
+        console.info("[Codex usage] Reset copy generation deferred", {
+          reason: "insufficient_monitor_source_evidence",
+        });
+      } else {
+        const generationOptions = {
+          canonicalEventKey: completionContext.evidence.eventKey,
+          sourcePostText: completionContext.sourceContext,
+          sourceTweetId: completionContext.sourceTweetId,
+          monitorEvidence: completionContext.evidence,
           apiKey: process.env.GEMINI_API_KEY?.trim() || null,
           model: RANDOM_RESET_NAME_MODEL,
           timeoutMs: 8_000,
+        };
+        await ensureResetDisplayNameForEvent(completionContext.item, generationOptions);
+        await ensureResetEventMetadataForEvent(completionContext.item, {
+          ...generationOptions,
           supabase: client,
-        },
-      );
+        });
+      }
     } catch (promotionError) {
-      console.warn("[Codex usage] Formal adoption or metadata claim deferred", {
+      console.warn("[Codex usage] Monitor-confirmed reset copy generation deferred", {
         reason: "best_effort_failed",
         error: promotionError instanceof Error ? promotionError.message : String(promotionError),
       });

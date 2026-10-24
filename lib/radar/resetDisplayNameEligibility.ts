@@ -41,3 +41,21 @@ export function isAutoNameableCanonicalEvent(
 
   return isGenericResetDisplayTitle(item.title);
 }
+
+/** Metadata may be missing even when a human has already chosen a good title. */
+export function isAutoMetadataEligibleCanonicalEvent(
+  item: WindowEventLike,
+  now: Date = new Date(),
+) {
+  if (!AUTO_NAMEABLE_RECORD_KINDS.has(item.recordKind as HistoryRecordKind)) return false;
+  if (item.details?.cycleType !== "ランダムリセット") return false;
+  if ((item as WindowEventLike & { is_reply?: boolean }).is_reply === true) return false;
+  if (item.status?.trim().toLowerCase() === "rejected") return false;
+
+  const completedAt = getCompletedResetTimestamp(item);
+  const nowTime = now.getTime();
+  return completedAt !== null &&
+    Number.isFinite(completedAt) &&
+    Number.isFinite(nowTime) &&
+    completedAt <= nowTime;
+}

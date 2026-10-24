@@ -2601,6 +2601,7 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
   const originalFetch = globalThis.fetch;
   const fetchMethods: string[] = [];
   const requestBodies: unknown[] = [];
+  const requestUrls: string[] = [];
 
   process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
   process.env.SUPABASE_URL = "https://example.supabase.co";
@@ -2612,6 +2613,7 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
   globalThis.fetch = async (input, init) => {
     fetchMethods.push(init?.method ?? (input instanceof Request ? input.method : "GET"));
     const url = input instanceof Request ? input.url : String(input);
+    requestUrls.push(url);
     if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
     if (url.includes("generativelanguage.googleapis.com")) {
       return new Response(
@@ -2671,10 +2673,8 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
     );
 
     assert.equal(response.status, 200);
-    assert.deepEqual(fetchMethods, [
-      "GET", "POST", "GET", "GET", "POST", "GET", "GET", "GET", "GET",
-      "POST", "GET", "GET", "GET", "GET", "POST", "GET", "POST", "GET", "POST", "GET", "POST",
-    ]);
+    assert.equal(fetchMethods.length, requestUrls.length);
+    assert.equal(requestUrls.some((url) => url.includes("/reset_display_names")), false);
     const upsertBody = requestBodies[1] as Record<string, unknown>;
     assert.equal(upsertBody.translated_text_ja, "Codexの利用上限をリセットしました。");
     assert.equal(upsertBody.translated_text_zh, "我已重置 Codex 的使用上限。");

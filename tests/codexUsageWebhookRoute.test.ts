@@ -3123,7 +3123,7 @@ test("quoted BANKED distribution context is not promoted to a public grant assoc
   }
 });
 
-test("promoted deferred Tibo reset claims formal adoption and initiates event metadata in codex-usage webhook", async () => {
+test("promoted deferred Tibo reset defers copy until its persisted monitor rows can be read", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
     SUPABASE_URL: "https://example.supabase.co",
@@ -3224,8 +3224,213 @@ test("promoted deferred Tibo reset claims formal adoption and initiates event me
     assert.ok(formalClaim, "Must call claim_tibo_formal_adoption RPC");
     assert.equal(formalClaim.body?.p_reset_event_key, `tibo-reset-${deferredTweetId}`);
     assert.equal(formalClaim.body?.p_claim_source, "new_adoption");
+    assert.equal(requests.some((req) => req.url.includes("generativelanguage.googleapis.com")), false);
+    assert.equal(requests.some((req) => req.url.includes("reset_display_names") && req.method !== "GET"), false);
   } finally {
     globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("Tibo-first recovery generates copy from the persisted canonical monitor event", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const originalGeminiKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  const requests: MockRequest[] = [];
+  const noticeId = "2099999999999999921";
+  const completionId = "2099999999999999922";
+  const observedAt = "2026-08-26T01:15:00.000Z";
+  const sourceRows: Array<{
+    tweet_id: string;
+    text: string;
+    tweet_url: string;
+    tweet_created_at: string;
+    signal_type: string;
+    confidence: number;
+    verification_status: string;
+    classification_source: string;
+    is_reply: boolean;
+    is_quote: boolean;
+    ai_signal_type?: string;
+    rule_signal_type?: string;
+  }> = [
+    {
+      tweet_id: noticeId,
+      text: "We will reset usage limits for all paid users after fixing a billing quality issue.",
+      tweet_url: `https://x.com/thsottiaux/status/${noticeId}`,
+      tweet_created_at: "2026-08-26T01:05:00.000Z",
+      signal_type: "official_notice",
+      confidence: 0.99,
+      verification_status: "confirmed",
+      classification_source: "gemini",
+      is_reply: false,
+      is_quote: false,
+    },
+    {
+      tweet_id: completionId,
+      text: "I reset usage limits for all paid users. The quality issue is fixed.",
+      tweet_url: `https://x.com/thsottiaux/status/${completionId}`,
+      tweet_created_at: "2026-08-26T01:14:00.000Z",
+      signal_type: "reset_executed",
+      confidence: 0.99,
+      verification_status: "confirmed",
+      classification_source: "gemini",
+      is_reply: false,
+      is_quote: false,
+    },
+  ];
+  let persistedEstimate: Record<string, unknown> | null = null;
+  let persistedObservation: Record<string, unknown> | null = null;
+  let displayName: Record<string, unknown> | null = null;
+  const geminiPrompts: string[] = [];
+
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      const plan = getAtomicPlan(body);
+      const estimate = plan?.execution_estimate;
+      const observation = plan?.observation;
+      if (estimate && typeof estimate === "object") {
+        persistedEstimate = {
+          ...(estimate as Record<string, unknown>),
+          id: "route-estimate-id",
+          recovery_observation_id: "route-observation-id",
+        };
+      }
+      if (observation && typeof observation === "object") {
+        persistedObservation = {
+          ...(observation as Record<string, unknown>),
+          id: "route-observation-id",
+          created_at: observedAt,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return respondToAtomicRpc(body);
+    }
+
+    const parsed = new URL(url);
+    const table = parsed.pathname.split("/").pop() ?? "";
+    if (method === "GET" && table === "codex_usage_monitor_state") {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-26T01:10:00.000Z",
+        received_at: "2026-08-26T01:10:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 100,
+        window_duration_mins: 10080,
+        resets_at: 1_788_000_000,
+        coverage_started_at: "2026-08-26T01:00:00.000Z",
+        banked_reset_available_count: 0,
+        last_banked_grant_at: null,
+        updated_at: "2026-08-26T01:10:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && table === "tibo_signals") {
+      const tweetFilter = parsed.searchParams.get("tweet_id");
+      if (tweetFilter?.startsWith("in.(")) {
+        const ids = tweetFilter.slice(4, -1).split(",");
+        return new Response(JSON.stringify(sourceRows.filter((row) => ids.includes(row.tweet_id))), { status: 200 });
+      }
+      let rows = sourceRows;
+      const signalFilter = parsed.searchParams.get("signal_type");
+      if (signalFilter?.startsWith("eq.")) {
+        rows = rows.filter((row) => row.signal_type === signalFilter.slice(3));
+      } else if (signalFilter?.startsWith("in.(")) {
+        const types = signalFilter.slice(4, -1).split(",");
+        rows = rows.filter((row) => types.includes(row.signal_type));
+      } else if (parsed.searchParams.has("or")) {
+        rows = rows.filter((row) => row.signal_type === "reset_executed" ||
+          row.ai_signal_type === "reset_executed" || row.rule_signal_type === "reset_executed");
+      }
+      return new Response(JSON.stringify(rows), { status: 200 });
+    }
+    if (method === "GET" && table === "regular_reset_events") {
+      return new Response("[]", { status: 200 });
+    }
+    if (method === "GET" && table === "reset_execution_estimates") {
+      const eventFilter = parsed.searchParams.get("reset_event_key");
+      const estimateRow = persistedEstimate && eventFilter === `eq.${persistedEstimate.reset_event_key}`
+        ? persistedEstimate
+        : null;
+      return new Response(JSON.stringify(estimateRow ?? []), { status: 200 });
+    }
+    if (method === "GET" && table === "codex_recovery_observations") {
+      const idFilter = parsed.searchParams.get("id");
+      return new Response(JSON.stringify(
+        persistedObservation && idFilter === "eq.route-observation-id" ? persistedObservation : [],
+      ), { status: 200 });
+    }
+    if (url.includes("generativelanguage.googleapis.com")) {
+      const prompt = JSON.stringify(body);
+      geminiPrompts.push(prompt);
+      const metadataRequest = prompt.includes("Canonical related Tibo posts:");
+      const result = metadataRequest
+        ? {
+            reasonType: "詫びリセット",
+            scope: null,
+            scopeEvidence: null,
+            summaryJa: "品質問題の修正後に利用枠をリセット",
+            summaryEn: "Usage limits reset after a quality fix",
+            summaryZh: "质量问题修复后重置使用额度",
+            noteJa: "告知投稿では品質問題への対応が説明され、完了投稿では利用枠の復旧が確認されました。",
+            noteEn: "The notice described the quality fix, and the completion post confirmed restored limits.",
+            noteZh: "告知帖说明了质量问题的修复，完成帖确认了额度恢复。",
+            reasonJa: "品質問題への対応が投稿に明示されています。",
+          }
+        : {
+            nameJa: "品質修正後の利用枠リセット",
+            nameEn: "Usage Reset After Quality Fix Reset",
+            nameZh: "质量修复后的额度重置",
+            reason: "The paired notice and completion posts describe a quality fix.",
+          };
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify(result) }] } }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (method === "GET" && table === "reset_display_names") {
+      return new Response(JSON.stringify(displayName ? [displayName] : []), { status: 200 });
+    }
+    if ((method === "POST" || method === "PATCH") && table === "reset_display_names") {
+      displayName = { ...(displayName ?? {}), ...(body ?? {}) };
+      return new Response(JSON.stringify([displayName]), { status: 200 });
+    }
+    return new Response("[]", { status: method === "POST" ? 201 : 200 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt,
+      usedPercent: 0,
+      resetsAt: 1_788_604_800,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    const plan = getAtomicPlanFromRequests(requests);
+    assert.equal((plan.execution_estimate as Record<string, unknown>).reset_event_key, `tibo-reset-${completionId}`);
+    assert.ok(displayName);
+    const storedDisplayName = displayName as Record<string, unknown>;
+    assert.equal(storedDisplayName.event_key, `tibo-reset-${completionId}`);
+    assert.equal(storedDisplayName.ai_status, "accepted");
+    assert.equal(storedDisplayName.event_metadata_status, "success");
+    assert.equal(storedDisplayName.event_summary_ja, "品質問題の修正後に利用枠をリセット");
+    assert.equal(geminiPrompts.length, 2);
+    assert.ok(geminiPrompts.every((prompt) => prompt.includes("Usage Monitor recovery")));
+    assert.ok(geminiPrompts.every((prompt) => prompt.includes(noticeId) && prompt.includes(completionId)));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalGeminiKey;
     restore();
   }
 });

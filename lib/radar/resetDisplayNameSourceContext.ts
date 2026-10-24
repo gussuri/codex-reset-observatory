@@ -1,9 +1,27 @@
 export type ResetDisplayNameSourceRow = {
   tweet_id: string;
   text: string;
+  tweet_url?: string | null;
   tweet_created_at?: string | null;
+  signal_type?: string | null;
+  confidence?: number | null;
   is_reply?: boolean | null;
+  is_quote?: boolean | null;
   verification_status?: string | null;
+  classification_source?: string | null;
+  ai_signal_type?: string | null;
+  ai_confidence?: number | null;
+  ai_classification_status?: string | null;
+  ai_temporal_direction?: string | null;
+  ai_evidence_quote?: string | null;
+  source_context_revision_hashes?: string[] | null;
+  source_context_classified_revision_hashes?: string[] | null;
+  source_context_generation?: number | null;
+  formal_reply_admission_proof?: unknown;
+  logical_post_id?: string | null;
+  edit_history_tweet_ids?: string[] | null;
+  edit_version?: number | null;
+  edit_metadata_source?: string | null;
 };
 
 export type ResetDisplayNameSourceContextInput = {
