@@ -33,10 +33,10 @@ Create:
 
 - `lib/radar/resetDisplayNameCandidateTypes.ts` — candidate records, seed input, identity and lifecycle predicates.
 - `lib/radar/resetDisplayNameCandidateActivation.ts` — fail-closed `off | seed | full` configuration and candidate-specific adoption cutoff parsing.
-- `supabase/migrations/20260908123000_create_reset_display_name_candidates.sql` — candidate table, constraints, RLS, and service-role grants.
+- `supabase/migrations/20260908163049_create_reset_display_name_candidates.sql` — candidate table, constraints, RLS, and service-role grants.
 - `lib/radar/resetDisplayNameCandidateStore.ts` — seed, read, generation claim/result, and lifecycle persistence.
 - `lib/radar/resetDisplayNameCandidateNaming.ts` — candidate-specific V3 input and prompt adapter.
-- `supabase/migrations/20260908124500_create_promote_reset_display_name_candidate.sql` — atomic promotion RPC.
+- `supabase/migrations/20260908163121_create_promote_reset_display_name_candidate.sql` — atomic promotion RPC.
 - `scripts/inspect-reset-display-name-candidates.ts` — read-only shadow inspection.
 - `docs/operations/reset-display-name-candidates-rollout.md` — rollout and activation runbook.
 
@@ -234,7 +234,7 @@ git commit -m "feat: define reset display name candidate policy"
 ### Task 2: Add the service-role-only candidate schema
 
 **Files:**
-- Create: `supabase/migrations/20260908123000_create_reset_display_name_candidates.sql`
+- Create: `supabase/migrations/20260908163049_create_reset_display_name_candidates.sql`
 - Test: `tests/resetDisplayNameCandidateSchema.test.ts`
 
 **Interfaces:**
@@ -246,7 +246,7 @@ The migration creates `public.reset_display_name_candidates` with `candidate_id 
 ```ts
 test("candidate migration declares the identity and lifecycle contract", () => {
   const sql = readFileSync(
-    "supabase/migrations/20260908123000_create_reset_display_name_candidates.sql",
+    "supabase/migrations/20260908163049_create_reset_display_name_candidates.sql",
     "utf8",
   );
   assert.match(sql, /candidate_id\\s+uuid\\s+primary key/i);
@@ -295,7 +295,7 @@ Expected: PASS. Validate the SQL locally with the repository's Supabase tooling 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20260908123000_create_reset_display_name_candidates.sql tests/resetDisplayNameCandidateSchema.test.ts
+git add supabase/migrations/20260908163049_create_reset_display_name_candidates.sql tests/resetDisplayNameCandidateSchema.test.ts
 git commit -m "feat: add reset display name candidate storage"
 ```
 
@@ -782,7 +782,7 @@ git commit -m "feat: reconcile reset display name candidates"
 ### Task 7: Add atomic candidate promotion after canonical identity exists
 
 **Files:**
-- Create: `supabase/migrations/20260908124500_create_promote_reset_display_name_candidate.sql`
+- Create: `supabase/migrations/20260908163121_create_promote_reset_display_name_candidate.sql`
 - Modify: `lib/radar/resetDisplayNameCandidateStore.ts`
 - Test: `tests/resetDisplayNameCandidatePromotion.test.ts`
 - Test: `tests/resetDisplayNameCandidateSchema.test.ts`
@@ -895,7 +895,7 @@ Expected: PASS for accepted promotion, `status="new"` rejection before RPC, exis
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20260908124500_create_promote_reset_display_name_candidate.sql lib/radar/resetDisplayNameCandidateStore.ts tests/resetDisplayNameCandidatePromotion.test.ts tests/resetDisplayNameCandidateSchema.test.ts
+git add supabase/migrations/20260908163121_create_promote_reset_display_name_candidate.sql lib/radar/resetDisplayNameCandidateStore.ts tests/resetDisplayNameCandidatePromotion.test.ts tests/resetDisplayNameCandidateSchema.test.ts
 git commit -m "feat: promote reset display name candidates safely"
 ```
 
