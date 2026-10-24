@@ -18,7 +18,6 @@ import {
   shouldRunGeminiClassification,
 } from "@/lib/radar/tiboClassificationMode";
 import {
-  convertTiboResetSignalToHistoryEvent,
   isFormalTiboResetSignal,
   type FormalTiboResetSignal,
 } from "@/lib/radar/tiboHistory";
@@ -31,7 +30,7 @@ import {
   readResetExecutionEstimates,
   upsertResetExecutionEstimate,
 } from "@/lib/codexUsageRecoveryStore";
-import { USAGE_TIBO_MATCH_WINDOW_MS } from "@/lib/codexUsageRecovery";
+import { USAGE_TIBO_MATCH_WINDOW_MS, type CodexRecoveryObservation } from "@/lib/codexUsageRecovery";
 import { getUsageMonitorCoverageAtEvent } from "@/lib/codexUsageMonitorCoverage";
 import {
   buildFormalAdoptionResult,
@@ -40,6 +39,14 @@ import {
 } from "@/lib/radar/formalAdoption";
 import { preserveTiboWebhookState } from "@/lib/radar/tiboWebhookState";
 import { getCodexOperationalExpiryAt } from "@/lib/radar/codexOperationalStatus";
+import {
+  finishFutureReplyCacheInvalidation,
+  type FutureReplyCacheInvalidation,
+} from "@/lib/radar/tiboFutureReplyCacheInvalidation";
+import {
+  isVerifiedTiboFutureReplyNotice,
+  type TiboFutureReplyNoticeLike,
+} from "@/lib/radar/tiboFutureReplyNotice";
 import type { TiboSecondarySignal } from "@/lib/radar/tiboSecondarySignal";
 import {
   parseTiboReplyMetadata,
@@ -73,15 +80,7 @@ import {
   isTiboTranslationValid,
   normalizeTiboTranslationValue,
 } from "@/lib/radar/tiboTranslationValidation";
-import {
-  ensureResetDisplayNameForEvent,
-} from "@/lib/radar/resetDisplayNameStore";
-import { ensureResetEventMetadataForEvent } from "@/lib/radar/resetEventMetadataStore";
-import { RANDOM_RESET_NAME_MODEL } from "@/lib/radar/randomResetNaming";
-import {
-  buildResetDisplayNameSourceContext,
-  type ResetDisplayNameSourceRow,
-} from "@/lib/radar/resetDisplayNameSourceContext";
+import { generateMonitorResetCopyFromPersistedEvent } from "@/lib/radar/monitorResetCopyGeneration";
 import { isBearerAuthorizationValid } from "@/lib/security/bearerAuth";
 import {
   getTemporalNoticeExpiry,
@@ -356,6 +355,130 @@ function getTiboEvidenceLookup(client: ReturnType<typeof getSupabaseServiceClien
   return createTiboEvidenceLookup(client as unknown as TiboEvidenceStoreClient);
 }
 
+const TIBO_FUTURE_REPLY_PROOF_COLUMNS = [
+  "tweet_id",
+  "text",
+  "tweet_url",
+  "tweet_created_at",
+  "signal_type",
+  "confidence",
+  "verification_status",
+  "classification_source",
+  "ai_confidence",
+  "ai_signal_type",
+  "ai_classification_status",
+  "ai_temporal_direction",
+  "ai_notice_timing_status",
+  "ai_evidence_quote",
+  "ai_temporal_expression",
+  "ai_temporal_kind",
+  "ai_temporal_precision",
+  "ai_temporal_timezone",
+  "ai_temporal_confidence",
+  "ai_contextual_reset_assessment",
+  "ai_contextual_reset_tweet_id",
+  "is_reply",
+  "is_quote",
+  "quote_context_text",
+  "quote_tweet_url",
+  "quote_author_handle",
+  "reply_to_handles",
+  "reply_context_text",
+  "source_context_snapshot",
+  "source_context_revision_hashes",
+  "source_context_classified_revision_hashes",
+  "source_context_generation",
+  "temporal_expression",
+  "temporal_kind",
+  "temporal_precision",
+  "temporal_timezone",
+  "temporal_confidence",
+  "expected_start_at",
+  "expected_end_at",
+  "temporal_resolution_status",
+  "temporal_resolution_version",
+] as const;
+
+async function loadVerifiedFutureReplyProof(
+  client: ReturnType<typeof getSupabaseServiceClient>,
+  tweetId: string,
+) {
+  const result = await client
+    .from("tibo_signals")
+    .select(TIBO_FUTURE_REPLY_PROOF_COLUMNS.join(","))
+    .eq("tweet_id", tweetId)
+    .limit(2);
+  if (result.error) return { proof: null, error: result.error };
+  const rows = Array.isArray(result.data) ? result.data : [];
+  if (rows.length > 1) return { proof: null, error: new Error("Future reply proof lookup was not unique") };
+  const row = rows[0] as unknown as Record<string, unknown> | undefined;
+  if (!row || !isVerifiedTiboFutureReplyNotice(row as TiboFutureReplyNoticeLike)) {
+    return { proof: null, error: null };
+  }
+  const proof = Object.fromEntries(
+    TIBO_FUTURE_REPLY_PROOF_COLUMNS.map((column) => [column, row[column]]),
+  );
+  return { proof, error: null };
+}
+
+async function reconcileVerifiedFutureReply(
+  client: ReturnType<typeof getSupabaseServiceClient>,
+  tweetId: string,
+) {
+  const { proof, error: proofError } = await loadVerifiedFutureReplyProof(client, tweetId);
+  if (proofError) return { pendingCacheInvalidation: null, canonicalEventKey: null, error: proofError };
+  if (!proof) return { pendingCacheInvalidation: null, canonicalEventKey: null, error: null };
+
+  const response = await client.rpc("reconcile_codex_future_reply_notice", {
+    p_tweet_id: tweetId,
+    p_expected_proof: proof,
+  });
+  if (response.error) return { pendingCacheInvalidation: null, canonicalEventKey: null, error: response.error };
+  const result = response.data && typeof response.data === "object" && !Array.isArray(response.data)
+    ? response.data as Record<string, unknown>
+    : null;
+  if (!result) return { pendingCacheInvalidation: null, canonicalEventKey: null, error: new Error("Future reply reconciliation returned an invalid result") };
+  const linked = result.status === "linked" || result.status === "already_linked";
+  const canonicalEventKey = linked && typeof result.reset_event_key === "string" && result.reset_event_key.trim()
+    ? result.reset_event_key.trim()
+    : null;
+  if (linked && !canonicalEventKey) {
+    return { pendingCacheInvalidation: null, canonicalEventKey: null, error: new Error("Future reply reconciliation omitted its persisted event key") };
+  }
+  if (result.needs_cache_invalidation !== true) {
+    return { pendingCacheInvalidation: null, canonicalEventKey, error: null };
+  }
+
+  const pending = {
+    event_key: result.event_key,
+    reply_tweet_id: result.reply_tweet_id,
+    recovery_observed_at: result.recovery_observed_at,
+    reset_event_key: result.reset_event_key,
+  };
+  if (Object.values(pending).some((value) => typeof value !== "string" || !value)) {
+    return { pendingCacheInvalidation: null, canonicalEventKey, error: new Error("Future reply cache retry identity was incomplete") };
+  }
+  return { pendingCacheInvalidation: pending as FutureReplyCacheInvalidation, canonicalEventKey, error: null };
+}
+
+async function generateMonitorResetCopyBestEffort(
+  client: ReturnType<typeof getSupabaseServiceClient>,
+  identity: { recoveryObservationId: string } | { canonicalEventKey: string },
+) {
+  try {
+    const generation = await generateMonitorResetCopyFromPersistedEvent(client, identity);
+    if (generation.status === "deferred") {
+      console.info("[Webhook] Monitor-backed reset copy generation deferred", {
+        reason: generation.reason,
+      });
+    }
+  } catch {
+    console.warn("[Webhook Warning] Monitor-backed reset copy generation skipped", {
+      reason: "best_effort_failed",
+    });
+  }
+}
+
 async function serializeTiboEvidenceContext(
   target: TiboEvidencePost,
   lookup: ReturnType<typeof getTiboEvidenceLookup>,
@@ -460,56 +583,6 @@ async function loadTiboSourceContextRevisionSnapshot(
     };
   } catch {
     return { status: "lookup_failed" };
-  }
-}
-
-async function fetchCanonicalTiboSourceRows(
-  supabase: ReturnType<typeof getSupabaseServiceClient>,
-  sourceTweetIds: readonly string[],
-): Promise<ResetDisplayNameSourceRow[]> {
-  const tweetIds = Array.from(new Set(
-    sourceTweetIds.map((tweetId) => tweetId.trim()).filter(Boolean),
-  ));
-  if (tweetIds.length === 0) return [];
-
-  try {
-    const result = await supabase
-      .from("tibo_signals")
-      .select("tweet_id,text,tweet_created_at,is_reply,verification_status")
-      .in("tweet_id", tweetIds)
-      .limit(32);
-    if (result.error) {
-      console.warn("[Webhook Warning] Canonical Tibo naming context lookup failed", {
-        reason: "lookup_failed",
-      });
-      return [];
-    }
-
-    return (result.data ?? []).flatMap((row) => {
-      if (
-        !row ||
-        typeof row.tweet_id !== "string" ||
-        typeof row.text !== "string"
-      ) {
-        return [];
-      }
-      return [{
-        tweet_id: row.tweet_id,
-        text: row.text,
-        tweet_created_at: typeof row.tweet_created_at === "string"
-          ? row.tweet_created_at
-          : null,
-        is_reply: row.is_reply === true,
-        verification_status: typeof row.verification_status === "string"
-          ? row.verification_status
-          : null,
-      }];
-    });
-  } catch {
-    console.warn("[Webhook Warning] Canonical Tibo naming context lookup failed", {
-      reason: "request_failed",
-    });
-    return [];
   }
 }
 
@@ -700,6 +773,35 @@ async function handleTiboWebhookPost(
           }
           const classified = new Set(storedEvidence.sourceContextClassifiedRevisionHashes);
           if (sourceContextRevisionHashes.every((hash) => classified.has(hash))) {
+            if (replyMetadata.isReply === true && replyMetadata.isQuote !== true) {
+              const reconciliation = await reconcileVerifiedFutureReply(supabase, enrichmentResult.value.tweetId);
+              if (reconciliation.error) {
+                console.warn("[Webhook Warning] Future reply recovery reconciliation unavailable", {
+                  reason: "reconciliation_failed",
+                });
+                return NextResponse.json({ error: "Future reply reconciliation unavailable" }, { status: 503 });
+              }
+              if (reconciliation.canonicalEventKey) {
+                await generateMonitorResetCopyBestEffort(supabase, {
+                  canonicalEventKey: reconciliation.canonicalEventKey,
+                });
+              }
+              if (reconciliation.pendingCacheInvalidation &&
+                !await finishFutureReplyCacheInvalidation(
+                  reconciliation.pendingCacheInvalidation,
+                  (pending) => supabase.rpc("ack_codex_future_reply_cache_invalidation", {
+                    p_event_key: pending.event_key,
+                    p_reply_tweet_id: pending.reply_tweet_id,
+                    p_recovery_observed_at: pending.recovery_observed_at,
+                    p_reset_event_key: pending.reset_event_key,
+                  }),
+                )) {
+                console.warn("[Webhook Warning] Future reply cache invalidation remains pending", {
+                  reason: "cache_invalidation_failed",
+                });
+                return NextResponse.json({ error: "Future reply cache invalidation unavailable" }, { status: 503 });
+              }
+            }
             return NextResponse.json({ success: true, status: result.status }, { status: 200 });
           }
 
@@ -1577,6 +1679,7 @@ async function handleTiboWebhookPost(
     let formalFlowCluster: Awaited<ReturnType<typeof findFormalTiboResetCluster>> | null = null;
     let formalFlowSourceTweetIds: string[] = [];
     let formalEnrichmentFailed = false;
+    let monitorCompletionObservation: CodexRecoveryObservation | null = null;
 
     if (shouldResolveFormalFlow && !editIdentityFlowBlocked) {
       const incomingRow = toLogicalPostRow(persistedPayload);
@@ -1854,6 +1957,7 @@ async function handleTiboWebhookPost(
             reason: "lookup_failed",
           });
         } else if (recoveryMatch.observation) {
+          monitorCompletionObservation = recoveryMatch.observation;
           const formalVersion = logicalPost?.rawVersions.find((row) =>
             row.tweet_id === effectiveFormalCandidate.tweet_id,
           );
@@ -1937,69 +2041,6 @@ async function handleTiboWebhookPost(
           }
         }
 
-        if (!formalEnrichmentFailed) {
-          try {
-            const displayNameSourceTweetIds = Array.from(new Set([
-              ...(adoptionResolution?.logicalPostTweetIds ?? []),
-              ...(formalFlowCluster?.sourceTweetIds ?? []),
-            ]));
-            const canonicalSourceRows = await fetchCanonicalTiboSourceRows(
-              supabase,
-              displayNameSourceTweetIds,
-            );
-            const sourcePostText = buildResetDisplayNameSourceContext({
-              effectiveFormalCandidate,
-              sourceTweetIds: displayNameSourceTweetIds,
-              sourceRows: canonicalSourceRows,
-            });
-            const displayNameItem = {
-              ...convertTiboResetSignalToHistoryEvent(effectiveFormalCandidate),
-              id: adoptionResolution.resetEventKey,
-              source_url: effectiveFormalCandidate.tweet_url,
-              sourceTweetIds: displayNameSourceTweetIds,
-            };
-            const displayNameResult = await ensureResetDisplayNameForEvent(
-              displayNameItem,
-              {
-                canonicalEventKey: adoptionResolution.resetEventKey,
-                sourcePostText,
-                sourceTweetId: effectiveFormalCandidate.tweet_id,
-                apiKey: process.env.GEMINI_API_KEY?.trim() || null,
-                model: RANDOM_RESET_NAME_MODEL,
-                timeoutMs: 8_000,
-              },
-            );
-            // Display-name generation remains best-effort. The raw signal and
-            // formal ledger are already durable, so a naming-model failure must
-            // not turn an otherwise successful webhook into a retry storm.
-            if (displayNameResult.status === "api_error") {
-              console.warn("[Webhook Warning] Reset display-name generation skipped", {
-                reason: "best_effort_failed",
-              });
-            }
-
-            const eventMetadataResult = await ensureResetEventMetadataForEvent(
-              displayNameItem,
-              {
-                canonicalEventKey: adoptionResolution.resetEventKey,
-                sourcePostText,
-                sourceTweetId: effectiveFormalCandidate.tweet_id,
-                apiKey: process.env.GEMINI_API_KEY?.trim() || null,
-                model: RANDOM_RESET_NAME_MODEL,
-                timeoutMs: 8_000,
-              },
-            );
-            if (["api_error", "read_error", "write_error", "generation_error"].includes(eventMetadataResult.status)) {
-              console.warn("[Webhook Warning] Reset event metadata generation skipped", {
-                reason: "best_effort_failed",
-              });
-            }
-          } catch {
-            console.warn("[Webhook Warning] Reset display-name generation skipped", {
-              reason: "best_effort_failed",
-            });
-          }
-        }
       } catch {
         formalEnrichmentFailed = true;
         console.warn("[Tibo Warning] Codex recovery reconciliation unavailable", {
@@ -2028,16 +2069,30 @@ async function handleTiboWebhookPost(
       );
     }
 
-    if (internalOptions.sourceContextRevisionHashes) {
-      const expectedRevisions = `{${internalOptions.sourceContextRevisionHashes.join(",")}}`;
+    const normalContextClassificationComplete = Boolean(
+      !internalOptions.sourceContextRevisionHashes &&
+      normalExpectedRevisions?.length &&
+      normalExpectedRevisions.every((hash) => /^[a-f0-9]{64}$/.test(hash)) &&
+      Number.isSafeInteger(normalExpectedGeneration) &&
+      (normalExpectedGeneration ?? -1) >= 0 &&
+      tiboEvidenceInput &&
+      tiboEvidenceContext?.status === "complete" &&
+      tiboEvidenceContext.omissions.length === 0 &&
+      aiResult?.status === "success" &&
+      selectedClassification.classificationSource === "gemini"
+    );
+    if (internalOptions.sourceContextRevisionHashes || normalContextClassificationComplete) {
+      const completedRevisionHashes = internalOptions.sourceContextRevisionHashes ?? normalExpectedRevisions!;
+      const completedGeneration = internalOptions.sourceContextGeneration ?? normalExpectedGeneration!;
+      const expectedRevisions = `{${completedRevisionHashes.join(",")}}`;
       const markerUpdateResult = await supabase
         .from("tibo_signals")
         .update({
-          source_context_classified_revision_hashes: internalOptions.sourceContextRevisionHashes,
+          source_context_classified_revision_hashes: completedRevisionHashes,
         })
         .eq("tweet_id", tweetId)
         .eq("source_context_revision_hashes", expectedRevisions)
-        .eq("source_context_generation", internalOptions.sourceContextGeneration)
+        .eq("source_context_generation", completedGeneration)
         .select("tweet_id");
       if (markerUpdateResult.error) {
         console.warn("[Webhook Warning] Tibo source context completion marker save failed", {
@@ -2051,6 +2106,29 @@ async function handleTiboWebhookPost(
         });
         return NextResponse.json({ error: "Source context changed during classification" }, { status: 503 });
       }
+    }
+
+    let futureReplyCacheInvalidation: FutureReplyCacheInvalidation | null = null;
+    if (replyMetadata.isReply === true && replyMetadata.isQuote !== true) {
+      const reconciliation = await reconcileVerifiedFutureReply(supabase, tweetId);
+      if (reconciliation.error) {
+        console.warn("[Webhook Warning] Future reply recovery reconciliation unavailable", {
+          reason: "reconciliation_failed",
+        });
+        return NextResponse.json({ error: "Future reply reconciliation unavailable" }, { status: 503 });
+      }
+      futureReplyCacheInvalidation = reconciliation.pendingCacheInvalidation;
+      if (reconciliation.canonicalEventKey) {
+        await generateMonitorResetCopyBestEffort(supabase, {
+          canonicalEventKey: reconciliation.canonicalEventKey,
+        });
+      }
+    }
+
+    if (monitorCompletionObservation?.id) {
+      await generateMonitorResetCopyBestEffort(supabase, {
+        recoveryObservationId: monitorCompletionObservation.id,
+      });
     }
 
     const newlyAdopted = adoptionClaim?.status === "claimed_new";
@@ -2067,10 +2145,27 @@ async function handleTiboWebhookPost(
     }
 
     // 9. Purge Next.js Cache
-    try {
-      await invalidateRadarCache("tibo-event");
-    } catch (e) {
-      console.warn("[Webhook Warning] Cache revalidation skipped:", e);
+    if (futureReplyCacheInvalidation) {
+      if (!await finishFutureReplyCacheInvalidation(
+        futureReplyCacheInvalidation,
+        (pending) => supabase.rpc("ack_codex_future_reply_cache_invalidation", {
+          p_event_key: pending.event_key,
+          p_reply_tweet_id: pending.reply_tweet_id,
+          p_recovery_observed_at: pending.recovery_observed_at,
+          p_reset_event_key: pending.reset_event_key,
+        }),
+      )) {
+        console.warn("[Webhook Warning] Future reply cache invalidation remains pending", {
+          reason: "cache_invalidation_failed",
+        });
+        return NextResponse.json({ error: "Future reply cache invalidation unavailable" }, { status: 503 });
+      }
+    } else {
+      try {
+        await invalidateRadarCache("tibo-event");
+      } catch (e) {
+        console.warn("[Webhook Warning] Cache revalidation skipped:", e);
+      }
     }
 
     return NextResponse.json({

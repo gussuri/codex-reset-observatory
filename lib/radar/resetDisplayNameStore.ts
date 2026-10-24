@@ -21,6 +21,14 @@ import {
   isAutoNameableCanonicalEvent,
 } from "./resetDisplayNameEligibility";
 import {
+  isResetCopyGenerationEvidenceValid,
+  type MonitorResetCopyEvidence,
+} from "./monitorResetCopyLifecycle";
+import {
+  hasResetCopyGenerationFailure,
+  recordResetCopyGenerationFailure,
+} from "./resetCopyGenerationFailures";
+import {
   getResetDisplayNameSourceTweetId,
   isSafeStoredAiResetName,
 } from "./resetDisplayNames";
@@ -440,10 +448,27 @@ export async function fetchResetDisplayNameByKey(
 export function hashResetDisplayNameInput(
   input: RandomResetNameEvaluationInput,
   sourcePostText: string | null,
+  evidenceFingerprint?: string | null,
+  model = RANDOM_RESET_NAME_MODEL,
 ) {
   return createHash("sha256")
-    .update(JSON.stringify({ input: { ...input, sourcePostText }, sourcePostText }))
+    .update(JSON.stringify({
+      input: { ...input, sourcePostText },
+      sourcePostText,
+      evidenceFingerprint: evidenceFingerprint ?? null,
+      generationContract: {
+        promptVersion: RANDOM_RESET_NAME_PROMPT_VERSION,
+        model,
+      },
+    }))
     .digest("hex");
+}
+
+function hasHumanApprovedResetDisplayName(
+  record: ResetDisplayNameRecord | null | undefined,
+) {
+  return record?.ai_status === "human_approved" ||
+    record?.ai_flags?.some((flag) => flag === "human_approved" || flag === "human-approved") === true;
 }
 
 export function shouldReuseResetDisplayNameResult(
@@ -456,7 +481,7 @@ export function shouldReuseResetDisplayNameResult(
       record.input_hash === inputHash &&
       record.ai_model === model &&
       record.ai_prompt_version === RANDOM_RESET_NAME_PROMPT_VERSION &&
-      ["accepted", "null", "review_required"].includes(record.ai_status ?? ""),
+      ["accepted", "null", "review_required", "api_error", "rate_limited", "invalid_response"].includes(record.ai_status ?? ""),
   );
 }
 
@@ -631,6 +656,58 @@ export async function upsertResetDisplayName(
   throw new Error("Reset display name write failed");
 }
 
+async function writeResetDisplayNameCompareAndSet(
+  supabase: SupabaseClient,
+  payload: ReturnType<typeof buildUpsertPayload>,
+  existing: ResetDisplayNameRecord | null,
+) {
+  const runWrite = async (writePayload: Record<string, unknown>) => {
+    let query = existing
+      ? supabase.from("reset_display_names").update(writePayload).eq("event_key", payload.event_key)
+      : supabase.from("reset_display_names").insert(writePayload);
+    if (existing) {
+      query = existing.updated_at
+        ? query.eq("updated_at", existing.updated_at)
+        : query.is("updated_at", null);
+    }
+    return query.select("event_key").maybeSingle();
+  };
+
+  let result = await runWrite(payload);
+  if (result.error && isMissingMetadataColumnsError(result.error)) {
+    result = await runWrite(stripMetadataFields(payload));
+  }
+  if (result.error && isMissingLocalizedColumnsError(result.error)) {
+    result = await runWrite(stripLocalizedNameFields(stripMetadataFields(payload)));
+  }
+  if (result.error) {
+    const error = result.error as { code?: unknown };
+    if (error.code === "23505" || error.code === "PGRST116") return false;
+    throw new Error("Reset display name write failed");
+  }
+  return Boolean(result.data);
+}
+
+async function writeResetDisplayNameFailureMarker(
+  supabase: SupabaseClient,
+  existing: ResetDisplayNameRecord,
+  inputHash: string,
+  updatedAt: string,
+) {
+  let query = supabase.from("reset_display_names")
+    .update({
+      event_metadata_flags: recordResetCopyGenerationFailure(existing.event_metadata_flags, inputHash),
+      updated_at: updatedAt,
+    })
+    .eq("event_key", existing.event_key);
+  query = existing.updated_at
+    ? query.eq("updated_at", existing.updated_at)
+    : query.is("updated_at", null);
+  const { data, error } = await query.select("event_key").maybeSingle();
+  if (error) throw new Error("Reset display-name failure marker write failed");
+  return Boolean(data);
+}
+
 export async function ensureResetDisplayNameForEvent(
   item: WindowEventLike,
   options: {
@@ -640,6 +717,7 @@ export async function ensureResetDisplayNameForEvent(
     existingRecord?: ResetDisplayNameRecord | null;
     sourcePostText?: string | null;
     sourceTweetId?: string | null;
+    monitorEvidence?: MonitorResetCopyEvidence;
     now?: Date;
     apiKey?: string | null;
     model?: string;
@@ -652,7 +730,8 @@ export async function ensureResetDisplayNameForEvent(
   if (
     !eventKey ||
     completedAt === null ||
-    !isAutoNameableCanonicalEvent(item, now)
+    !isAutoNameableCanonicalEvent(item, now) ||
+    !isResetCopyGenerationEvidenceValid(item, options.monitorEvidence, now)
   ) {
     return { eventKey, status: "skipped", displayName: null, inputMode: null, skipped: true };
   }
@@ -666,7 +745,12 @@ export async function ensureResetDisplayNameForEvent(
   const input = toRandomResetNameInput(item, completedAt);
   input.sourcePostText = sourcePostText;
   const inputMode = sourcePostText ? "metadata+source" : "metadata";
-  const inputHash = hashResetDisplayNameInput(input, sourcePostText);
+  const inputHash = hashResetDisplayNameInput(
+    input,
+    sourcePostText,
+    options.monitorEvidence?.fingerprint,
+    options.model ?? RANDOM_RESET_NAME_MODEL,
+  );
   let existing: ResetDisplayNameRecord | null = null;
   if (options.existingRecord !== undefined) {
     existing = options.existingRecord;
@@ -686,8 +770,17 @@ export async function ensureResetDisplayNameForEvent(
       "";
     return { eventKey, status: "manual", displayName: manualName, inputMode, skipped: true };
   }
+  if (hasHumanApprovedResetDisplayName(existing)) {
+    return {
+      eventKey,
+      status: "human_approved",
+      displayName: existing?.ai_name_ja ?? null,
+      inputMode,
+      skipped: true,
+    };
+  }
   const existingAiName = existing?.ai_name_ja?.trim() ?? null;
-  if (shouldPreserveExistingAcceptedResetDisplayName(existing) && existingAiName) {
+  if (!options.monitorEvidence && shouldPreserveExistingAcceptedResetDisplayName(existing) && existingAiName) {
     return {
       eventKey,
       status: "preserved_legacy_accepted",
@@ -696,7 +789,7 @@ export async function ensureResetDisplayNameForEvent(
       skipped: true,
     };
   }
-  if (isSafeAcceptedPrecomputedResetDisplayName(existing) && existingAiName) {
+  if (!options.monitorEvidence && isSafeAcceptedPrecomputedResetDisplayName(existing) && existingAiName) {
     return {
       eventKey,
       status: "preserved_precomputed",
@@ -723,31 +816,69 @@ export async function ensureResetDisplayNameForEvent(
       skipped: true,
     };
   }
+  if (
+    existing?.ai_status === "accepted" &&
+    hasResetCopyGenerationFailure(existing.event_metadata_flags, inputHash)
+  ) {
+    return {
+      eventKey,
+      status: "previous_failure_preserved",
+      displayName: existing.ai_name_ja,
+      inputMode,
+      skipped: true,
+    };
+  }
 
-  const result = await generateRandomResetName(input, {
-    apiKey: options.apiKey,
-    model: options.model ?? RANDOM_RESET_NAME_MODEL,
-    timeoutMs: options.timeoutMs,
-  });
+  let result: RandomResetNameGenerationResult;
+  try {
+    result = await generateRandomResetName(input, {
+      apiKey: options.apiKey,
+      model: options.model ?? RANDOM_RESET_NAME_MODEL,
+      timeoutMs: options.timeoutMs,
+    });
+  } catch {
+    result = {
+      name: null,
+      nameEn: null,
+      nameZh: null,
+      confidence: null,
+      evidence: null,
+      reason: null,
+      evidenceGrounded: false,
+      flags: ["generation_exception"],
+      status: "api_error",
+      model: options.model ?? RANDOM_RESET_NAME_MODEL,
+      promptVersion: RANDOM_RESET_NAME_PROMPT_VERSION,
+      latencyMs: 0,
+      httpStatus: null,
+      retryAfterSeconds: null,
+    };
+  }
   const acceptance = assessRandomResetNameResult(result);
 
-  let freshExisting = existing;
+  let freshExisting: ResetDisplayNameRecord | null;
   try {
     const reRead = await fetchResetDisplayNameByKey(supabase, eventKey);
-    if (reRead !== null) {
-      freshExisting = reRead;
-    } else if (options.existingRecord === undefined) {
-      freshExisting = null;
-    }
+    freshExisting = reRead;
   } catch {
-    // Keep pre-call existing if re-read fails
+    return { eventKey, status: "read_error", displayName: null, inputMode, skipped: true };
   }
 
   // A failed regeneration never hides an already accepted name.
   if (freshExisting?.ai_status === "accepted" && acceptance.status !== "accepted") {
+    try {
+      await writeResetDisplayNameFailureMarker(
+        supabase,
+        freshExisting,
+        inputHash,
+        new Date().toISOString(),
+      );
+    } catch {
+      // Keep the accepted name intact if attempt bookkeeping is unavailable.
+    }
     return {
       eventKey,
-      status: acceptance.status,
+      status: "generation_failed_preserved",
       displayName: freshExisting.ai_name_ja,
       inputMode,
       skipped: true,
@@ -762,9 +893,18 @@ export async function ensureResetDisplayNameForEvent(
       "";
     return { eventKey, status: "manual", displayName: manualName, inputMode, skipped: true };
   }
+  if (hasHumanApprovedResetDisplayName(freshExisting)) {
+    return {
+      eventKey,
+      status: "human_approved",
+      displayName: freshExisting?.ai_name_ja ?? null,
+      inputMode,
+      skipped: true,
+    };
+  }
 
   try {
-    await upsertResetDisplayName(
+    const wrote = await writeResetDisplayNameCompareAndSet(
       supabase,
       buildUpsertPayload(
         eventKey,
@@ -775,7 +915,17 @@ export async function ensureResetDisplayNameForEvent(
         freshExisting,
         new Date().toISOString(),
       ),
+      freshExisting,
     );
+    if (!wrote) {
+      return {
+        eventKey,
+        status: "write_conflict",
+        displayName: freshExisting?.ai_name_ja ?? null,
+        inputMode,
+        skipped: true,
+      };
+    }
   } catch {
     return { eventKey, status: "api_error", displayName: null, inputMode, skipped: true };
   }

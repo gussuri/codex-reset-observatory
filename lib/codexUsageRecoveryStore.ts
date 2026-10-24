@@ -1481,6 +1481,51 @@ export async function fetchPublicCodexRecoveryObservation(
   return { data: null, error: null };
 }
 
+export async function readResetExecutionEstimateByEventKey(
+  client: SupabaseClient<any>,
+  eventKey: string,
+) {
+  const result = await client
+    .from("reset_execution_estimates")
+    .select(EXECUTION_ESTIMATE_COLUMNS)
+    .eq("reset_event_key", eventKey)
+    .maybeSingle();
+  return {
+    estimate: toResetExecutionEstimate(result.data as ResetExecutionEstimateRow | null),
+    error: result.error,
+  };
+}
+
+export async function readResetExecutionEstimateByRecoveryObservationId(
+  client: SupabaseClient<any>,
+  observationId: string,
+) {
+  const result = await client
+    .from("reset_execution_estimates")
+    .select(EXECUTION_ESTIMATE_COLUMNS)
+    .eq("recovery_observation_id", observationId)
+    .maybeSingle();
+  return {
+    estimate: toResetExecutionEstimate(result.data as ResetExecutionEstimateRow | null),
+    error: result.error,
+  };
+}
+
+export async function readCodexRecoveryObservationById(
+  client: SupabaseClient<any>,
+  observationId: string,
+) {
+  const result = await client
+    .from("codex_recovery_observations")
+    .select(OBSERVATION_COLUMNS)
+    .eq("id", observationId)
+    .maybeSingle();
+  return {
+    observation: toCodexRecoveryObservation(result.data as CodexRecoveryObservationRow | null),
+    error: result.error,
+  };
+}
+
 export async function readCodexRecoveryObservations(client: SupabaseClient<any>) {
   const result = await client
     .from("codex_recovery_observations")

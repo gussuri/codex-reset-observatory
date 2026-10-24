@@ -51,17 +51,35 @@ test("accepts strict event metadata with the two-value public scope", () => {
   assert.equal(result.promptVersion, RESET_EVENT_METADATA_PROMPT_VERSION);
 });
 
-test("allows unknown scope to stay null instead of guessing a product scope", () => {
+test("keeps an operational default reason separate from source-grounded public copy", () => {
+  const shortSource = [
+    "[Tibo notice | tweet_id=notice-2]",
+    "Day 17/ Reset. Usage limits are restored for all paid users.",
+    "[End Tibo source 1]",
+  ].join("\n");
   const result = parseResetEventMetadataResponse(
-    { ...validPayload, reasonType: "ご祝儀リセット", scope: null, scopeEvidence: null },
+    {
+      ...validPayload,
+      reasonType: "ご祝儀リセット",
+      scope: null,
+      scopeEvidence: null,
+      summaryJa: "Day 17に全有料ユーザーの利用枠が回復しました。",
+      summaryEn: "Day 17 restored usage limits for all paid users.",
+      summaryZh: "第17天为所有付费用户恢复了使用额度。",
+      noteJa: "完了投稿で利用枠の復旧が確認されました。",
+      noteEn: "The completion post confirmed restored usage limits.",
+      noteZh: "完成帖确认使用额度已恢复。",
+      reasonJa: "明示された詫びの根拠がないため、ご祝儀を運用分類として選択。",
+    },
     "test-model",
     0,
-    sourceContext,
+    shortSource,
   );
 
   assert.equal(result.status, "success");
   assert.equal(result.reasonType, "ご祝儀リセット");
   assert.equal(result.scope, null);
+  assert.doesNotMatch(`${result.summaryJa} ${result.noteJa}`, /祝|記念|release|celebrat/i);
 });
 
 test("rejects retired product-name scope values", () => {
@@ -75,12 +93,18 @@ test("rejects retired product-name scope values", () => {
   }
 });
 
-test("requires a non-empty apology-or-celebration reason and localized copy", () => {
+test("requires a non-empty operational reason and localized copy", () => {
   const invalidReason = parseResetEventMetadataResponse(
     { ...validPayload, reasonType: null },
     "test-model",
   );
   assert.equal(invalidReason.status, "invalid_schema");
+
+  const invalidAuditRationale = parseResetEventMetadataResponse(
+    { ...validPayload, reasonJa: null },
+    "test-model",
+  );
+  assert.equal(invalidAuditRationale.status, "invalid_schema");
 
   const invalidSummary = parseResetEventMetadataResponse(
     { ...validPayload, summaryJa: "" },
@@ -327,6 +351,8 @@ test("Gemini request separates short public event notes from the internal audit 
     assert.match(systemPrompt, /Do not.*(?:reasonType|classification rationale)/i);
     assert.match(systemPrompt, /Do not.*(?:classified|processed|explain scope|system interpretation)/i);
     assert.match(systemPrompt, /reasonJa.*internal audit.*reasonType.*scope/i);
+    assert.match(systemPrompt, /Otherwise use "ご祝儀リセット" as the product's operational category/i);
+    assert.match(systemPrompt, /does not establish celebration or a cause/i);
     assert.equal(result.reasonJa, validPayload.reasonJa);
   } finally {
     globalThis.fetch = originalFetch;

@@ -378,12 +378,12 @@ describe("Usage Monitor Standalone Reset Detection Protocol", () => {
     assert.equal(estimate?.displayExecutionAt, OBSERVATION_TIME); // Preserves 01:15:00!
   });
 
-  it("13. unknown reason -> ご祝儀fallbackしない (理由行非表示)", () => {
+  it("13. reset reason without apology evidence uses the ご祝儀 operational default", () => {
     const emptyReason = normalizeResetReasonType({});
     assert.equal(emptyReason, undefined);
 
     const genericReason = normalizeResetReasonType({ title: "ランダムリセット", summary: "Codexの週間利用枠がリセットされたことを確認しました。" });
-    assert.equal(genericReason, undefined);
+    assert.equal(genericReason, "ご祝儀リセット");
   });
 
   it("14. Public UIに「Usage Monitor」という内部語を出さない", () => {

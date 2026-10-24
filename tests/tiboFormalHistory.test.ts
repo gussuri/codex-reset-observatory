@@ -1376,7 +1376,7 @@ test("automatically generated Tibo history is localized without Japanese leakage
         isRegular
           ? locale === "en" ? "Regular update" : "定期更新"
           : !testCase.reason
-            ? ""
+            ? locale === "en" ? "Celebration reset" : "庆祝重置"
             : locale === "en"
             ? testCase.reason === "詫びリセット"
               ? "Compensation reset"

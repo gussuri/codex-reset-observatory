@@ -760,8 +760,16 @@ test("a post-claim enrichment failure is retried against the existing ledger", a
 });
 
 test("display-name API failure remains best-effort after durable enrichment", async () => {
+  const noticeId = "2095000000000000011";
   const state = createState({
     geminiApiError: true,
+    signals: new Map([[noticeId, signal(noticeId, {
+      text: "We will reset usage limits for all paid users tomorrow.",
+      tweet_created_at: "2026-08-30T23:00:00.000Z",
+      signal_type: "official_notice",
+      confidence: 0.99,
+      classification_source: "gemini",
+    })]]),
     recoveries: [recovery("recovery-display-name")],
   });
 
@@ -775,6 +783,45 @@ test("display-name API failure remains best-effort after durable enrichment", as
   assert.equal(
     state.calls.filter((call) => call.url.includes("generativelanguage.googleapis.com")).length,
     2,
+  );
+});
+
+test("a formal Tibo completion without a confirmed monitor recovery does not generate final copy", async () => {
+  const state = createState({
+    geminiNameResult: {
+      nameJa: "未確認リセット",
+      nameEn: "Unconfirmed Reset",
+      nameZh: "未确认重置",
+      reason: "source fact",
+    },
+    geminiMetadataResult: {
+      reasonType: null,
+      scope: null,
+      scopeEvidence: null,
+      summaryJa: "利用枠のリセット",
+      summaryEn: "Usage limit reset",
+      summaryZh: "使用额度重置",
+      noteJa: "利用枠の復旧が確認されました。",
+      noteEn: "The usage limit recovery was confirmed.",
+      noteZh: "使用额度已恢复。",
+      reasonJa: null,
+    },
+  });
+
+  const response = await runWebhook(state, {
+    tweetId: A,
+    text: "We have reset usage limits for all paid users. Reset is live.",
+    tweetUrl: `https://x.com/thsottiaux/status/${A}`,
+    tweetCreatedAt: "2026-08-31T00:00:00.000Z",
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(state.ledgers.length, 1);
+  assert.equal(state.estimates.length, 0);
+  assert.equal(state.displayNames.size, 0);
+  assert.equal(
+    state.calls.filter((call) => call.url.includes("generativelanguage.googleapis.com")).length,
+    0,
   );
 });
 
@@ -886,7 +933,6 @@ test("Monitor-first formal adoption names one canonical event from its Tibo prov
   const displayNameWrite = state.calls.find((call) =>
     call.method === "POST" && call.url.includes("reset_display_names"),
   )?.body;
-
   assert.equal(response.status, 200);
   assert.equal((await response.json()).formalAdoption.newlyAdopted, false);
   assert.equal(state.ledgers.length, 1);

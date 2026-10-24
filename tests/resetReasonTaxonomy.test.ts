@@ -130,18 +130,18 @@ describe("canonical reset reason taxonomy", () => {
     }
   });
 
-  it("does not classify ordinary user announcements as celebration reset while matching milestone user counts", () => {
+  it("uses the product default for ordinary reset events without implying celebratory public copy", () => {
     assert.equal(
       normalizeResetReasonType({
         text: "We have reset usage limits for all Plus and Pro users",
       }),
-      undefined,
+      "ご祝儀リセット",
     );
     assert.equal(
       normalizeResetReasonType({
         text: "Usage limits have been reset for all paid users.",
       }),
-      undefined,
+      "ご祝儀リセット",
     );
     assert.equal(
       normalizeResetReasonType({
@@ -161,5 +161,7 @@ describe("canonical reset reason taxonomy", () => {
       }),
       "ご祝儀リセット",
     );
+
+    assert.equal(normalizeResetReasonType({}), undefined);
   });
 });

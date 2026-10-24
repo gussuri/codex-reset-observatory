@@ -138,6 +138,9 @@ export type TiboNoticeSignal = TiboEditIdentityFields & {
   temporal_resolution_source?: TemporalResolutionSource | null;
   is_reply?: boolean | null;
   is_quote?: boolean | null;
+  quote_context_text?: string | null;
+  quote_tweet_url?: string | null;
+  quote_author_handle?: string | null;
   reply_to_handles?: string[] | null;
   reply_context_text?: string | null;
   source_context_snapshot?: unknown;
@@ -1909,6 +1912,9 @@ export function collectOfficialTiboNoticeSignals(
       temporal_resolution_version: signal.temporal_resolution_version ?? null,
       is_reply: signal.is_reply ?? null,
       is_quote: signal.is_quote ?? null,
+      quote_context_text: signal.quote_context_text ?? null,
+      quote_tweet_url: signal.quote_tweet_url ?? null,
+      quote_author_handle: signal.quote_author_handle ?? null,
       reply_to_handles: signal.reply_to_handles ?? null,
       reply_context_text: signal.reply_context_text ?? null,
       source_context_snapshot: signal.source_context_snapshot ?? null,
@@ -1985,6 +1991,9 @@ function collectTiboRecoveryEvidenceSignals(
       temporal_resolution_version: signal.temporal_resolution_version ?? null,
       is_reply: signal.is_reply ?? null,
       is_quote: signal.is_quote ?? null,
+      quote_context_text: signal.quote_context_text ?? null,
+      quote_tweet_url: signal.quote_tweet_url ?? null,
+      quote_author_handle: signal.quote_author_handle ?? null,
       reply_to_handles: signal.reply_to_handles ?? null,
       reply_context_text: signal.reply_context_text ?? null,
       source_context_snapshot: signal.source_context_snapshot ?? null,

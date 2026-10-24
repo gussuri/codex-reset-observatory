@@ -5,6 +5,7 @@ import {
   TIBO_RESET_DEADLINE_LEAD_WINDOW_MS,
   TIBO_TEMPORAL_DEADLINE_ESTIMATE_VERSION,
 } from "./tiboTemporal";
+import type { ResetExecutionWindow } from "./tiboTemporal";
 import { isTiboHandle } from "./tiboHandle";
 
 const MAX_SOURCE_CONTEXT_SNAPSHOT_BYTES = 8 * 1024;
@@ -45,6 +46,7 @@ export type TiboFutureReplyNoticeLike = {
   temporal_expression?: string | null;
   temporal_kind?: string | null;
   temporal_precision?: string | null;
+  temporal_timezone?: string | null;
   temporal_confidence?: number | null;
   expected_start_at?: string | null;
   expected_end_at?: string | null;
@@ -186,4 +188,28 @@ export function isVerifiedTiboFutureReplyNotice(signal: TiboFutureReplyNoticeLik
   }
 
   return true;
+}
+
+/**
+ * Validates a strict future reply as evidence for one observed execution
+ * interval. Endpoints that merely touch do not count as overlap.
+ */
+export function isVerifiedTiboFutureReplyNoticeInExecutionWindow(
+  signal: TiboFutureReplyNoticeLike,
+  executionWindow: ResetExecutionWindow | null | undefined,
+) {
+  if (!isVerifiedTiboFutureReplyNotice(signal) || !executionWindow) return false;
+
+  const noticeStartAt = Date.parse(signal.expected_start_at ?? "");
+  const noticeEndAt = Date.parse(signal.expected_end_at ?? "");
+  const executionStartAt = Date.parse(executionWindow.executionWindowStartAt ?? "");
+  const executionEndAt = Date.parse(executionWindow.executionWindowEndAt ?? "");
+  if (
+    !Number.isFinite(noticeStartAt) || !Number.isFinite(noticeEndAt) || noticeStartAt >= noticeEndAt ||
+    !Number.isFinite(executionStartAt) || !Number.isFinite(executionEndAt) || executionStartAt >= executionEndAt
+  ) {
+    return false;
+  }
+
+  return noticeStartAt < executionEndAt && noticeEndAt > executionStartAt;
 }

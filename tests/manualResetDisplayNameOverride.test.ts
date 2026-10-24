@@ -359,7 +359,11 @@ test("hasManualResetDisplayName recognizes manual names across all locales and p
       resetItem({
         completed_at: "2026-08-31T00:00:00.000Z",
         closed_at: "2026-08-31T00:00:00.000Z",
+        status: "closed",
+        kind: "reset_completed",
         recordKind: "confirmed_global",
+        presentation: "notice_backed_recovery",
+        recoveryObservationId: "recovery-manual-localized-test",
         details: {
           cycleType: "ランダムリセット",
           reasonType: "ご祝儀リセット",
@@ -373,6 +377,15 @@ test("hasManualResetDisplayName recognizes manual names across all locales and p
         canonicalEventKey: eventKey,
         existingRecord: record({ manual_name_ja: null, manual_name_en: "EN Manual Name" }),
         sourcePostText: "Reset is live.",
+        monitorEvidence: {
+          eventKey,
+          recoveryObservationId: "recovery-manual-localized-test",
+          recoveryStatus: "confirmed",
+          recoveryObservedAt: "2026-08-31T00:00:00.000Z",
+          recoveryConfirmedAt: "2026-08-31T00:01:00.000Z",
+          recoveryMatchedTiboTweetId: "2115000000000000201",
+          fingerprint: "a".repeat(64),
+        },
         apiKey: "test-gemini-key",
       },
     );
@@ -380,6 +393,73 @@ test("hasManualResetDisplayName recognizes manual names across all locales and p
     assert.equal(outcome.displayName, "EN Manual Name");
     assert.equal(outcome.skipped, true);
   } finally {
+    if (prevUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = prevUrl;
+    if (prevKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = prevKey;
+  }
+});
+
+test("preserves a human-approved AI title when confirmed completion evidence changes", async () => {
+  const prevUrl = process.env.SUPABASE_URL;
+  const prevKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const originalFetch = globalThis.fetch;
+  let fetchCalls = 0;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return new Response("[]", { status: 200 });
+  };
+
+  try {
+    const observedAt = "2026-08-31T00:00:00.000Z";
+    const recoveryObservationId = "recovery-human-approved-title";
+    const outcome = await ensureResetDisplayNameForEvent(
+      resetItem({
+        completed_at: observedAt,
+        closed_at: observedAt,
+        status: "closed",
+        kind: "reset_completed",
+        recordKind: "confirmed_global",
+        presentation: "notice_backed_recovery",
+        recoveryObservationId,
+        details: {
+          cycleType: "ランダムリセット",
+          reasonType: "詫びリセット",
+          resetMethod: "強制リセット",
+          scope: "全有料プラン",
+          noticeToExecution: "0分",
+          noticeType: "公式告知あり",
+        },
+      }),
+      {
+        canonicalEventKey: eventKey,
+        existingRecord: record({
+          ai_name_ja: "人が承認したタイトル",
+          ai_status: "human_approved",
+          ai_flags: ["human_approved"],
+        }),
+        sourcePostText: "The confirmed monitor recovery and source posts changed.",
+        monitorEvidence: {
+          eventKey,
+          recoveryObservationId,
+          recoveryStatus: "confirmed",
+          recoveryObservedAt: observedAt,
+          recoveryConfirmedAt: "2026-08-31T00:01:00.000Z",
+          recoveryMatchedTiboTweetId: "2115000000000000201",
+          fingerprint: "f".repeat(64),
+        },
+        apiKey: "test-gemini-key",
+      },
+    );
+
+    assert.equal(outcome.status, "human_approved");
+    assert.equal(outcome.displayName, "人が承認したタイトル");
+    assert.equal(outcome.skipped, true);
+    assert.equal(fetchCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
     if (prevUrl === undefined) delete process.env.SUPABASE_URL;
     else process.env.SUPABASE_URL = prevUrl;
     if (prevKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;

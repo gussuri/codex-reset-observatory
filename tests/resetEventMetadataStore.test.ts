@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
   ensureResetEventMetadataForEvent,
   hashResetEventMetadataInput,
 } from "../lib/radar/resetEventMetadataStore";
-import { RESET_EVENT_METADATA_PROMPT_VERSION } from "../lib/radar/resetEventMetadata";
+import {
+  RESET_EVENT_METADATA_PROMPT_VERSION,
+  type ResetEventMetadataResult,
+} from "../lib/radar/resetEventMetadata";
 import type { ResetDisplayNameRecord, WindowEventLike } from "../lib/radar/types";
 
 const eventKey = "tibo-reset-event-metadata-store";
@@ -19,16 +23,28 @@ const sourceContext = [
   "Reset complete.",
   "[End Tibo post 2]",
 ].join("\n");
+const now = new Date("2026-10-24T12:00:00.000Z");
+const monitorEvidence = {
+  eventKey,
+  recoveryObservationId: "recovery-metadata-store",
+  recoveryStatus: "confirmed" as const,
+  recoveryObservedAt: completedAt,
+  recoveryConfirmedAt: "2026-09-13T00:02:00.000Z",
+  recoveryMatchedTiboTweetId: "completion-1",
+  fingerprint: "a".repeat(64),
+};
 
 const item: WindowEventLike = {
   id: eventKey,
   recordKind: "confirmed_global",
-  title: "ランダムリセット",
+  title: "Quality issue reset restored usage",
   kind: "reset_completed",
   status: "closed",
   opened_at: completedAt,
   closed_at: completedAt,
   completed_at: completedAt,
+  presentation: "notice_backed_recovery",
+  recoveryObservationId: monitorEvidence.recoveryObservationId,
   sourceTweetIds: ["notice-1", "completion-1"],
   details: {
     cycleType: "ランダムリセット",
@@ -40,7 +56,25 @@ const item: WindowEventLike = {
   },
 };
 
-const generated = {
+test("a notice-only global event cannot generate metadata without monitor authority", async () => {
+  let generatedCalls = 0;
+  const result = await ensureResetEventMetadataForEvent(item, {
+    canonicalEventKey: eventKey,
+    sourcePostText: sourceContext,
+    apiKey: "test-gemini-key",
+    now,
+    generate: async () => {
+      generatedCalls += 1;
+      return generated;
+    },
+  });
+
+  assert.equal(result.status, "skipped");
+  assert.equal(result.wrote, false);
+  assert.equal(generatedCalls, 0);
+});
+
+const generated: ResetEventMetadataResult = {
   reasonType: "詫びリセット" as const,
   scope: "全有料プラン" as const,
   summaryJa: "品質問題修正に伴うリセット",
@@ -51,6 +85,13 @@ const generated = {
   noteZh: "记录的原因是修复质量问题。",
   reasonJa: "品質問題への対応が明示されています。",
   scopeEvidence: "reset limits for all paid plans tonight",
+  status: "success",
+  flags: [],
+  model: "test-model",
+  promptVersion: RESET_EVENT_METADATA_PROMPT_VERSION,
+  latencyMs: 0,
+  httpStatus: 200,
+  retryAfterSeconds: null,
 };
 
 function record(overrides: Partial<ResetDisplayNameRecord> = {}): ResetDisplayNameRecord {
@@ -81,7 +122,7 @@ function record(overrides: Partial<ResetDisplayNameRecord> = {}): ResetDisplayNa
 
 function setupStoreFetch(initial: ResetDisplayNameRecord | null = null) {
   const originalFetch = globalThis.fetch;
-  const stored = initial ? { ...initial } : null;
+  let stored = initial ? { ...initial } : null;
   const writes: Record<string, unknown>[] = [];
   globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
@@ -89,23 +130,58 @@ function setupStoreFetch(initial: ResetDisplayNameRecord | null = null) {
     if (url.includes("/reset_display_names") && method === "GET") {
       return new Response(JSON.stringify(stored ? [stored] : []), { status: 200 });
     }
-    if (url.includes("/reset_display_names") && method === "POST") {
+    if (url.includes("/reset_display_names") && (method === "POST" || method === "PATCH")) {
       const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
       writes.push(payload);
-      Object.assign(stored ?? {}, payload);
-      return new Response("[]", { status: 201 });
+      const params = new URL(url).searchParams;
+      if (method === "POST") {
+        if (stored) return new Response("[]", { status: 409 });
+        stored = payload as unknown as ResetDisplayNameRecord;
+      } else {
+        const expectedUpdatedAt = params.get("updated_at");
+        const matches = stored && (expectedUpdatedAt === "is.null"
+          ? stored.updated_at === null || stored.updated_at === undefined
+          : expectedUpdatedAt === `eq.${stored.updated_at}`);
+        if (!matches) return new Response("[]", { status: 200 });
+        stored = { ...stored, ...payload } as ResetDisplayNameRecord;
+      }
+      return new Response(JSON.stringify([stored]), { status: method === "POST" ? 201 : 200 });
     }
     return new Response("[]", { status: 200 });
   };
   return {
     writes,
+    storedRow: () => stored ? { ...stored } : null,
     restore() {
       globalThis.fetch = originalFetch;
     },
   };
 }
 
-test("persists generated metadata on the existing event-keyed row", async () => {
+function ensureMetadata(
+  event: WindowEventLike,
+  options: Omit<Parameters<typeof ensureResetEventMetadataForEvent>[1], "now">,
+) {
+  return ensureResetEventMetadataForEvent(event, {
+    ...options,
+    monitorEvidence: options.monitorEvidence ?? (
+      event.recordKind === "banked_distribution" ? undefined : monitorEvidence
+    ),
+    now,
+    model: options.model ?? "test-model",
+  });
+}
+
+function hashMetadataValue(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex");
+}
+
+function autoCopyFlags(values: Record<string, unknown>) {
+  const hashes = Object.fromEntries(Object.entries(values).map(([field, value]) => [field, hashMetadataValue(value)]));
+  return [`auto-copy-hashes-v1:${JSON.stringify(hashes)}`];
+}
+
+test("persists generated metadata when a useful title already exists", async () => {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   process.env.SUPABASE_URL = "https://example.supabase.co";
@@ -114,7 +190,7 @@ test("persists generated metadata on the existing event-keyed row", async () => 
   let generatedCalls = 0;
 
   try {
-    const result = await ensureResetEventMetadataForEvent(item, {
+    const result = await ensureMetadata(item, {
       sourcePostText: sourceContext,
       sourceTweetId: "completion-1",
       apiKey: "test-gemini-key",
@@ -147,6 +223,8 @@ test("persists generated metadata on the existing event-keyed row", async () => 
       sourceContext,
       fallbackReasonType: "詫びリセット",
       fallbackScope: "全有料プラン",
+      evidenceFingerprint: monitorEvidence.fingerprint,
+      model: "test-model",
     }));
   } finally {
     mock.restore();
@@ -167,6 +245,8 @@ test("reuses a successful same-input row without a duplicate metadata generation
     sourceContext,
     fallbackReasonType: "詫びリセット",
     fallbackScope: "全有料プラン",
+    evidenceFingerprint: monitorEvidence.fingerprint,
+    model: "test-model",
   });
   const mock = setupStoreFetch(record({
     event_metadata_status: "success",
@@ -176,7 +256,7 @@ test("reuses a successful same-input row without a duplicate metadata generation
   let generatedCalls = 0;
 
   try {
-    const result = await ensureResetEventMetadataForEvent(item, {
+    const result = await ensureMetadata(item, {
       sourcePostText: sourceContext,
       sourceTweetId: "completion-1",
       apiKey: "test-gemini-key",
@@ -208,6 +288,49 @@ test("reuses a successful same-input row without a duplicate metadata generation
   }
 });
 
+test("does not retry Gemini for a failed same-input metadata fingerprint", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  const inputHash = hashResetEventMetadataInput({
+    completedAt,
+    sourceContext,
+    fallbackReasonType: "詫びリセット",
+    fallbackScope: "全有料プラン",
+    evidenceFingerprint: monitorEvidence.fingerprint,
+    model: "test-model",
+  });
+  const mock = setupStoreFetch(record({
+    event_metadata_status: "api_error",
+    event_metadata_input_hash: inputHash,
+  }));
+  let generatedCalls = 0;
+
+  try {
+    const result = await ensureMetadata(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      generate: async () => {
+        generatedCalls += 1;
+        return generated;
+      },
+    });
+
+    assert.equal(result.status, "previous_failure_reused");
+    assert.equal(result.wrote, false);
+    assert.equal(generatedCalls, 0);
+    assert.equal(mock.writes.length, 0);
+  } finally {
+    mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 test("reuses same-input successful metadata across prompt versions to protect corrected summaries and notes", async () => {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -218,6 +341,8 @@ test("reuses same-input successful metadata across prompt versions to protect co
     sourceContext,
     fallbackReasonType: "詫びリセット",
     fallbackScope: "全有料プラン",
+    evidenceFingerprint: monitorEvidence.fingerprint,
+    model: "test-model",
   });
   const existing = record({
     event_metadata_status: "success",
@@ -235,7 +360,7 @@ test("reuses same-input successful metadata across prompt versions to protect co
   let generatedCalls = 0;
 
   try {
-    const result = await ensureResetEventMetadataForEvent(item, {
+    const result = await ensureMetadata(item, {
       sourcePostText: sourceContext,
       sourceTweetId: "completion-1",
       apiKey: "test-gemini-key",
@@ -270,6 +395,128 @@ test("reuses same-input successful metadata across prompt versions to protect co
   }
 });
 
+test("preserves successful metadata after a new-evidence failure and retries only after evidence changes", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  const oldEvidence = { ...monitorEvidence, fingerprint: "a".repeat(64) };
+  const failedEvidence = { ...monitorEvidence, fingerprint: "b".repeat(64) };
+  const nextEvidence = { ...monitorEvidence, fingerprint: "c".repeat(64) };
+  const oldInputHash = hashResetEventMetadataInput({
+    completedAt,
+    sourceContext,
+    fallbackReasonType: "詫びリセット",
+    fallbackScope: "全有料プラン",
+    evidenceFingerprint: oldEvidence.fingerprint,
+    model: "test-model",
+  });
+  const textFields = {
+    event_reason_type: "詫びリセット",
+    event_scope: "全有料プラン",
+    event_summary_ja: "以前の日本語要約",
+    event_summary_en: "Previous English summary",
+    event_summary_zh: "之前的中文摘要",
+    event_note_ja: "以前の日本語補足。",
+    event_note_en: "Previous English note.",
+    event_note_zh: "之前的中文补充。",
+  };
+  const existing = record({
+    manual_name_ja: "手動名を保持",
+    manual_name_en: "Keep this manual name",
+    manual_name_zh: "保留手动名称",
+    ai_name_ja: "以前のAI名",
+    ai_name_en: "Previous AI name",
+    ai_name_zh: "之前的AI名称",
+    event_metadata_status: "success",
+    event_metadata_input_hash: oldInputHash,
+    event_metadata_model: "test-model",
+    event_metadata_prompt_version: "previous-prompt-version",
+    event_metadata_flags: autoCopyFlags(textFields),
+    ...textFields,
+  });
+  const mock = setupStoreFetch(existing);
+  let generatedCalls = 0;
+
+  try {
+    const failedResult = await ensureMetadata(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      monitorEvidence: failedEvidence,
+      generatedAt: "2026-10-24T12:01:00.000Z",
+      generate: async () => {
+        generatedCalls += 1;
+        return {
+          ...generated,
+          reasonType: null,
+          scope: null,
+          summaryJa: null,
+          summaryEn: null,
+          summaryZh: null,
+          noteJa: null,
+          noteEn: null,
+          noteZh: null,
+          status: "api_error" as const,
+          flags: ["upstream_unavailable"],
+          model: "test-model",
+          latencyMs: 4,
+          httpStatus: 503,
+        };
+      },
+    });
+
+    assert.equal(failedResult.status, "generation_failed_preserved");
+    assert.equal(generatedCalls, 1);
+    const afterFailure = mock.storedRow();
+    assert.ok(afterFailure);
+    assert.equal(afterFailure.event_metadata_status, "success");
+    assert.equal(afterFailure.event_metadata_input_hash, oldInputHash);
+    assert.deepEqual(
+      Object.fromEntries(Object.keys(textFields).map((field) => [field, afterFailure[field as keyof ResetDisplayNameRecord]])),
+      textFields,
+    );
+    assert.equal(afterFailure.manual_name_ja, "手動名を保持");
+    assert.equal(afterFailure.manual_name_en, "Keep this manual name");
+    assert.equal(afterFailure.manual_name_zh, "保留手动名称");
+    assert.equal(mock.writes.length, 1);
+    assert.deepEqual(Object.keys(mock.writes[0]!).sort(), ["event_metadata_flags", "updated_at"]);
+
+    const repeatedFailure = await ensureMetadata(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      monitorEvidence: failedEvidence,
+      generate: async () => {
+        generatedCalls += 1;
+        return generated;
+      },
+    });
+    assert.equal(repeatedFailure.status, "previous_failure_preserved");
+    assert.equal(generatedCalls, 1, "the same failed evidence and generation contract are not retried");
+    assert.equal(mock.writes.length, 1);
+
+    const changedEvidenceResult = await ensureMetadata(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      monitorEvidence: nextEvidence,
+      generate: async () => {
+        generatedCalls += 1;
+        return generated;
+      },
+    });
+    assert.equal(changedEvidenceResult.status, "success");
+    assert.equal(generatedCalls, 2, "a different evidence fingerprint is eligible for a fresh generation attempt");
+  } finally {
+    mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
 test("stores a failure audit without blocking callers or losing the event key", async () => {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -278,7 +525,7 @@ test("stores a failure audit without blocking callers or losing the event key", 
   const mock = setupStoreFetch();
 
   try {
-    const result = await ensureResetEventMetadataForEvent(item, {
+    const result = await ensureMetadata(item, {
       sourcePostText: sourceContext,
       sourceTweetId: "completion-1",
       apiKey: "test-gemini-key",
@@ -335,7 +582,7 @@ test("does not generate metadata for reference or regular history records", asyn
   ];
 
   for (const nonMetadataEvent of nonMetadataEvents) {
-    const result = await ensureResetEventMetadataForEvent(nonMetadataEvent, {
+    const result = await ensureMetadata(nonMetadataEvent, {
       sourcePostText: sourceContext,
       apiKey: "test-gemini-key",
       generate: async () => {
@@ -361,25 +608,29 @@ test("does not generate metadata for reference or regular history records", asyn
   assert.equal(generatedCalls, 0);
 });
 
-test("preserves BANKED conditional scope without changing its event kind", async () => {
+test("generates metadata for a canonical grant-backed BANKED event", async () => {
   const previousUrl = process.env.SUPABASE_URL;
   const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   process.env.SUPABASE_URL = "https://example.supabase.co";
   process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
   const mock = setupStoreFetch();
-  const bankedItem: WindowEventLike = {
+  const bankedItem: WindowEventLike & { officialNoticeTweetId: string } = {
     ...item,
     recordKind: "banked_distribution",
     scope: "一部ユーザー",
+    officialNoticeTweetId: "notice-1",
     details: {
       ...item.details!,
+      resetMethod: "任意リセット権配布",
+      noticeType: "公式予告あり",
       scope: "一部ユーザー",
     },
   };
   let capturedFallbackScope: string | null | undefined;
+  let generatedCalls = 0;
 
   try {
-    const result = await ensureResetEventMetadataForEvent(bankedItem, {
+    const result = await ensureMetadata(bankedItem, {
       sourcePostText: sourceContext.replace(
         "all paid plans",
         "affected users",
@@ -387,6 +638,7 @@ test("preserves BANKED conditional scope without changing its event kind", async
       sourceTweetId: "completion-1",
       apiKey: "test-gemini-key",
       generate: async (input) => {
+        generatedCalls += 1;
         capturedFallbackScope = input.fallbackScope;
         return {
           ...generated,
@@ -404,10 +656,12 @@ test("preserves BANKED conditional scope without changing its event kind", async
     });
 
     assert.equal(result.status, "success");
+    assert.equal(result.wrote, true);
     assert.equal(bankedItem.recordKind, "banked_distribution");
     assert.equal(bankedItem.details?.scope, "一部ユーザー");
     assert.equal(capturedFallbackScope, "一部ユーザー");
-    assert.equal(mock.writes[0]?.event_scope, "一部ユーザー");
+    assert.equal(generatedCalls, 1);
+    assert.equal(mock.writes.length, 1);
   } finally {
     mock.restore();
     if (previousUrl === undefined) delete process.env.SUPABASE_URL;
@@ -428,7 +682,7 @@ test("does not overwrite display names when metadata columns are missing in DB",
     ai_name_ja: "保護されたAI名",
     manual_name_ja: "保護された手動名",
   });
-  let postCount = 0;
+  let patchCount = 0;
 
   globalThis.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
@@ -436,8 +690,8 @@ test("does not overwrite display names when metadata columns are missing in DB",
     if (url.includes("/reset_display_names") && method === "GET") {
       return new Response(JSON.stringify([initialRow]), { status: 200 });
     }
-    if (url.includes("/reset_display_names") && method === "POST") {
-      postCount += 1;
+    if (url.includes("/reset_display_names") && method === "PATCH") {
+      patchCount += 1;
       return new Response(
         JSON.stringify({
           code: "PGRST204",
@@ -450,7 +704,7 @@ test("does not overwrite display names when metadata columns are missing in DB",
   };
 
   try {
-    const result = await ensureResetEventMetadataForEvent(item, {
+    const result = await ensureMetadata(item, {
       sourcePostText: sourceContext,
       sourceTweetId: "completion-1",
       apiKey: "test-gemini-key",
@@ -471,7 +725,7 @@ test("does not overwrite display names when metadata columns are missing in DB",
     assert.equal(result.skipped, true);
     assert.equal(result.record?.ai_name_ja, "保護されたAI名");
     assert.equal(result.record?.manual_name_ja, "保護された手動名");
-    assert.equal(postCount, 1);
+    assert.equal(patchCount, 1);
   } finally {
     globalThis.fetch = originalFetch;
     if (previousUrl === undefined) delete process.env.SUPABASE_URL;
@@ -500,16 +754,17 @@ test("re-reads fresh row after Gemini generation so concurrent name updates are 
     if (url.includes("/reset_display_names") && method === "GET") {
       return new Response(JSON.stringify([serverRow]), { status: 200 });
     }
-    if (url.includes("/reset_display_names") && method === "POST") {
+    if (url.includes("/reset_display_names") && method === "PATCH") {
       const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
       writes.push(payload);
-      return new Response("[]", { status: 201 });
+      serverRow = { ...serverRow, ...payload };
+      return new Response(JSON.stringify([{ event_key: eventKey }]), { status: 200 });
     }
     return new Response("[]", { status: 200 });
   };
 
   try {
-    const result = await ensureResetEventMetadataForEvent(item, {
+    const result = await ensureMetadata(item, {
       sourcePostText: sourceContext,
       sourceTweetId: "completion-1",
       apiKey: "test-gemini-key",
@@ -518,6 +773,7 @@ test("re-reads fresh row after Gemini generation so concurrent name updates are 
           ...serverRow,
           ai_name_ja: "並行書き込みAI名",
           manual_name_en: "Concurrent Manual EN",
+          updated_at: "2026-09-13T00:03:00.000Z",
         };
         return {
           ...generated,
@@ -538,6 +794,171 @@ test("re-reads fresh row after Gemini generation so concurrent name updates are 
     assert.equal(writes[0]?.ai_name_ja, "並行書き込みAI名");
     assert.equal(writes[0]?.manual_name_en, "Concurrent Manual EN");
     assert.equal(writes[0]?.event_reason_type, "詫びリセット");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("refreshes auto-generated fields after evidence changes but preserves human-edited and legacy fields", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  const oldAutoSummary = "Prior generated summary";
+  const humanEditedSummary = "Human corrected summary";
+  const legacyNote = "Legacy note without an auto marker";
+  const initial = record({
+    event_metadata_status: "success",
+    event_metadata_input_hash: "b".repeat(64),
+    event_summary_ja: oldAutoSummary,
+    event_summary_en: humanEditedSummary,
+    event_note_ja: legacyNote,
+    event_metadata_flags: autoCopyFlags({
+      event_summary_ja: oldAutoSummary,
+      event_summary_en: "Value before a human edit",
+    }),
+  });
+  const mock = setupStoreFetch(initial);
+  const changedEvidence = { ...monitorEvidence, fingerprint: "c".repeat(64) };
+
+  try {
+    const result = await ensureMetadata(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      monitorEvidence: changedEvidence,
+      apiKey: "test-gemini-key",
+      generate: async () => ({
+        ...generated,
+        summaryJa: "Updated summary from new evidence",
+        status: "success" as const,
+        flags: [],
+        model: "test-model",
+        promptVersion: RESET_EVENT_METADATA_PROMPT_VERSION,
+        latencyMs: 1,
+        httpStatus: 200,
+        retryAfterSeconds: null,
+      }),
+    });
+
+    assert.equal(result.status, "success");
+    assert.equal(result.wrote, true);
+    const write = mock.writes[0]!;
+    assert.equal(write.event_summary_ja, "Updated summary from new evidence");
+    assert.equal(write.event_summary_en, humanEditedSummary);
+    assert.equal(write.event_note_ja, legacyNote);
+    const marker = String((write.event_metadata_flags as string[]).find((flag) => flag.startsWith("auto-copy-hashes-v1:")));
+    const hashes = JSON.parse(marker.slice("auto-copy-hashes-v1:".length)) as Record<string, string>;
+    assert.equal(hashes.event_summary_ja, hashMetadataValue("Updated summary from new evidence"));
+    assert.equal(hashes.event_summary_en, undefined);
+    assert.equal(hashes.event_note_ja, undefined);
+  } finally {
+    mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("keeps prior successful metadata when regeneration fails", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  const existing = record({
+    event_metadata_status: "success",
+    event_metadata_input_hash: "d".repeat(64),
+    event_summary_ja: "Previously generated summary",
+    event_metadata_flags: autoCopyFlags({ event_summary_ja: "Previously generated summary" }),
+  });
+  const mock = setupStoreFetch(existing);
+
+  try {
+    const result = await ensureMetadata(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      monitorEvidence: { ...monitorEvidence, fingerprint: "e".repeat(64) },
+      apiKey: "test-gemini-key",
+      generate: async () => ({
+        ...generated,
+        status: "api_error" as const,
+        summaryJa: null,
+        flags: ["upstream_unavailable"],
+        model: "test-model",
+        promptVersion: RESET_EVENT_METADATA_PROMPT_VERSION,
+        latencyMs: 1,
+        httpStatus: 503,
+        retryAfterSeconds: null,
+      }),
+    });
+
+    assert.equal(result.status, "generation_failed_preserved");
+    assert.equal(result.wrote, false);
+    assert.equal(mock.writes.length, 1, "the failed attempt is recorded without replacing successful metadata");
+    assert.deepEqual(Object.keys(mock.writes[0]!).sort(), ["event_metadata_flags", "updated_at"]);
+    assert.equal(mock.storedRow()?.event_summary_ja, "Previously generated summary");
+  } finally {
+    mock.restore();
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
+
+test("a manual edit after the CAS reread wins over the generated metadata write", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  let serverRow = record({ event_summary_ja: "Existing summary" });
+  const writes: Record<string, unknown>[] = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? "GET";
+    if (url.includes("/reset_display_names") && method === "GET") {
+      return new Response(JSON.stringify([serverRow]), { status: 200 });
+    }
+    if (url.includes("/reset_display_names") && method === "PATCH") {
+      const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      writes.push(payload);
+      serverRow = {
+        ...serverRow,
+        event_summary_ja: "Human edit made after read",
+        updated_at: "2026-09-13T00:04:00.000Z",
+      };
+      return new Response("[]", { status: 200 });
+    }
+    return new Response("[]", { status: 200 });
+  };
+
+  try {
+    const result = await ensureMetadata(item, {
+      sourcePostText: sourceContext,
+      sourceTweetId: "completion-1",
+      apiKey: "test-gemini-key",
+      generate: async () => ({
+        ...generated,
+        status: "success" as const,
+        flags: [],
+        model: "test-model",
+        promptVersion: RESET_EVENT_METADATA_PROMPT_VERSION,
+        latencyMs: 1,
+        httpStatus: 200,
+        retryAfterSeconds: null,
+      }),
+    });
+
+    assert.equal(result.status, "write_conflict");
+    assert.equal(result.wrote, false);
+    assert.equal(writes.length, 1);
+    assert.equal(serverRow.event_summary_ja, "Human edit made after read");
   } finally {
     globalThis.fetch = originalFetch;
     if (previousUrl === undefined) delete process.env.SUPABASE_URL;

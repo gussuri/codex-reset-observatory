@@ -4,11 +4,22 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getCompletedResetTimestamp } from "./probability";
 import {
   generateResetEventMetadata,
+  RESET_EVENT_METADATA_MODEL,
+  RESET_EVENT_METADATA_PROMPT_VERSION,
   type GeneratedResetReasonType,
   type ResetEventMetadataResult,
 } from "./resetEventMetadata";
 import { fetchResetDisplayNameByKey } from "./resetDisplayNameStore";
-import { getCanonicalResetDisplayNameEventKey, isAutoNameableCanonicalEvent } from "./resetDisplayNameEligibility";
+import { getCanonicalResetDisplayNameEventKey, isAutoMetadataEligibleCanonicalEvent } from "./resetDisplayNameEligibility";
+import {
+  isResetCopyGenerationEvidenceValid,
+  type MonitorResetCopyEvidence,
+} from "./monitorResetCopyLifecycle";
+import {
+  hasResetCopyGenerationFailure,
+  preserveResetCopyGenerationFailureFlags,
+  recordResetCopyGenerationFailure,
+} from "./resetCopyGenerationFailures";
 import { normalizeResetScope } from "./resetScope";
 import type { ResetDisplayNameRecord, WindowEventLike } from "./types";
 
@@ -22,6 +33,7 @@ export type ResetEventMetadataStoreOutcome = {
 
 type ResetEventMetadataStoreOptions = {
   canonicalEventKey?: string;
+  monitorEvidence?: MonitorResetCopyEvidence;
   existingRecord?: ResetDisplayNameRecord | null;
   sourcePostText?: string | null;
   sourceTweetId?: string | null;
@@ -74,19 +86,108 @@ export function hashResetEventMetadataInput(input: {
   sourceContext: string;
   fallbackReasonType?: string | null;
   fallbackScope?: string | null;
+  evidenceFingerprint?: string | null;
+  model?: string | null;
 }) {
   return createHash("sha256")
-    .update(JSON.stringify(input))
+    .update(JSON.stringify({
+      ...input,
+      generationContract: {
+        promptVersion: RESET_EVENT_METADATA_PROMPT_VERSION,
+        model: input.model?.trim() || undefined,
+      },
+    }))
     .digest("hex");
 }
 
 function getFallbackReasonType(item: WindowEventLike): GeneratedResetReasonType | null {
   const reason = item.details?.reasonType;
-  return reason === "詫びリセット" || reason === "ご祝儀リセット" ? reason : null;
+  return reason === "詫びリセット" || reason === "ご祝儀リセット"
+    ? reason
+    : "ご祝儀リセット";
 }
 
 function getFallbackScope(item: WindowEventLike) {
   return normalizeResetScope(item.scope ?? item.details?.scope) ?? null;
+}
+
+const AUTO_COPY_HASHES_FLAG = "auto-copy-hashes-v1:";
+const AUTO_COPY_FIELDS = [
+  "event_reason_type",
+  "event_scope",
+  "event_summary_ja",
+  "event_summary_en",
+  "event_summary_zh",
+  "event_note_ja",
+  "event_note_en",
+  "event_note_zh",
+] as const;
+type AutoCopyField = (typeof AUTO_COPY_FIELDS)[number];
+
+function hashMetadataValue(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex");
+}
+
+function getAutoCopyHashes(record: ResetDisplayNameRecord | null | undefined) {
+  const marker = record?.event_metadata_flags?.find((flag) => flag.startsWith(AUTO_COPY_HASHES_FLAG));
+  if (!marker) return {} as Partial<Record<AutoCopyField, string>>;
+  try {
+    const value = JSON.parse(marker.slice(AUTO_COPY_HASHES_FLAG.length)) as Record<string, unknown>;
+    return Object.fromEntries(AUTO_COPY_FIELDS.flatMap((field) =>
+      typeof value[field] === "string" && /^[a-f0-9]{64}$/.test(value[field])
+        ? [[field, value[field]]]
+        : [],
+    )) as Partial<Record<AutoCopyField, string>>;
+  } catch {
+    return {} as Partial<Record<AutoCopyField, string>>;
+  }
+}
+
+function mergeMetadataCopy(
+  existing: ResetDisplayNameRecord | null,
+  result: ResetEventMetadataResult,
+) {
+  const previousHashes = getAutoCopyHashes(existing);
+  const nextHashes: Partial<Record<AutoCopyField, string>> = {};
+  const values: Record<AutoCopyField, unknown> = {
+    event_reason_type: result.reasonType,
+    event_scope: result.scope,
+    event_summary_ja: result.summaryJa,
+    event_summary_en: result.summaryEn,
+    event_summary_zh: result.summaryZh,
+    event_note_ja: result.noteJa,
+    event_note_en: result.noteEn,
+    event_note_zh: result.noteZh,
+  };
+
+  for (const field of AUTO_COPY_FIELDS) {
+    const current = existing?.[field];
+    const isCurrentAutoCopy = Boolean(
+      previousHashes[field] && previousHashes[field] === hashMetadataValue(current),
+    );
+    const hasExistingValue = current !== null && current !== undefined &&
+      !(typeof current === "string" && current.trim() === "");
+    const mayWrite = !hasExistingValue || isCurrentAutoCopy;
+    if (!mayWrite) {
+      values[field] = current;
+      continue;
+    }
+    if (result.status === "success") {
+      nextHashes[field] = hashMetadataValue(values[field]);
+    } else if (isCurrentAutoCopy) {
+      values[field] = current;
+      nextHashes[field] = hashMetadataValue(current);
+    }
+  }
+
+  const flags = preserveResetCopyGenerationFailureFlags(
+    (result.flags ?? []).filter((flag) => !flag.startsWith(AUTO_COPY_HASHES_FLAG)),
+    existing?.event_metadata_flags,
+  );
+  if (Object.keys(nextHashes).length > 0) {
+    flags.push(`${AUTO_COPY_HASHES_FLAG}${JSON.stringify(nextHashes)}`);
+  }
+  return { values, flags };
 }
 
 function buildMetadataWritePayload(
@@ -97,6 +198,7 @@ function buildMetadataWritePayload(
   inputHash: string,
   generatedAt: string,
 ) {
+  const copy = mergeMetadataCopy(existing, result);
   return {
     event_key: eventKey,
     source_tweet_id: sourceTweetId ?? existing?.source_tweet_id ?? null,
@@ -118,18 +220,18 @@ function buildMetadataWritePayload(
     input_hash: existing?.input_hash ?? null,
     created_at: existing?.created_at ?? undefined,
     updated_at: generatedAt,
-    event_reason_type: result.reasonType,
-    event_scope: result.scope,
-    event_summary_ja: result.summaryJa,
-    event_summary_en: result.summaryEn,
-    event_summary_zh: result.summaryZh,
-    event_note_ja: result.noteJa,
-    event_note_en: result.noteEn,
-    event_note_zh: result.noteZh,
+    event_reason_type: copy.values.event_reason_type,
+    event_scope: copy.values.event_scope,
+    event_summary_ja: copy.values.event_summary_ja,
+    event_summary_en: copy.values.event_summary_en,
+    event_summary_zh: copy.values.event_summary_zh,
+    event_note_ja: copy.values.event_note_ja,
+    event_note_en: copy.values.event_note_en,
+    event_note_zh: copy.values.event_note_zh,
     event_metadata_model: result.model,
     event_metadata_prompt_version: result.promptVersion,
     event_metadata_status: result.status,
-    event_metadata_flags: result.flags,
+    event_metadata_flags: copy.flags,
     event_metadata_generated_at: generatedAt,
     event_metadata_input_hash: inputHash,
   };
@@ -138,17 +240,47 @@ function buildMetadataWritePayload(
 async function writeMetadata(
   supabase: SupabaseClient,
   payload: ReturnType<typeof buildMetadataWritePayload>,
+  existing: ResetDisplayNameRecord | null,
 ) {
-  const { error } = await supabase
-    .from("reset_display_names")
-    .upsert(payload, { onConflict: "event_key" });
-  if (!error) return true;
+  let query = existing
+    ? supabase.from("reset_display_names").update(payload).eq("event_key", payload.event_key)
+    : supabase.from("reset_display_names").insert(payload);
+  if (existing) {
+    query = existing.updated_at
+      ? query.eq("updated_at", existing.updated_at)
+      : query.is("updated_at", null);
+  }
+  const { data, error } = await query.select("event_key").maybeSingle();
+  if (!error) return data ? "written" as const : "write_conflict" as const;
   if (isMissingMetadataColumnsError(error)) {
     // Schema propagation must not turn a durable source event into a failed
     // webhook. The metadata is retried after the migration is available.
-    return false;
+    return "schema_unavailable" as const;
   }
   throw new Error("Reset event metadata write failed");
+}
+
+async function writeMetadataFailureMarker(
+  supabase: SupabaseClient,
+  existing: ResetDisplayNameRecord,
+  inputHash: string,
+  updatedAt: string,
+) {
+  let query = supabase.from("reset_display_names")
+    .update({
+      event_metadata_flags: recordResetCopyGenerationFailure(existing.event_metadata_flags, inputHash),
+      updated_at: updatedAt,
+    })
+    .eq("event_key", existing.event_key);
+  query = existing.updated_at
+    ? query.eq("updated_at", existing.updated_at)
+    : query.is("updated_at", null);
+  const { data, error } = await query.select("event_key").maybeSingle();
+  if (error) {
+    if (isMissingMetadataColumnsError(error)) return false;
+    throw new Error("Reset event metadata failure marker write failed");
+  }
+  return Boolean(data);
 }
 
 export async function ensureResetEventMetadataForEvent(
@@ -161,7 +293,8 @@ export async function ensureResetEventMetadataForEvent(
   if (
     !eventKey ||
     completedAtMs === null ||
-    !isAutoNameableCanonicalEvent(item, now)
+    !isAutoMetadataEligibleCanonicalEvent(item, now) ||
+    !isResetCopyGenerationEvidenceValid(item, options.monitorEvidence, now)
   ) {
     return { eventKey, status: "skipped", wrote: false, skipped: true };
   }
@@ -185,6 +318,8 @@ export async function ensureResetEventMetadataForEvent(
     sourceContext,
     fallbackReasonType,
     fallbackScope,
+    evidenceFingerprint: options.monitorEvidence?.fingerprint ?? null,
+    model: options.model ?? null,
   };
   const inputHash = hashResetEventMetadataInput(input);
 
@@ -202,10 +337,40 @@ export async function ensureResetEventMetadataForEvent(
   // Successful same-input metadata may contain human-edited summaries or notes.
   // A prompt upgrade alone must not overwrite that event-level correction.
   if (
-    existing?.event_metadata_status === "success" &&
+    existing?.event_metadata_status &&
     existing.event_metadata_input_hash === inputHash
   ) {
-    return { eventKey, status: "reused", wrote: false, skipped: true };
+    return {
+      eventKey,
+      status: existing.event_metadata_status === "success" ? "reused" : "previous_failure_reused",
+      wrote: false,
+      skipped: true,
+    };
+  }
+  if (
+    existing?.event_metadata_status === "success" &&
+    hasResetCopyGenerationFailure(existing.event_metadata_flags, inputHash)
+  ) {
+    return {
+      eventKey,
+      status: "previous_failure_preserved",
+      wrote: false,
+      skipped: true,
+      record: existing,
+    };
+  }
+
+  const existingHashes = getAutoCopyHashes(existing);
+  const hasWritableCopyField = AUTO_COPY_FIELDS.some((field) => {
+    const value = existing?.[field];
+    const hasValue = value !== null && value !== undefined &&
+      !(typeof value === "string" && value.trim() === "");
+    return !hasValue || Boolean(
+      existingHashes[field] && existingHashes[field] === hashMetadataValue(value),
+    );
+  });
+  if (!hasWritableCopyField) {
+    return { eventKey, status: "human_content_preserved", wrote: false, skipped: true, record: existing };
   }
 
   const generate = options.generate ?? generateResetEventMetadata;
@@ -217,19 +382,47 @@ export async function ensureResetEventMetadataForEvent(
       timeoutMs: options.timeoutMs,
     });
   } catch {
-    return { eventKey, status: "generation_error", wrote: false, skipped: true };
+    result = {
+      reasonType: null,
+      scope: null,
+      summaryJa: null,
+      summaryEn: null,
+      summaryZh: null,
+      noteJa: null,
+      noteEn: null,
+      noteZh: null,
+      reasonJa: null,
+      scopeEvidence: null,
+      status: "api_error",
+      flags: ["generation_exception"],
+      model: options.model ?? RESET_EVENT_METADATA_MODEL,
+      promptVersion: RESET_EVENT_METADATA_PROMPT_VERSION,
+      latencyMs: 0,
+      httpStatus: null,
+      retryAfterSeconds: null,
+    };
   }
 
-  let freshExisting = existing;
+  let freshExisting: ResetDisplayNameRecord | null;
   try {
     const reRead = await fetchResetDisplayNameByKey(supabase, eventKey);
-    if (reRead !== null) {
-      freshExisting = reRead;
-    } else if (options.existingRecord === undefined) {
-      freshExisting = null;
-    }
+    freshExisting = reRead;
   } catch {
-    // Keep pre-call existing if re-read fails
+    return { eventKey, status: "read_error", wrote: false, skipped: true };
+  }
+
+  if (result.status !== "success" && freshExisting?.event_metadata_status === "success") {
+    try {
+      await writeMetadataFailureMarker(
+        supabase,
+        freshExisting,
+        inputHash,
+        options.generatedAt ?? new Date().toISOString(),
+      );
+    } catch {
+      // Keep the successful event copy intact if attempt bookkeeping is unavailable.
+    }
+    return { eventKey, status: "generation_failed_preserved", wrote: false, skipped: true, record: freshExisting };
   }
 
   const generatedAt = options.generatedAt ?? new Date().toISOString();
@@ -243,11 +436,11 @@ export async function ensureResetEventMetadataForEvent(
   );
 
   try {
-    const wrote = await writeMetadata(supabase, payload);
-    if (!wrote) {
+    const writeStatus = await writeMetadata(supabase, payload, freshExisting);
+    if (writeStatus !== "written") {
       return {
         eventKey,
-        status: "schema_unavailable",
+        status: writeStatus,
         record: freshExisting,
         wrote: false,
         skipped: true,

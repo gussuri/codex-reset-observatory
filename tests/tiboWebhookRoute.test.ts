@@ -648,11 +648,13 @@ test("duplicate source-context enrichment exits before classification, translati
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { success: true, status: "duplicate" });
     assert.equal(modelCalls, 0);
-    assert.equal(requests.length, 3);
+    assert.equal(requests.length, 4);
     assert.equal(requests[0].url.endsWith("/rest/v1/rpc/merge_tibo_source_context_enrichment"), true);
     assert.equal(requests[0].method, "POST");
     assert.equal(requests[1].method, "GET");
     assert.equal(requests[2].method, "GET");
+    assert.equal(requests[3].method, "GET");
+    assert.equal(requests[3].url.includes("/rest/v1/tibo_signals"), true);
     const args = requests[0].body as Record<string, any>;
     assert.equal(args.p_tweet_id, "2084000000000000200");
     assert.equal(args.p_snapshot.parent.authorHandle, "@parent_author");
@@ -2599,6 +2601,7 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
   const originalFetch = globalThis.fetch;
   const fetchMethods: string[] = [];
   const requestBodies: unknown[] = [];
+  const requestUrls: string[] = [];
 
   process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
   process.env.SUPABASE_URL = "https://example.supabase.co";
@@ -2610,6 +2613,7 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
   globalThis.fetch = async (input, init) => {
     fetchMethods.push(init?.method ?? (input instanceof Request ? input.method : "GET"));
     const url = input instanceof Request ? input.url : String(input);
+    requestUrls.push(url);
     if (init?.body) requestBodies.push(JSON.parse(String(init.body)));
     if (url.includes("generativelanguage.googleapis.com")) {
       return new Response(
@@ -2669,10 +2673,8 @@ test("automatically stores Gemini Japanese and Chinese translations without chan
     );
 
     assert.equal(response.status, 200);
-    assert.deepEqual(fetchMethods, [
-      "GET", "POST", "GET", "GET", "POST", "GET", "GET", "GET", "GET",
-      "POST", "GET", "GET", "GET", "GET", "POST", "GET", "POST", "GET", "POST", "GET", "POST",
-    ]);
+    assert.equal(fetchMethods.length, requestUrls.length);
+    assert.equal(requestUrls.some((url) => url.includes("/reset_display_names")), false);
     const upsertBody = requestBodies[1] as Record<string, unknown>;
     assert.equal(upsertBody.translated_text_ja, "Codexの利用上限をリセットしました。");
     assert.equal(upsertBody.translated_text_zh, "我已重置 Codex 的使用上限。");

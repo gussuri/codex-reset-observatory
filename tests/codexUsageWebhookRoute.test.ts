@@ -4,6 +4,7 @@ import test from "node:test";
 import { NextRequest } from "next/server";
 
 import { POST } from "../app/api/webhook/codex-usage/route";
+import { POST as POSTTibo } from "../app/api/webhook/tibo/route";
 import { shouldCreateNoticeBackedEstimate } from "../lib/codexUsageRecovery";
 import { NOTICE_LOOKBACK_MS } from "../lib/radar/tiboHistory";
 
@@ -14,6 +15,7 @@ const ENV_KEYS = [
 ] as const;
 
 const ATOMIC_RPC_PATH = "/rpc/apply_codex_usage_webhook_write_v2";
+const FUTURE_REPLY_ATOMIC_RPC_PATH = "/rpc/apply_codex_usage_future_reply_webhook_write";
 const BANKED_ASSOCIATION_RPC_PATH = "/rpc/record_banked_grant_association_decision";
 
 type MockRequest = {
@@ -49,7 +51,9 @@ function respondToBankedAssociationRpc(body: Record<string, unknown> | null) {
 
 function getAtomicPlanFromRequests(requests: ReadonlyArray<MockRequest>) {
   const rpcRequest = requests.find((request) =>
-    request.method === "POST" && request.url.includes(ATOMIC_RPC_PATH),
+    request.method === "POST" && (
+      request.url.includes(ATOMIC_RPC_PATH) || request.url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH)
+    ),
   );
   assert.ok(rpcRequest, "The webhook should use the atomic write RPC");
   const plan = getAtomicPlan(rpcRequest!.body);
@@ -60,6 +64,71 @@ function getAtomicPlanFromRequests(requests: ReadonlyArray<MockRequest>) {
 function getAtomicPlanPart(requests: ReadonlyArray<MockRequest>, key: string) {
   const value = getAtomicPlanFromRequests(requests)[key];
   return value && typeof value === "object" ? value as Record<string, unknown> : null;
+}
+
+function verifiedFutureReplyRow(overrides: Record<string, unknown> = {}) {
+  const parentId = "2113162277688070445";
+  const replyId = "2113162413008884099";
+  const revision = "a".repeat(64);
+  const parentText = "Day 17/ Bet you thought we forgot, but no, it’s reset day today.";
+  const replyText = "Lands tomorrow before 10am PST.";
+  return {
+    tweet_id: replyId,
+    text: replyText,
+    tweet_url: `https://x.com/thsottiaux/status/${replyId}`,
+    tweet_created_at: "2026-10-22T06:55:54.000Z",
+    expires_at: "2026-10-23T06:55:54.000Z",
+    signal_type: "official_notice",
+    confidence: 0.98,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    ai_signal_type: "official_notice",
+    ai_confidence: 0.98,
+    ai_classification_status: "success",
+    ai_temporal_direction: "future",
+    ai_notice_timing_status: "known",
+    ai_evidence_quote: replyText,
+    ai_temporal_expression: "tomorrow before 10am PST",
+    ai_temporal_kind: "deadline",
+    ai_temporal_precision: "range",
+    ai_temporal_timezone: "PST",
+    ai_temporal_confidence: 0.95,
+    ai_contextual_reset_assessment: "same_global_reset",
+    ai_contextual_reset_tweet_id: parentId,
+    is_reply: true,
+    is_quote: false,
+    quote_context_text: null,
+    quote_tweet_url: null,
+    quote_author_handle: null,
+    reply_to_handles: ["@thsottiaux"],
+    reply_context_text: parentText,
+    source_context_snapshot: {
+      parent: {
+        tweetId: parentId,
+        tweetUrl: `https://x.com/thsottiaux/status/${parentId}`,
+        authorHandle: "@thsottiaux",
+        text: parentText,
+      },
+    },
+    source_context_revision_hashes: [revision],
+    source_context_classified_revision_hashes: [revision],
+    source_context_generation: 1,
+    temporal_expression: "tomorrow before 10am PST",
+    temporal_kind: "deadline",
+    temporal_precision: "range",
+    temporal_timezone: "PST",
+    temporal_confidence: 0.95,
+    temporal_resolution_source: null,
+    temporal_resolution_status: "resolved",
+    temporal_resolution_version: "tibo-temporal-v9-deadline-start-estimate",
+    expected_start_at: "2026-10-22T15:00:00.000Z",
+    expected_end_at: "2026-10-22T18:00:00.000Z",
+    logical_post_id: replyId,
+    edit_history_tweet_ids: [replyId],
+    edit_version: 1,
+    edit_metadata_source: "none",
+    ...overrides,
+  };
 }
 
 function withEnvironment(values: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>) {
@@ -224,7 +293,9 @@ test("the first valid snapshot is stored as a baseline only", async () => {
     }
     methods.push(method);
     if (init?.body) bodies.push(JSON.parse(String(init.body)));
-    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+    if (method === "POST" && (
+      url.includes(ATOMIC_RPC_PATH) || url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH)
+    )) {
       return respondToAtomicRpc(bodies.at(-1) as Record<string, unknown> | null);
     }
     if (methods.length === 1) {
@@ -1773,7 +1844,7 @@ test("a future-dated teaser is not used to corroborate an earlier monitor recove
     }));
 
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "observed_unconfirmed" });
     assertUsageWebhookQueryBounds(requests, "2026-08-25T00:04:00.000Z");
     const estimate = getAtomicPlanPart(requests, "execution_estimate");
     assert.equal(estimate?.reset_event_key, "usage-reset-pending");
@@ -2355,14 +2426,21 @@ function createMockSupabaseFetch(options?: {
     const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
     requests.push({ url, method, body });
 
-    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+    if (method === "POST" && (
+      url.includes(ATOMIC_RPC_PATH) || url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH)
+    )) {
       return respondToAtomicRpc(body, "mock-observation-id");
     }
     if (method === "GET" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify(options?.previousState ?? defaultState), { status: 200 });
     }
     if (method === "GET" && url.includes("tibo_signals")) {
-      return new Response(JSON.stringify(options?.tiboSignals ?? []), { status: 200 });
+      const query = new URL(url);
+      const replyExcluded = query.searchParams.getAll("or").some((filter) => filter.includes("is_reply"));
+      const rows = options?.tiboSignals ?? [];
+      return new Response(JSON.stringify(replyExcluded
+        ? rows.filter((row) => (row as Record<string, unknown>).is_reply !== true)
+        : rows), { status: 200 });
     }
     if (method === "GET" && url.includes("regular_reset_events")) {
       return new Response(JSON.stringify(options?.regularEvents ?? []), { status: 200 });
@@ -2375,6 +2453,226 @@ function createMockSupabaseFetch(options?: {
 
   return { requests, fetchHandler };
 }
+
+test("a strict future reply can corroborate only the bounded matching recovery query", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const previousResetsAt = Math.floor(Date.parse("2026-10-23T03:55:00.000Z") / 1000);
+  const { requests, fetchHandler } = createMockSupabaseFetch({
+    previousState: {
+      source_key: "local-codex-app-server",
+      observed_at: "2026-10-22T17:54:00.000Z",
+      received_at: "2026-10-22T17:54:01.000Z",
+      limit_id: "codex",
+      plan_type: "plus",
+      used_percent: 60,
+      window_duration_mins: 10080,
+      resets_at: previousResetsAt,
+      coverage_started_at: "2026-10-22T16:00:00.000Z",
+      banked_reset_available_count: 1,
+      last_banked_grant_at: null,
+      updated_at: "2026-10-22T17:54:01.000Z",
+    },
+    tiboSignals: [verifiedFutureReplyRow()],
+  });
+  globalThis.fetch = fetchHandler;
+
+  try {
+    const requestBody = {
+      observedAt: "2026-10-22T17:59:00.000Z",
+      usedPercent: 0,
+      resetsAt: Math.floor(Date.parse("2026-10-30T03:55:00.000Z") / 1000),
+      monitorProtocolVersion: 2,
+      postReason: "recovery_candidate",
+    };
+    const response = await POST(buildRequest(requestBody));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "observed_unconfirmed" });
+    const estimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(estimate?.official_notice_tweet_id, "2113162413008884099");
+    assert.equal(estimate?.official_notice_at, "2026-10-22T06:55:54.000Z");
+    const plan = getAtomicPlanFromRequests(requests);
+    assert.equal(plan.future_reply_claim && (plan.future_reply_claim as Record<string, unknown>).event_key, "2113162277688070445");
+    assert.deepEqual(
+      (plan.future_reply_claim as Record<string, unknown>)?.reply_proof,
+      verifiedFutureReplyRow(),
+      "the forward RPC must receive the exact full row snapshot that passed the JS validator",
+    );
+    const fallbackEstimate = plan.future_reply_fallback_execution_estimate as Record<string, unknown> | undefined;
+    assert.equal(fallbackEstimate?.reset_event_key, "usage-reset-pending");
+    assert.equal(fallbackEstimate?.is_monitor_observed, true);
+    assert.ok(requests.some((request) => request.url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH)));
+
+    const replayResponse = await POST(buildRequest(requestBody));
+    assert.equal(replayResponse.status, 200);
+    const futureReplyWrites = requests.filter((request) =>
+      request.method === "POST" && request.url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH),
+    );
+    assert.equal(futureReplyWrites.length, 2);
+    const firstReplayPlan = getAtomicPlan(futureReplyWrites[0]!.body)!;
+    const secondReplayPlan = getAtomicPlan(futureReplyWrites[1]!.body)!;
+    assert.deepEqual(secondReplayPlan.future_reply_claim, firstReplayPlan.future_reply_claim);
+    assert.deepEqual(secondReplayPlan.future_reply_fallback_execution_estimate, firstReplayPlan.future_reply_fallback_execution_estimate);
+
+    const tiboReads = requests.filter((request) => request.method === "GET" && request.url.includes("tibo_signals"));
+    const boundedRead = tiboReads.find((request) => !new URL(request.url).searchParams.has("tweet_id"));
+    const persistentRead = tiboReads.find((request) => new URL(request.url).searchParams.has("tweet_id"));
+    assert.ok(boundedRead);
+    assert.ok(persistentRead);
+    const boundedUrl = new URL(boundedRead!.url);
+    const persistentUrl = new URL(persistentRead!.url);
+    assert.equal(boundedUrl.searchParams.get("is_reply"), null, "bounded recovery lookup may consider replies");
+    assert.ok(!boundedUrl.searchParams.getAll("or").some((filter) => filter.includes("is_reply")));
+    assert.ok(persistentUrl.searchParams.getAll("or").some((filter) => filter.includes("is_reply")), "persistent notices keep the reply exclusion");
+    for (const column of [
+      "source_context_snapshot",
+      "source_context_revision_hashes",
+      "source_context_classified_revision_hashes",
+      "source_context_generation",
+      "reply_context_text",
+      "reply_to_handles",
+      "temporal_resolution_version",
+    ]) {
+      assert.ok(boundedUrl.searchParams.get("select")?.split(",").includes(column), `query projection must include ${column}`);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("different strict reply events overlapping one recovery fail closed instead of selecting the newest", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const previousResetsAt = Math.floor(Date.parse("2026-10-23T03:55:00.000Z") / 1000);
+  const secondParentId = "2113162277688070446";
+  const secondReply = verifiedFutureReplyRow({
+    tweet_id: "2113162413008884100",
+    tweet_url: "https://x.com/thsottiaux/status/2113162413008884100",
+    tweet_created_at: "2026-10-22T06:56:54.000Z",
+    ai_contextual_reset_tweet_id: secondParentId,
+    reply_context_text: "Day 18/ Reset day today.",
+    source_context_snapshot: {
+      parent: {
+        tweetId: secondParentId,
+        tweetUrl: `https://x.com/thsottiaux/status/${secondParentId}`,
+        authorHandle: "@thsottiaux",
+        text: "Day 18/ Reset day today.",
+      },
+    },
+  });
+  const { requests, fetchHandler } = createMockSupabaseFetch({
+    previousState: {
+      source_key: "local-codex-app-server",
+      observed_at: "2026-10-22T17:54:00.000Z",
+      received_at: "2026-10-22T17:54:01.000Z",
+      limit_id: "codex",
+      plan_type: "plus",
+      used_percent: 60,
+      window_duration_mins: 10080,
+      resets_at: previousResetsAt,
+      coverage_started_at: "2026-10-22T16:00:00.000Z",
+      banked_reset_available_count: 1,
+      last_banked_grant_at: null,
+      updated_at: "2026-10-22T17:54:01.000Z",
+    },
+    tiboSignals: [verifiedFutureReplyRow(), secondReply],
+  });
+  globalThis.fetch = fetchHandler;
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-10-22T17:59:00.000Z",
+      usedPercent: 0,
+      resetsAt: Math.floor(Date.parse("2026-10-30T03:55:00.000Z") / 1000),
+      monitorProtocolVersion: 2,
+      postReason: "recovery_candidate",
+    }));
+
+    assert.equal(response.status, 200);
+    const estimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(estimate?.reset_event_key, "usage-reset-pending");
+    assert.equal(estimate?.official_notice_tweet_id, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("same-parent strict reply edit variants remain one corroborating event", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const previousResetsAt = Math.floor(Date.parse("2026-10-23T03:55:00.000Z") / 1000);
+  const firstReplyId = "2113162413008884099";
+  const secondReplyId = "2113162413008884100";
+  const editHistory = [firstReplyId, secondReplyId];
+  const firstReply = verifiedFutureReplyRow({
+    logical_post_id: firstReplyId,
+    edit_history_tweet_ids: editHistory,
+    edit_version: 1,
+    edit_metadata_source: "x_api",
+  });
+  const secondReply = verifiedFutureReplyRow({
+    tweet_id: secondReplyId,
+    tweet_url: `https://x.com/thsottiaux/status/${secondReplyId}`,
+    tweet_created_at: "2026-10-22T06:56:54.000Z",
+    logical_post_id: firstReplyId,
+    edit_history_tweet_ids: editHistory,
+    edit_version: 2,
+    edit_metadata_source: "x_api",
+  });
+  const { requests, fetchHandler } = createMockSupabaseFetch({
+    previousState: {
+      source_key: "local-codex-app-server",
+      observed_at: "2026-10-22T17:54:00.000Z",
+      received_at: "2026-10-22T17:54:01.000Z",
+      limit_id: "codex",
+      plan_type: "plus",
+      used_percent: 60,
+      window_duration_mins: 10080,
+      resets_at: previousResetsAt,
+      coverage_started_at: "2026-10-22T16:00:00.000Z",
+      banked_reset_available_count: 1,
+      last_banked_grant_at: null,
+      updated_at: "2026-10-22T17:54:01.000Z",
+    },
+    tiboSignals: [firstReply, secondReply],
+  });
+  globalThis.fetch = fetchHandler;
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt: "2026-10-22T17:59:00.000Z",
+      usedPercent: 0,
+      resetsAt: Math.floor(Date.parse("2026-10-30T03:55:00.000Z") / 1000),
+      monitorProtocolVersion: 2,
+      postReason: "recovery_candidate",
+    }));
+
+    assert.equal(response.status, 200);
+    const plan = getAtomicPlanFromRequests(requests);
+    const estimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(estimate?.reset_event_key, "tibo-reset-2113162277688070445");
+    assert.equal((estimate?.tibo_source_tweet_ids as string[]).length, 2);
+    assert.equal((plan.future_reply_claim as Record<string, unknown>)?.event_key, "2113162277688070445");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
 
 test("protocol v2 strict validation: rejects missing postReason with status 400", async () => {
   const restore = withEnvironment({
@@ -2437,7 +2735,7 @@ test("protocol v2 strict validation: rejects invalid monitorProtocolVersion with
   }
 });
 
-test("Test A: protocol v2 confirmed recovery (recovery_candidate) creates execution estimate and updates state", async () => {
+test("Test A: protocol v2 observed recovery (recovery_candidate) creates execution estimate and updates state", async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
     SUPABASE_URL: "https://example.supabase.co",
@@ -2457,7 +2755,7 @@ test("Test A: protocol v2 confirmed recovery (recovery_candidate) creates execut
       postReason: "recovery_candidate",
     }));
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "observed_unconfirmed" });
     const executionEstimate = getAtomicPlanPart(requests, "execution_estimate");
     const observation = getAtomicPlanPart(requests, "observation");
     const state = getAtomicPlanPart(requests, "state");
@@ -2715,7 +3013,7 @@ test("Test I: legacy protocol v1 compatibility allows fallback evaluation withou
       resetsAt: currentResetsAt,
     }));
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "observed_unconfirmed" });
     const plan = getAtomicPlanFromRequests(requests);
     assert.ok(plan.execution_estimate, "Legacy client arithmetic recovery accepted for zero-downtime deploy");
 
@@ -2826,7 +3124,11 @@ test("quoted BANKED distribution context is not promoted to a public grant assoc
   }
 });
 
-test("promoted deferred Tibo reset claims formal adoption and initiates event metadata in codex-usage webhook", async () => {
+for (const formalAdoption of [
+  { status: "claimed_new" as const, resetEventKey: "canonical", expectedEstimateRead: true },
+  { status: "conflict" as const, resetEventKey: "wrong-event-key", expectedEstimateRead: false },
+]) {
+test(`atomic promotion ${formalAdoption.status === "conflict" ? "blocks copy on identity conflict" : "claims formal identity before copy generation"}`, async () => {
   const restore = withEnvironment({
     CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
     SUPABASE_URL: "https://example.supabase.co",
@@ -2886,20 +3188,23 @@ test("promoted deferred Tibo reset claims formal adoption and initiates event me
       return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
     }
     if (method === "POST" && url.includes("/rpc/claim_tibo_formal_adoption")) {
+      const claimedEventKey = formalAdoption.resetEventKey === "canonical"
+        ? String(body?.p_reset_event_key)
+        : formalAdoption.resetEventKey;
       return new Response(JSON.stringify({
-        status: "claimed_new",
+        status: formalAdoption.status,
         record: {
           id: "adoption-rec-1",
           logical_post_id: deferredTweetId,
           logical_post_tweet_ids: [deferredTweetId],
-          reset_event_key: `tibo-reset-${deferredTweetId}`,
+          reset_event_key: claimedEventKey,
           representative_tweet_id: deferredTweetId,
           source_tweet_ids: [deferredTweetId],
           claim_source: "new_adoption",
-          adopted_at: "2026-08-26T01:15:05.000Z",
-          claimed_at: "2026-08-26T01:15:05.000Z",
-          created_at: "2026-08-26T01:15:05.000Z",
-          updated_at: "2026-08-26T01:15:05.000Z",
+          adopted_at: observedAt,
+          claimed_at: observedAt,
+          created_at: observedAt,
+          updated_at: observedAt,
         },
       }), { status: 200 });
     }
@@ -2924,14 +3229,524 @@ test("promoted deferred Tibo reset claims formal adoption and initiates event me
     assert.equal((plan.promotion as { tweet_id: string }).tweet_id, deferredTweetId);
 
     const formalClaim = requests.find((req) => req.url.includes("/rpc/claim_tibo_formal_adoption"));
-    assert.ok(formalClaim, "Must call claim_tibo_formal_adoption RPC");
-    assert.equal(formalClaim.body?.p_reset_event_key, `tibo-reset-${deferredTweetId}`);
-    assert.equal(formalClaim.body?.p_claim_source, "new_adoption");
+    assert.ok(formalClaim, "A promoted reset must claim its formal identity after the atomic monitor write");
+    assert.equal(formalClaim!.body?.p_reset_event_key, `tibo-reset-${deferredTweetId}`);
+    assert.equal(formalClaim!.body?.p_claim_source, "new_adoption");
+    const atomicWriteIndex = requests.findIndex((req) => req.url.includes(ATOMIC_RPC_PATH));
+    const postAtomicEstimateReads = requests.slice(atomicWriteIndex + 1).filter((req) =>
+      req.method === "GET" && req.url.includes("reset_execution_estimates"),
+    );
+    assert.equal(postAtomicEstimateReads.length > 0, formalAdoption.expectedEstimateRead,
+      "A failed or mismatched formal claim must stop persisted-event copy generation");
+    assert.equal(requests.some((req) => req.url.includes("generativelanguage.googleapis.com")), false);
+    assert.equal(requests.some((req) => req.url.includes("reset_display_names") && req.method !== "GET"), false);
   } finally {
     globalThis.fetch = originalFetch;
     restore();
   }
 });
+}
+
+test("Tibo-first recovery generates copy from the persisted canonical monitor event", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const originalGeminiKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  const requests: MockRequest[] = [];
+  const noticeId = "2099999999999999921";
+  const completionId = "2099999999999999922";
+  const observedAt = "2026-08-26T01:15:00.000Z";
+  const sourceRows: Array<{
+    tweet_id: string;
+    text: string;
+    tweet_url: string;
+    tweet_created_at: string;
+    signal_type: string;
+    confidence: number;
+    verification_status: string;
+    classification_source: string;
+    is_reply: boolean;
+    is_quote: boolean;
+    ai_signal_type?: string;
+    rule_signal_type?: string;
+  }> = [
+    {
+      tweet_id: noticeId,
+      text: "We will reset usage limits for all paid users after fixing a billing quality issue.",
+      tweet_url: `https://x.com/thsottiaux/status/${noticeId}`,
+      tweet_created_at: "2026-08-26T01:05:00.000Z",
+      signal_type: "official_notice",
+      confidence: 0.99,
+      verification_status: "confirmed",
+      classification_source: "gemini",
+      is_reply: false,
+      is_quote: false,
+    },
+    {
+      tweet_id: completionId,
+      text: "I reset usage limits for all paid users. The quality issue is fixed.",
+      tweet_url: `https://x.com/thsottiaux/status/${completionId}`,
+      tweet_created_at: "2026-08-26T01:14:00.000Z",
+      signal_type: "reset_executed",
+      confidence: 0.99,
+      verification_status: "confirmed",
+      classification_source: "gemini",
+      is_reply: false,
+      is_quote: false,
+    },
+  ];
+  let persistedEstimate: Record<string, unknown> | null = null;
+  let persistedObservation: Record<string, unknown> | null = null;
+  let displayName: Record<string, unknown> | null = null;
+  const geminiPrompts: string[] = [];
+
+  globalThis.fetch = async (input, init) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      const plan = getAtomicPlan(body);
+      const estimate = plan?.execution_estimate;
+      const observation = plan?.observation;
+      if (estimate && typeof estimate === "object") {
+        persistedEstimate = {
+          ...(estimate as Record<string, unknown>),
+          id: "route-estimate-id",
+          recovery_observation_id: "route-observation-id",
+        };
+      }
+      if (observation && typeof observation === "object") {
+        persistedObservation = {
+          ...(observation as Record<string, unknown>),
+          id: "route-observation-id",
+          created_at: observedAt,
+          updated_at: new Date().toISOString(),
+        };
+      }
+      return respondToAtomicRpc(body);
+    }
+
+    const parsed = new URL(url);
+    const table = parsed.pathname.split("/").pop() ?? "";
+    if (method === "GET" && table === "codex_usage_monitor_state") {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-26T01:10:00.000Z",
+        received_at: "2026-08-26T01:10:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 100,
+        window_duration_mins: 10080,
+        resets_at: 1_788_000_000,
+        coverage_started_at: "2026-08-26T01:00:00.000Z",
+        banked_reset_available_count: 0,
+        last_banked_grant_at: null,
+        updated_at: "2026-08-26T01:10:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && table === "tibo_signals") {
+      const tweetFilter = parsed.searchParams.get("tweet_id");
+      if (tweetFilter?.startsWith("in.(")) {
+        const ids = tweetFilter.slice(4, -1).split(",");
+        return new Response(JSON.stringify(sourceRows.filter((row) => ids.includes(row.tweet_id))), { status: 200 });
+      }
+      let rows = sourceRows;
+      const signalFilter = parsed.searchParams.get("signal_type");
+      if (signalFilter?.startsWith("eq.")) {
+        rows = rows.filter((row) => row.signal_type === signalFilter.slice(3));
+      } else if (signalFilter?.startsWith("in.(")) {
+        const types = signalFilter.slice(4, -1).split(",");
+        rows = rows.filter((row) => types.includes(row.signal_type));
+      } else if (parsed.searchParams.has("or")) {
+        rows = rows.filter((row) => row.signal_type === "reset_executed" ||
+          row.ai_signal_type === "reset_executed" || row.rule_signal_type === "reset_executed");
+      }
+      return new Response(JSON.stringify(rows), { status: 200 });
+    }
+    if (method === "GET" && table === "regular_reset_events") {
+      return new Response("[]", { status: 200 });
+    }
+    if (method === "GET" && table === "reset_execution_estimates") {
+      const eventFilter = parsed.searchParams.get("reset_event_key");
+      const recoveryObservationFilter = parsed.searchParams.get("recovery_observation_id");
+      const estimateRow = persistedEstimate && (
+        eventFilter === `eq.${persistedEstimate.reset_event_key}` ||
+        recoveryObservationFilter === `eq.${persistedEstimate.recovery_observation_id}`
+      )
+        ? persistedEstimate
+        : null;
+      return new Response(JSON.stringify(estimateRow ?? []), { status: 200 });
+    }
+    if (method === "GET" && table === "codex_recovery_observations") {
+      const idFilter = parsed.searchParams.get("id");
+      return new Response(JSON.stringify(
+        persistedObservation && idFilter === "eq.route-observation-id" ? persistedObservation : [],
+      ), { status: 200 });
+    }
+    if (url.includes("generativelanguage.googleapis.com")) {
+      const prompt = JSON.stringify(body);
+      geminiPrompts.push(prompt);
+      const metadataRequest = prompt.includes("Canonical related Tibo posts:");
+      const result = metadataRequest
+        ? {
+            reasonType: "詫びリセット",
+            scope: null,
+            scopeEvidence: null,
+            summaryJa: "品質問題の修正後に利用枠をリセット",
+            summaryEn: "Usage limits reset after a quality fix",
+            summaryZh: "质量问题修复后重置使用额度",
+            noteJa: "告知投稿では品質問題への対応が説明され、完了投稿では利用枠の復旧が確認されました。",
+            noteEn: "The notice described the quality fix, and the completion post confirmed restored limits.",
+            noteZh: "告知帖说明了质量问题的修复，完成帖确认了额度恢复。",
+            reasonJa: "品質問題への対応が投稿に明示されています。",
+          }
+        : {
+            nameJa: "品質修正後の利用枠リセット",
+            nameEn: "Usage Reset After Quality Fix Reset",
+            nameZh: "质量修复后的额度重置",
+            reason: "The paired notice and completion posts describe a quality fix.",
+          };
+      return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: JSON.stringify(result) }] } }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (method === "GET" && table === "reset_display_names") {
+      return new Response(JSON.stringify(displayName ? [displayName] : []), { status: 200 });
+    }
+    if ((method === "POST" || method === "PATCH") && table === "reset_display_names") {
+      displayName = { ...(displayName ?? {}), ...(body ?? {}) };
+      return new Response(JSON.stringify([displayName]), { status: 200 });
+    }
+    return new Response("[]", { status: method === "POST" ? 201 : 200 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt,
+      usedPercent: 0,
+      resetsAt: 1_788_604_800,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { accepted: true, recovery: "confirmed" });
+    const plan = getAtomicPlanFromRequests(requests);
+    assert.equal((plan.execution_estimate as Record<string, unknown>).reset_event_key, `tibo-reset-${completionId}`);
+    assert.ok(displayName);
+    const storedDisplayName = displayName as Record<string, unknown>;
+    assert.equal(storedDisplayName.event_key, `tibo-reset-${completionId}`);
+    assert.equal(storedDisplayName.ai_status, "accepted");
+    assert.equal(storedDisplayName.event_metadata_status, "success");
+    assert.equal(storedDisplayName.event_summary_ja, "品質問題の修正後に利用枠をリセット");
+    assert.equal(geminiPrompts.length, 2);
+    assert.ok(geminiPrompts.every((prompt) => prompt.includes("Usage Monitor recovery")));
+    assert.ok(geminiPrompts.every((prompt) => prompt.includes(noticeId) && prompt.includes(completionId)));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalGeminiKey;
+    restore();
+  }
+});
+
+for (const arrivalOrder of ["monitor-first", "day17-reply-first"] as const) {
+  test(`${arrivalOrder} webhook arrival order generates copy only from the linked persisted event`, async () => {
+    const restore = withEnvironment({
+      CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+      SUPABASE_URL: "https://example.supabase.co",
+      SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+    });
+    const originalFetch = globalThis.fetch;
+    const previousTiboSecret = process.env.TIBO_WEBHOOK_SECRET;
+    const previousGeminiKey = process.env.GEMINI_API_KEY;
+    process.env.TIBO_WEBHOOK_SECRET = "tibo-test-secret";
+    process.env.GEMINI_API_KEY = "test-gemini-key";
+
+    const reply = verifiedFutureReplyRow();
+    const replyId = String(reply.tweet_id);
+    const parentId = "2113162277688070445";
+    const recoveryObservedAt = "2026-10-22T17:59:00.000Z";
+    const previousObservedAt = "2026-10-22T17:54:00.000Z";
+    const canonicalEventKey = `tibo-reset-${parentId}`;
+    const requests: MockRequest[] = [];
+    const geminiPrompts: string[] = [];
+    let sourceReady = arrivalOrder === "day17-reply-first";
+    let persistedEstimate: Record<string, unknown> | null = null;
+    let originalEstimateEventKey: string | null = null;
+    let persistedObservation: Record<string, unknown> | null = null;
+    let displayName: Record<string, unknown> | null = null;
+    const getPersistedEstimate = (): Record<string, unknown> | null => persistedEstimate;
+    const getDisplayName = (): Record<string, unknown> | null => displayName;
+
+    globalThis.fetch = async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+      const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+      requests.push({ url, method, body });
+      const parsed = new URL(url);
+      const table = parsed.pathname.split("/").pop() ?? "";
+
+      if (method === "POST" && (url.includes(ATOMIC_RPC_PATH) || url.includes(FUTURE_REPLY_ATOMIC_RPC_PATH))) {
+        const plan = getAtomicPlan(body);
+        const estimate = plan?.execution_estimate;
+        const observation = plan?.observation;
+        if (estimate && typeof estimate === "object") {
+          const initiallyPersistedEventKey = plan?.future_reply_claim
+            ? String((estimate as Record<string, unknown>).reset_event_key)
+            : "usage-reset-route-observation-id";
+          originalEstimateEventKey = initiallyPersistedEventKey;
+          persistedEstimate = {
+            ...(estimate as Record<string, unknown>),
+            reset_event_key: initiallyPersistedEventKey,
+            id: "route-estimate-id",
+            recovery_observation_id: "route-observation-id",
+          };
+        }
+        if (observation && typeof observation === "object") {
+          persistedObservation = {
+            ...(observation as Record<string, unknown>),
+            id: "route-observation-id",
+            created_at: recoveryObservedAt,
+            updated_at: recoveryObservedAt,
+          };
+        }
+        return respondToAtomicRpc(body);
+      }
+
+      if (method === "POST" && url.includes("/rpc/merge_tibo_source_context_enrichment")) {
+        sourceReady = true;
+        return new Response(JSON.stringify({ status: "duplicate" }), { status: 200 });
+      }
+
+      if (method === "POST" && url.includes("/rpc/reconcile_codex_future_reply_notice")) {
+        if (!persistedEstimate) {
+          return new Response(JSON.stringify({ status: "not_linked" }), { status: 200 });
+        }
+        persistedEstimate = {
+          ...persistedEstimate,
+          execution_window_start_at: previousObservedAt,
+          execution_window_end_at: recoveryObservedAt,
+          tibo_announced_at: reply.tweet_created_at,
+          tibo_primary_tweet_id: replyId,
+          tibo_source_tweet_ids: [replyId],
+          official_notice_tweet_id: replyId,
+          official_notice_at: reply.tweet_created_at,
+        };
+        return new Response(JSON.stringify({
+          status: "linked",
+          reset_event_key: persistedEstimate.reset_event_key,
+          needs_cache_invalidation: false,
+        }), { status: 200 });
+      }
+
+      if (url.includes("generativelanguage.googleapis.com")) {
+        const prompt = JSON.stringify(body);
+        geminiPrompts.push(prompt);
+        const result = prompt.includes("Canonical related Tibo posts:")
+          ? {
+              reasonType: "ご祝儀リセット",
+              scope: null,
+              scopeEvidence: null,
+              summaryJa: "Day 17の投稿に続く返信で期限が案内され、利用枠の回復が観測されました。",
+              summaryEn: "A reply to the Day 17 post gave a deadline, and the usage recovery was observed.",
+              summaryZh: "Day 17帖子的回复说明了期限，之后观测到额度恢复。",
+              noteJa: "Day 17の投稿と同じリセットについて、続く返信で期限が案内されました。",
+              noteEn: "A follow-up reply gave a deadline for the same reset described in the Day 17 post.",
+              noteZh: "后续回复说明了 Day 17 帖子中同一重置的期限。",
+              reasonJa: "明示的な詫び根拠がないため、ご祝儀を運用カテゴリとして適用しました。これは祝賀や原因を示す事実ではありません。",
+            }
+          : {
+              nameJa: null,
+              nameEn: null,
+              nameZh: null,
+              reason: "The canonical notice and monitor observation identify the event.",
+            };
+        if (prompt.includes("Canonical related Tibo posts:")) {
+          displayName = {
+            ...(displayName ?? {}),
+            manual_name_ja: "手動で決めた名前",
+            manual_name_en: "Manually chosen name",
+            manual_name_zh: "人工确定的名称",
+            ai_name_ja: "以前のAI名を維持",
+            ai_name_en: "Keep the previous AI name",
+            ai_name_zh: "保留以前的AI名称",
+            ai_status: "accepted",
+            ai_prompt_version: "previous-name-prompt",
+            input_hash: "previous-name-input-hash",
+            event_reason_type: "詫びリセット",
+            event_scope: "全有料プラン",
+            event_summary_ja: "人手で直した日本語要約",
+            event_summary_en: "Human edited English summary",
+            event_summary_zh: "人工修订的中文摘要",
+            event_note_ja: "人手で直した日本語補足。",
+            event_note_en: "Human edited English note.",
+            event_note_zh: "人工修订的中文补充。",
+            event_metadata_status: "success",
+            event_metadata_input_hash: "previous-success-hash",
+            event_metadata_flags: [],
+          };
+        }
+        return new Response(JSON.stringify({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(result) }] } }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+
+      if (method === "GET" && table === "codex_usage_monitor_state") {
+        return new Response(JSON.stringify({
+          source_key: "local-codex-app-server",
+          observed_at: previousObservedAt,
+          received_at: "2026-10-22T17:54:01.000Z",
+          limit_id: "codex",
+          plan_type: "plus",
+          used_percent: 60,
+          window_duration_mins: 10080,
+          resets_at: Math.floor(Date.parse("2026-10-23T03:55:00.000Z") / 1000),
+          coverage_started_at: "2026-10-22T16:00:00.000Z",
+          banked_reset_available_count: 1,
+          last_banked_grant_at: null,
+          updated_at: "2026-10-22T17:54:01.000Z",
+        }), { status: 200 });
+      }
+
+      if (method === "GET" && table === "tibo_signals") {
+        return new Response(JSON.stringify(sourceReady ? [reply] : []), { status: 200 });
+      }
+
+      if (method === "GET" && table === "regular_reset_events") {
+        return new Response("[]", { status: 200 });
+      }
+
+      if (method === "GET" && table === "reset_execution_estimates") {
+        const eventKey = parsed.searchParams.get("reset_event_key");
+        const observationId = parsed.searchParams.get("recovery_observation_id");
+        const estimate = persistedEstimate && (
+          eventKey === `eq.${persistedEstimate.reset_event_key}` ||
+          observationId === `eq.${persistedEstimate.recovery_observation_id}`
+        ) ? persistedEstimate : null;
+        return new Response(JSON.stringify(estimate ?? []), { status: 200 });
+      }
+
+      if (method === "GET" && table === "codex_recovery_observations") {
+        const observationId = parsed.searchParams.get("id");
+        return new Response(JSON.stringify(
+          persistedObservation && observationId === "eq.route-observation-id" ? persistedObservation : [],
+        ), { status: 200 });
+      }
+
+      if (method === "GET" && table === "reset_display_names") {
+        return new Response(JSON.stringify(displayName ? [displayName] : []), { status: 200 });
+      }
+
+      if ((method === "POST" || method === "PATCH") && table === "reset_display_names") {
+        const value = body && Array.isArray(body) ? body[0] : body;
+        displayName = { ...(displayName ?? {}), ...(value ?? {}) };
+        return new Response(JSON.stringify([displayName]), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+    };
+
+    const postVerifiedReplyContext = async () => POSTTibo(new NextRequest("http://localhost/api/webhook/tibo", {
+      method: "POST",
+      headers: {
+        authorization: "Bearer tibo-test-secret",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        kind: "source_context_enrichment",
+        tweetId: replyId,
+        text: reply.text,
+        tweetUrl: reply.tweet_url,
+        tweetCreatedAt: reply.tweet_created_at,
+        isReply: true,
+        replyToHandles: ["@thsottiaux"],
+        replyParentTweetId: parentId,
+        replyParentTweetUrl: `https://x.com/thsottiaux/status/${parentId}`,
+        replyContextText: "Day 17/ Bet you thought we forgot, but no, it’s reset day today.",
+      }),
+    }));
+
+    try {
+      if (arrivalOrder === "monitor-first") {
+        const monitorResponse = await POST(buildRequest({
+          observedAt: recoveryObservedAt,
+          usedPercent: 0,
+          resetsAt: Math.floor(Date.parse("2026-10-30T03:55:00.000Z") / 1000),
+          monitorProtocolVersion: 2,
+          postReason: "recovery_candidate",
+        }));
+        assert.equal(monitorResponse.status, 200);
+        assert.deepEqual(await monitorResponse.json(), { accepted: true, recovery: "observed_unconfirmed" });
+        assert.equal(geminiPrompts.length, 0, "A pending monitor estimate cannot generate before its reply link exists");
+      }
+
+      const tiboResponse = await postVerifiedReplyContext();
+      assert.equal(tiboResponse.status, 200);
+      assert.deepEqual(await tiboResponse.json(), { success: true, status: "duplicate" });
+      if (arrivalOrder === "day17-reply-first") {
+        assert.equal(geminiPrompts.length, 0, "The notice alone cannot generate reset copy");
+      }
+
+      if (arrivalOrder === "day17-reply-first") {
+        const monitorResponse = await POST(buildRequest({
+          observedAt: recoveryObservedAt,
+          usedPercent: 0,
+          resetsAt: Math.floor(Date.parse("2026-10-30T03:55:00.000Z") / 1000),
+          monitorProtocolVersion: 2,
+          postReason: "recovery_candidate",
+        }));
+        assert.equal(monitorResponse.status, 200);
+        assert.deepEqual(await monitorResponse.json(), { accepted: true, recovery: "observed_unconfirmed" });
+      }
+
+      const linkedEstimate = getPersistedEstimate();
+      assert.ok(linkedEstimate);
+      assert.equal(originalEstimateEventKey, arrivalOrder === "monitor-first"
+        ? "usage-reset-route-observation-id"
+        : canonicalEventKey);
+      assert.equal(linkedEstimate.reset_event_key, originalEstimateEventKey, "reply reconciliation preserves the estimate's original event key");
+      assert.equal(linkedEstimate.official_notice_tweet_id, replyId);
+      assert.equal(geminiPrompts.length, 2, "Both copy generators run after the persisted monitor event is linked");
+      const metadataPrompt = geminiPrompts.find((prompt) => prompt.includes("Canonical related Tibo posts:"));
+      assert.ok(metadataPrompt, "The metadata generator receives persisted Tibo source context");
+      const namePrompt = geminiPrompts.find((prompt) => !prompt.includes("Canonical related Tibo posts:"));
+      assert.ok(namePrompt, "The display-name generator receives persisted Tibo source context");
+      const parentText = "Day 17/ Bet you thought we forgot, but no, it’s reset day today.";
+      for (const prompt of [metadataPrompt!, namePrompt!]) {
+        assert.ok(prompt.includes("verified reply notice"));
+        assert.ok(prompt.includes("verified reply parent"));
+        assert.ok(prompt.includes(String(reply.text)));
+        assert.ok(prompt.includes(parentText));
+        assert.ok(prompt.includes(parentId));
+      }
+      assert.equal(getDisplayName()?.event_metadata_status, "success");
+      assert.equal(getDisplayName()?.manual_name_ja, "手動で決めた名前");
+      assert.equal(getDisplayName()?.manual_name_en, "Manually chosen name");
+      assert.equal(getDisplayName()?.manual_name_zh, "人工确定的名称");
+      assert.equal(getDisplayName()?.ai_name_ja, "以前のAI名を維持");
+      assert.equal(getDisplayName()?.ai_name_en, "Keep the previous AI name");
+      assert.equal(getDisplayName()?.ai_name_zh, "保留以前的AI名称");
+      assert.equal(getDisplayName()?.event_summary_ja, "人手で直した日本語要約");
+      assert.equal(getDisplayName()?.event_summary_en, "Human edited English summary");
+      assert.equal(getDisplayName()?.event_summary_zh, "人工修订的中文摘要");
+      assert.equal(getDisplayName()?.event_note_ja, "人手で直した日本語補足。");
+      assert.equal(getDisplayName()?.event_note_en, "Human edited English note.");
+      assert.equal(getDisplayName()?.event_note_zh, "人工修订的中文补充。");
+    } finally {
+      globalThis.fetch = originalFetch;
+      restore();
+      if (previousTiboSecret === undefined) delete process.env.TIBO_WEBHOOK_SECRET;
+      else process.env.TIBO_WEBHOOK_SECRET = previousTiboSecret;
+      if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+      else process.env.GEMINI_API_KEY = previousGeminiKey;
+    }
+  });
+}
 
 test("partial error on notice lookup writes fallback observation and executes cache invalidation path", async () => {
   const restore = withEnvironment({
