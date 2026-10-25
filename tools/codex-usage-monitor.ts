@@ -25,9 +25,11 @@ import {
   type PendingMonitorPostDeliveryFailure,
 } from "./codex-usage-monitor-persistence";
 import {
+  advanceMonitorRecoverySchedule,
   createMonitorRecoveryCandidateStore,
   getMonitorRecoveryCandidatePath,
   MonitorRecoveryCandidateStoreError,
+  RESET_AT_JITTER_TOLERANCE_SEC,
   type MonitorRecoveryCandidateStore,
   type PendingRecoveryCandidateRecord,
   type RecoveryCandidateDiscardReason,
@@ -51,7 +53,7 @@ export const APP_SERVER_RPC_FAILURE_RESTART_THRESHOLD = 3;
 export const MONITOR_WEBHOOK_TIMEOUT_MS = 15_000;
 export const MAX_JSON_LINE_LENGTH = 1_000_000;
 export const MIN_RECOVERY_CONFIRMATION_DELAY_MS = MIN_MONITOR_POLL_INTERVAL_MS;
-export const RESET_AT_JITTER_TOLERANCE_SEC = 30;
+export { RESET_AT_JITTER_TOLERANCE_SEC };
 
 const RESTART_BACKOFF_MS = [5_000, 30_000, 120_000] as const;
 const DEFAULT_WEBHOOK_URL = "https://codex.gussuriworks.com/api/webhook/codex-usage";
@@ -422,12 +424,12 @@ export function evaluateMonitorRecoveryCandidate(
       };
     }
 
-    // 5. resetsAt reverted or jitter deviation
+    // 5. The reset schedule must remain consistent with established evidence.
     const resetsAtAdvanceFromBaseline = snapshot.resetsAt - baseline.resetsAt;
-    const resetsAtDiffFromFirstEvidence = Math.abs(snapshot.resetsAt - firstEvidence.resetsAt);
+    const scheduleAdvance = advanceMonitorRecoverySchedule(candidate, snapshot);
     if (
       resetsAtAdvanceFromBaseline < RESET_AT_MEANINGFUL_FORWARD_SEC - RESET_AT_JITTER_TOLERANCE_SEC ||
-      resetsAtDiffFromFirstEvidence > RESET_AT_JITTER_TOLERANCE_SEC
+      !scheduleAdvance
     ) {
       return {
         status: "cancelled",
@@ -438,6 +440,7 @@ export function evaluateMonitorRecoveryCandidate(
         nextBaselineSnapshot: snapshot,
       };
     }
+    const { schedule: scheduleState, confirmationEligible } = scheduleAdvance;
 
     // Check confirmation requirements:
     // 1. Must be a scheduled poll (notifications can start, update, or cancel candidates, but cannot confirm)
@@ -446,13 +449,14 @@ export function evaluateMonitorRecoveryCandidate(
       ? nowMs - candidate.candidateStartedAtMs
       : 0;
 
-    if (trigger !== "poll" || elapsedMs < MIN_RECOVERY_CONFIRMATION_DELAY_MS) {
+    if (trigger !== "poll" || elapsedMs < MIN_RECOVERY_CONFIRMATION_DELAY_MS || !confirmationEligible) {
       return {
         status: "pending_unconfirmed",
         postReason: null,
         postSnapshot: snapshot,
         nextPendingRecoveryCandidate: {
           ...candidate,
+          ...scheduleState,
           lastObservation: snapshot,
           observationCount: candidate.observationCount + 1,
         },
@@ -542,6 +546,7 @@ export function evaluateMonitorRecoveryCandidate(
         candidateStartedAtMs: nowMs,
         lastObservation: snapshot,
         observationCount: 1,
+        scheduleMode: "undetermined",
       },
       nextBaselineSnapshot: baseline,
     };
@@ -598,17 +603,13 @@ export function getMonitorDiagnosticComparison(snapshot: CodexUsageSnapshot, sta
   }
 
   const usageDelta = baseline.usedPercent - snapshot.usedPercent;
-  const resetsAtDeltaSec = snapshot.resetsAt - baseline.resetsAt;
   if (state.pendingRecoveryCandidate) {
     if (usageDelta < 1) return { evaluation, reason: "usage_condition_unmet" };
-    if (resetsAtDeltaSec < RESET_AT_MEANINGFUL_FORWARD_SEC - RESET_AT_JITTER_TOLERANCE_SEC ||
-      Math.abs(snapshot.resetsAt - state.pendingRecoveryCandidate.firstEvidenceSnapshot.resetsAt) > RESET_AT_JITTER_TOLERANCE_SEC) {
-      return { evaluation, reason: "time_condition_unmet" };
-    }
     return { evaluation, reason: "candidate_confirmation_waiting" };
   }
 
   const usageMet = usageDelta >= 1;
+  const resetsAtDeltaSec = snapshot.resetsAt - baseline.resetsAt;
   const timeMet = resetsAtDeltaSec >= RESET_AT_MEANINGFUL_FORWARD_SEC;
   if (!usageMet && !timeMet) return { evaluation, reason: "both_conditions_unmet" };
   if (!usageMet) return { evaluation, reason: "usage_condition_unmet" };
