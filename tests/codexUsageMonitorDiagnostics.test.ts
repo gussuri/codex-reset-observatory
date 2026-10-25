@@ -57,6 +57,68 @@ test("diagnostic comparison reasons cover usage-only, structure, gap, clock canc
   assert.equal(heartbeat.evaluation.postReason, "heartbeat", "the send decision remains separately available");
 });
 
+test("rolling schedule diagnostics agree with candidate confirmation for the incident observations", () => {
+  const baseline = {
+    observedAt: "2026-10-25T06:09:36.080Z",
+    limitId: "codex",
+    planType: "plus",
+    usedPercent: 46,
+    windowDurationMins: 10080,
+    resetsAt: 1_793_382_112,
+  } as const;
+  const observations = [
+    {
+      observedAt: "2026-10-25T06:11:35.968Z",
+      limitId: "codex",
+      planType: "plus",
+      usedPercent: 0,
+      windowDurationMins: 10080,
+      resetsAt: 1_793_513_498,
+    },
+    {
+      observedAt: "2026-10-25T06:13:35.922Z",
+      limitId: "codex",
+      planType: "plus",
+      usedPercent: 0,
+      windowDurationMins: 10080,
+      resetsAt: 1_793_513_618,
+    },
+    {
+      observedAt: "2026-10-25T06:15:36.214Z",
+      limitId: "codex",
+      planType: "plus",
+      usedPercent: 0,
+      windowDurationMins: 10080,
+      resetsAt: 1_793_513_738,
+    },
+  ] as const;
+  let state: MonitorSnapshotState = {
+    baselineSnapshot: baseline,
+    previousLocalSnapshot: baseline,
+    lastSuccessfulPostAt: Date.parse(baseline.observedAt),
+    pendingPosts: [],
+  };
+
+  const firstAt = Date.parse(observations[0].observedAt);
+  const first = evaluateMonitorRecoveryCandidate(observations[0], state, firstAt, "notification");
+  assert.equal(first.status, "started");
+  state = { ...state, pendingRecoveryCandidate: first.nextPendingRecoveryCandidate };
+
+  const secondAt = Date.parse(observations[1].observedAt);
+  const second = getMonitorDiagnosticComparison(observations[1], state, secondAt, "notification");
+  assert.equal(second.reason, "candidate_confirmation_waiting");
+  assert.equal(second.evaluation.status, "pending_unconfirmed");
+  state = {
+    ...state,
+    pendingRecoveryCandidate: second.evaluation.nextPendingRecoveryCandidate,
+  };
+
+  const thirdAt = Date.parse(observations[2].observedAt);
+  const third = getMonitorDiagnosticComparison(observations[2], state, thirdAt, "poll");
+  assert.equal(third.reason, "candidate_confirmed");
+  assert.equal(third.evaluation.postReason, "recovery_candidate");
+});
+
 test("diagnostic sink rotates within its byte and generation caps and resumes after restart", () => {
   const parent = mkdtempSync(path.join(os.tmpdir(), "monitor-diagnostics-"));
   const directory = path.join(parent, "logs");

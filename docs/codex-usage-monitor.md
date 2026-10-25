@@ -168,7 +168,7 @@ Observations arrive via three distinct triggers:
    - **Scheduled poll trigger**: `trigger === "poll"`, ensuring client-side independent verification rather than a server-pushed notification burst.
    - **Hold duration**: At least one minimum poll interval has elapsed (`elapsedMs >= MIN_RECOVERY_CONFIRMATION_DELAY_MS = 60s`, typically the scheduled poll at 120s).
    - **Usage drop maintained**: Usage remains recovered relative to the frozen `preRecoveryBaseline` (`preRecoveryBaseline.usedPercent - snapshot.usedPercent >= 1%`).
-   - **Schedule forward maintained**: `resetsAt` remains forward relative to `preRecoveryBaseline.resetsAt` and consistent with `firstEvidenceSnapshot.resetsAt` (within 30-second clock jitter tolerance `RESET_AT_JITTER_TOLERANCE_SEC = 30s`).
+   - **Schedule forward maintained**: `resetsAt` remains meaningfully forward relative to `preRecoveryBaseline.resetsAt` and follows an accepted schedule state below.
    - **First Evidence Timestamp Preservation**: Upon confirmation, the snapshot enqueued and posted to the webhook is `firstEvidenceSnapshot`. This ensures that the public observatory reflects the exact original time of recovery (t=0s) rather than the confirmation-delay time (t=120s), keeping regular proximity and probability windows accurate.
    - Audit log `recovery_candidate_confirmed` is emitted.
    - The candidate is cleared and the baseline advances to the current snapshot.
@@ -185,7 +185,7 @@ Observations arrive via three distinct triggers:
    - **Usage reverted (`usage_reverted`)**: The current usage bounces back towards the
      baseline (`preRecoveryBaseline.usedPercent - snapshot.usedPercent < 1%`).
    - **Reset time reverted (`reset_at_reverted`)**: `resetsAt` reverts to the old
-     schedule or deviates unexpectedly from `firstEvidenceSnapshot`.
+     schedule, leaves the established schedule pattern, or shifts without evidence.
    - **Structure change (`structure_change`)**: `planType`, `limitId`, or
      `windowDurationMins` changes. Candidate is cancelled and `structure_change` is posted.
    - **Comparison gap (`comparison_gap`)**: More than 10 minutes pass without observation.
@@ -193,6 +193,67 @@ Observations arrive via three distinct triggers:
    - When cancelled, `recovery_candidate_cancelled` is logged with the specific reason,
      the candidate is cleared, and baseline rebases to the latest snapshot. Zero webhooks
      are sent for the false alarm.
+
+### Reset schedule states
+
+The monitor compares a pending candidate with one of four schedule states. The
+30-second tolerance is retained; it is not widened for the incident.
+
+- **Undetermined:** A short interval may fit both a fixed timestamp and an
+  observation-following weekly timestamp. The monitor keeps this state until
+  the observations separate the two patterns; a fixed state also requires at
+  least 60 seconds since first evidence. For example, fixed `resetsAt` values
+  at +10s, +20s, and +31s remain uncommitted; a scheduled poll at +120s with
+  the same timestamp establishes the fixed pattern and remains confirmable.
+- **Fixed:** The timestamp remains within ±30 seconds of the first evidence
+  value. Once this pattern is established, a later move into a rolling pattern
+  cancels the candidate.
+- **Rolling:** The first and current `resetsAt - observedAt` offsets stay within
+  ±30 seconds of the 10080-minute window, and `resetsAt` movement tracks the
+  observation interval within ±30 seconds. This accepts a consistent moving
+  schedule as a calculation model; it does not claim that the provider's
+  internal reset behavior has been verified. If usage rises while `resetsAt`
+  appears stationary inside a sub-30-second interval, even a scheduled poll
+  waits for more evidence unless that interval independently shows positive
+  rolling movement.
+- **Fixed after usage:** This transition is accepted only after rolling was
+  established, the fixed timestamp is more than 30 seconds after the last
+  rolling observation, usage increased by at least 1 percentage point, and the
+  new timestamp is within ±30 seconds of the last rolling value. The transition
+  snapshot and its rolling predecessor are kept in candidate schema v2. Later
+  observations must remain within ±30 seconds of the freeze snapshot.
+
+The 2026-10-25 incident contains three recovered observations at 06:11:35.968Z,
+06:13:35.922Z, and 06:15:36.214Z. Their usage was 0%, and their reset offsets
+were 604802.032s, 604802.078s, and 604801.786s. The observations show an
+approximately one-week window advancing with observation time. They do not show
+how the provider behaves after usage begins. In particular, `usedPercent > 0`
+with a rolling offset is handled as a bounded calculation model, not as a
+verified provider contract.
+
+Candidate storage at `%LOCALAPPDATA%\CodexUsageMonitor\pending-recovery-candidate.json`
+uses schema v2 for the schedule mode and any rolling-to-fixed transition
+evidence. Existing schema-v1 candidates remain readable only under their former
+fixed-timestamp rule; the loader does not invent missing rolling observations.
+This storage version does not change webhook protocol v2 or the database schema.
+
+### Local update and rollback handling
+
+Before a local executable or shortcut switch, close the GUI and copy both
+`%LOCALAPPDATA%\CodexUsageMonitor\pending-posts.json` and
+`%LOCALAPPDATA%\CodexUsageMonitor\pending-recovery-candidate.json` to a dated
+backup outside the active state directory. Keep `pending-posts.json` in place:
+it is the durable delivery queue and can contain confirmed observations waiting
+for retry. A newer monitor reads v1 and writes v2.
+
+For rollback, close the GUI and check whether a v2 candidate exists. An older
+binary does not understand v2 and deletes an unsupported candidate when loading
+it. Keep the old binary stopped while that candidate exists; restore a compatible
+newer binary and the backed-up candidate before resuming, or wait until the
+candidate has been confirmed/cancelled and removed. The outbox remains separate;
+do not replace it with an older backup over newer queued work. Never delete or
+replace the state directory during a shortcut switch. This change does not update
+the installed executable or shortcut.
 
 ### Post-Recovery Usage Protection
 

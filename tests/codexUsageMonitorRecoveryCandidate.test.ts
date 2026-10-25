@@ -12,15 +12,19 @@ import type { CodexUsageSnapshot } from "../lib/codexUsageRecovery";
 import {
   createJsonMonitorLogger,
   runCodexUsageMonitor,
+  toSafeMonitorPayload,
   updateMonitorSnapshotState,
   type MonitorLogger,
 } from "../tools/codex-usage-monitor";
 import {
   createMonitorRecoveryCandidateStore,
   getMonitorRecoveryCandidatePath,
+  MONITOR_RECOVERY_CANDIDATE_SCHEMA_VERSION,
+  MONITOR_RECOVERY_CANDIDATE_SOURCE,
   MONITOR_RECOVERY_CANDIDATE_TTL_MS,
   type PendingRecoveryCandidateRecord,
 } from "../tools/codex-usage-monitor-recovery-candidate";
+import type { MonitorDiagnosticEvent } from "../tools/codex-usage-monitor-diagnostics";
 import { createPendingMonitorPostStore, getMonitorPendingPostsPath } from "../tools/codex-usage-monitor-persistence";
 
 const STARTED_AT = Date.parse("2026-09-27T00:00:00.000Z");
@@ -50,9 +54,51 @@ function candidate(): PendingRecoveryCandidateRecord {
     candidateStartedAtMs: STARTED_AT + 120_000,
     lastObservation: firstEvidence,
     observationCount: 1,
+    scheduleMode: "legacy_fixed",
     lastSuccessfulPostAtMs: STARTED_AT,
     lastKnownBankedResetAvailableCount: 3,
   };
+}
+
+function rollingFreezeCandidate(): PendingRecoveryCandidateRecord {
+  const firstAt = STARTED_AT + 120_000;
+  const firstResetAt = firstAt / 1000 + 604_800;
+  const baseline = snapshot({
+    observedAt: new Date(STARTED_AT).toISOString(),
+    usedPercent: 80,
+    resetsAt: firstResetAt - 3_600,
+  });
+  const firstEvidence = snapshot({
+    observedAt: new Date(firstAt).toISOString(),
+    usedPercent: 0,
+    resetsAt: firstResetAt,
+  });
+  const lastRollingObservation = snapshot({
+    observedAt: new Date(firstAt + 60_000).toISOString(),
+    usedPercent: 0,
+    resetsAt: firstResetAt + 60,
+  });
+  const scheduleFreezeObservation = snapshot({
+    observedAt: new Date(firstAt + 180_000).toISOString(),
+    usedPercent: 1,
+    resetsAt: firstResetAt + 60,
+  });
+  const lastObservation = snapshot({
+    ...scheduleFreezeObservation,
+    observedAt: new Date(firstAt + 240_000).toISOString(),
+  });
+  return {
+    preRecoveryBaseline: baseline,
+    firstEvidenceSnapshot: firstEvidence,
+    candidateStartedAtMs: firstAt,
+    lastObservation,
+    observationCount: 4,
+    lastSuccessfulPostAtMs: STARTED_AT,
+    lastKnownBankedResetAvailableCount: 3,
+    scheduleMode: "fixed_after_usage",
+    lastRollingObservation,
+    scheduleFreezeObservation,
+  } as PendingRecoveryCandidateRecord;
 }
 
 function createRateLimitResponse(value: CodexUsageSnapshot) {
@@ -130,9 +176,148 @@ test("recovery candidate is atomically persisted separately and restored after a
     assert.notEqual(candidatePath, queuePath, "candidate state must not share the outbox file");
     assert.equal(path.dirname(candidatePath), path.dirname(queuePath));
     assert.equal(existsSync(candidatePath), true);
+    assert.equal(JSON.parse(readFileSync(candidatePath, "utf8")).schemaVersion, MONITOR_RECOVERY_CANDIDATE_SCHEMA_VERSION);
     assert.doesNotMatch(readFileSync(candidatePath, "utf8"), /api.?key|secret|token/i);
     const restored = createMonitorRecoveryCandidateStore(candidatePath).load(STARTED_AT + 180_000);
     assert.deepEqual(restored, { candidate: pending });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("schema-v2 restores a rolling-to-fixed-after-usage transition with its evidence", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-recovery-candidate-freeze-"));
+  const filePath = path.join(directory, "pending-recovery-candidate.json");
+  try {
+    const pending = rollingFreezeCandidate();
+    createMonitorRecoveryCandidateStore(filePath).save(pending, STARTED_AT + 120_000 + 240_000);
+
+    const restored = createMonitorRecoveryCandidateStore(filePath).load(STARTED_AT + 120_000 + 300_000);
+    assert.deepEqual(restored, { candidate: pending });
+    assert.equal(JSON.parse(readFileSync(filePath, "utf8")).schemaVersion, 2);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("schema-v2 restores an established rolling candidate without inventing freeze evidence", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-recovery-candidate-rolling-"));
+  const filePath = path.join(directory, "pending-recovery-candidate.json");
+  try {
+    const transitioned = rollingFreezeCandidate();
+    const pending: PendingRecoveryCandidateRecord = {
+      ...transitioned,
+      lastObservation: transitioned.lastRollingObservation!,
+      observationCount: 2,
+      scheduleMode: "rolling",
+      scheduleFreezeObservation: undefined,
+    };
+    delete (pending as Record<string, unknown>).scheduleFreezeObservation;
+    createMonitorRecoveryCandidateStore(filePath).save(pending, STARTED_AT + 180_000);
+
+    const restored = createMonitorRecoveryCandidateStore(filePath).load(STARTED_AT + 240_000);
+    assert.deepEqual(restored, { candidate: pending });
+    assert.equal(restored.candidate?.scheduleMode, "rolling");
+    assert.equal(restored.candidate?.scheduleFreezeObservation, undefined);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("schema-v2 rejects fabricated freeze anchors, wrong identities, and invalid transition order", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-recovery-candidate-freeze-invalid-"));
+  const filePath = path.join(directory, "pending-recovery-candidate.json");
+  const store = createMonitorRecoveryCandidateStore(filePath);
+  const writeCandidate = () => store.save(rollingFreezeCandidate(), STARTED_AT + 360_000);
+  try {
+    writeCandidate();
+    const forgedAnchor = JSON.parse(readFileSync(filePath, "utf8")) as Record<string, any>;
+    forgedAnchor.candidate.scheduleFreezeObservation.resetsAt += 3_600;
+    writeFileSync(filePath, JSON.stringify(forgedAnchor), "utf8");
+    assert.deepEqual(store.load(STARTED_AT + 420_000), { candidate: null, discardedReason: "inconsistent" });
+
+    writeCandidate();
+    const wrongIdentity = JSON.parse(readFileSync(filePath, "utf8")) as Record<string, any>;
+    wrongIdentity.candidate.lastRollingObservation.planType = "pro";
+    writeFileSync(filePath, JSON.stringify(wrongIdentity), "utf8");
+    assert.deepEqual(store.load(STARTED_AT + 420_000), { candidate: null, discardedReason: "identity_mismatch" });
+
+    writeCandidate();
+    const wrongOrder = JSON.parse(readFileSync(filePath, "utf8")) as Record<string, any>;
+    wrongOrder.candidate.scheduleFreezeObservation.observedAt = new Date(STARTED_AT + 120_000 + 30_000).toISOString();
+    writeFileSync(filePath, JSON.stringify(wrongOrder), "utf8");
+    assert.deepEqual(store.load(STARTED_AT + 420_000), { candidate: null, discardedReason: "inconsistent" });
+
+    writeCandidate();
+    const comparisonGap = JSON.parse(readFileSync(filePath, "utf8")) as Record<string, any>;
+    const lastRollingAt = STARTED_AT + 120_000 + MONITOR_RECOVERY_CANDIDATE_TTL_MS + 1;
+    comparisonGap.candidate.lastRollingObservation.observedAt = new Date(lastRollingAt).toISOString();
+    comparisonGap.candidate.scheduleFreezeObservation.observedAt = new Date(lastRollingAt + 1).toISOString();
+    comparisonGap.candidate.lastObservation.observedAt = new Date(lastRollingAt + 2).toISOString();
+    writeFileSync(filePath, JSON.stringify(comparisonGap), "utf8");
+    assert.deepEqual(store.load(STARTED_AT + 120_000 + MONITOR_RECOVERY_CANDIDATE_TTL_MS), {
+      candidate: null,
+      discardedReason: "inconsistent",
+    }, "restore rechecks the ten-minute evidence gap across all schedule anchors");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("schema-v1 fixed candidates remain readable without invented rolling evidence", () => {
+  const directory = mkdtempSync(path.join(os.tmpdir(), "codex-recovery-candidate-v1-"));
+  const filePath = path.join(directory, "pending-recovery-candidate.json");
+  try {
+    const pending = candidate();
+    const legacyCandidate = {
+      ...pending,
+      lastSuccessfulPostAtMs: STARTED_AT,
+      lastKnownBankedResetAvailableCount: 3,
+    };
+    delete (legacyCandidate as Record<string, unknown>).scheduleMode;
+    writeFileSync(filePath, JSON.stringify({
+      schemaVersion: 1,
+      source: MONITOR_RECOVERY_CANDIDATE_SOURCE,
+      identity: { limitId: "codex", planType: "plus", windowDurationMins: 10080 },
+      candidate: legacyCandidate,
+    }), "utf8");
+
+    const restored = createMonitorRecoveryCandidateStore(filePath).load(STARTED_AT + 180_000);
+    assert.equal(restored.candidate?.firstEvidenceSnapshot.observedAt, pending.firstEvidenceSnapshot.observedAt);
+    assert.equal(restored.candidate?.scheduleMode, "legacy_fixed");
+    assert.equal(restored.candidate?.lastRollingObservation, undefined);
+    assert.equal(restored.candidate?.scheduleFreezeObservation, undefined);
+
+    const movingLegacyCandidate = {
+      ...legacyCandidate,
+      firstEvidenceSnapshot: snapshot({
+        observedAt: new Date(STARTED_AT + 120_000).toISOString(),
+        usedPercent: 0,
+        resetsAt: Math.floor((STARTED_AT + 120_000) / 1000) + 604_800,
+      }),
+      lastObservation: snapshot({
+        observedAt: new Date(STARTED_AT + 240_000).toISOString(),
+        usedPercent: 0,
+        resetsAt: Math.floor((STARTED_AT + 240_000) / 1000) + 604_800,
+      }),
+      candidateStartedAtMs: STARTED_AT + 120_000,
+      observationCount: 2,
+      preRecoveryBaseline: snapshot({
+        observedAt: new Date(STARTED_AT).toISOString(),
+        usedPercent: 80,
+        resetsAt: Math.floor((STARTED_AT + 120_000) / 1000) + 604_800 - 3_600,
+      }),
+    };
+    writeFileSync(filePath, JSON.stringify({
+      schemaVersion: 1,
+      source: MONITOR_RECOVERY_CANDIDATE_SOURCE,
+      identity: { limitId: "codex", planType: "plus", windowDurationMins: 10080 },
+      candidate: movingLegacyCandidate,
+    }), "utf8");
+    assert.deepEqual(createMonitorRecoveryCandidateStore(filePath).load(STARTED_AT + 300_000), {
+      candidate: null,
+      discardedReason: "inconsistent",
+    }, "v1 cannot invent rolling evidence that was never stored");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -340,6 +525,118 @@ test("monitor restores a persisted candidate after restart and queues one recove
     assert.equal(secondEvents.filter((event) => event.event === "recovery_candidate_confirmed").length, 1);
     assert.ok(secondEvents.some((event) => event.event === "pending_queue_delivery_deferred"));
     assert.deepEqual(deliveries, ["recovery_candidate"], "the normal initial snapshot is not relabeled as recovery");
+  } finally {
+    firstController.abort();
+    rmSync(localAppData, { recursive: true, force: true });
+  }
+});
+
+test("restored rolling-to-freeze evidence queues once, survives failure, and replays protocol-v2 success", async () => {
+  const localAppData = mkdtempSync(path.join(os.tmpdir(), "codex-recovery-freeze-restart-"));
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: "test",
+    LOCALAPPDATA: localAppData,
+    CODEX_USAGE_MONITOR_SECRET: "test-only-secret",
+    CODEX_USAGE_WEBHOOK_URL: "https://example.invalid/api/webhook/codex-usage",
+    CODEX_USAGE_POLL_INTERVAL_MS: "60000",
+    CODEX_CLI_PATH: "test-codex",
+  };
+  const queuePath = getMonitorPendingPostsPath(env);
+  const queueStore = createPendingMonitorPostStore(queuePath);
+  const candidatePath = getMonitorRecoveryCandidatePath(queuePath);
+  const pending = rollingFreezeCandidate();
+  const freeze = pending.scheduleFreezeObservation!;
+  const afterFreeze = snapshot({
+    ...freeze,
+    observedAt: new Date(Date.parse(freeze.observedAt) + 60_000).toISOString(),
+    usedPercent: 2,
+  });
+  const firstDeliveryAt = Date.parse(afterFreeze.observedAt);
+  const firstDiagnostics: MonitorDiagnosticEvent[] = [];
+  const firstEvents: Array<Record<string, unknown>> = [];
+  const firstController = new AbortController();
+  const firstLogger = createJsonMonitorLogger((line) => firstEvents.push(JSON.parse(line) as Record<string, unknown>));
+  const failedDeliveries: Array<{ payload: ReturnType<typeof toSafeMonitorPayload>; reason: string }> = [];
+  createMonitorRecoveryCandidateStore(candidatePath).save(pending, Date.parse(pending.lastObservation.observedAt));
+  let firstReadCount = 0;
+  const firstRun = runCodexUsageMonitor(env, {
+    signal: firstController.signal,
+    logger: firstLogger,
+    diagnosticSink: (event) => firstDiagnostics.push(event),
+    monitorTiming: { now: () => firstDeliveryAt, pollIntervalMs: 2 },
+    pendingQueueRetryTiming: { checkIntervalMs: 2, shortRetryIntervalMs: 60_000, recoveryBackoffMs: [60_000] },
+    spawnAppServer: () => createSnapshotAppServer(() => {
+      const current = snapshot({
+        ...afterFreeze,
+        observedAt: new Date(firstDeliveryAt + firstReadCount * 60_000).toISOString(),
+      });
+      firstReadCount += 1;
+      return createRateLimitResponse(current);
+    }),
+    sendSnapshot: async (value, reason) => {
+      if (reason === "recovery_candidate") {
+        failedDeliveries.push({ payload: toSafeMonitorPayload(value, reason), reason });
+      }
+      return { accepted: false, failure: { category: "transport" } };
+    },
+  });
+
+  try {
+    await waitForCondition(() => failedDeliveries.length === 1, "the restored recovery delivery attempt");
+    firstController.abort();
+    await firstRun;
+    const queuedRecovery = queueStore.load().filter((post) => post.reason === "recovery_candidate");
+    assert.equal(queuedRecovery.length, 1, "the rolling-to-freeze candidate creates one durable recovery event");
+    assert.equal(queuedRecovery[0]?.snapshot.observedAt, pending.firstEvidenceSnapshot.observedAt);
+    assert.equal(failedDeliveries[0]?.payload.monitorProtocolVersion, 2);
+    assert.equal(failedDeliveries[0]?.payload.postReason, "recovery_candidate");
+    assert.equal(existsSync(candidatePath), false, "confirmation moves to the outbox before delivery");
+    assert.ok(firstEvents.some((event) => event.event === "recovery_candidate_restored"));
+    assert.equal(firstEvents.filter((event) => event.event === "recovery_candidate_confirmed").length, 1);
+    assert.ok(firstDiagnostics.some((event) => event.event === "diagnostic_webhook_result" && event.status === "failure" && event.reason === "recovery_candidate"));
+
+    const replayAt = Date.parse(afterFreeze.observedAt) + 60_000;
+    const replayController = new AbortController();
+    const replayDiagnostics: MonitorDiagnosticEvent[] = [];
+    const replayDeliveries: Array<{ payload: ReturnType<typeof toSafeMonitorPayload>; reason: string }> = [];
+    let replayReadCount = 0;
+    const replayRun = runCodexUsageMonitor(env, {
+      signal: replayController.signal,
+      logger: createJsonMonitorLogger(() => undefined),
+      diagnosticSink: (event) => replayDiagnostics.push(event),
+      monitorTiming: { now: () => replayAt, pollIntervalMs: 2 },
+      pendingQueueRetryTiming: { checkIntervalMs: 2, shortRetryIntervalMs: 2, recoveryBackoffMs: [2] },
+      spawnAppServer: () => createSnapshotAppServer(() => {
+        const current = snapshot({
+          ...afterFreeze,
+          observedAt: new Date(replayAt + replayReadCount * 60_000).toISOString(),
+        });
+        replayReadCount += 1;
+        return createRateLimitResponse(current);
+      }),
+      sendSnapshot: async (value, reason) => {
+        replayDeliveries.push({ payload: toSafeMonitorPayload(value, reason), reason });
+        return { accepted: true, recovery: "confirmed" };
+      },
+    });
+
+    try {
+      await waitForCondition(() => replayDeliveries.length === 1, "the queued recovery replay");
+      replayController.abort();
+      await replayRun;
+    } finally {
+      replayController.abort();
+      await replayRun;
+    }
+
+    assert.equal(replayDeliveries.length, 1);
+    assert.equal(replayDeliveries[0]?.reason, "recovery_candidate");
+    assert.equal(replayDeliveries[0]?.payload.monitorProtocolVersion, 2);
+    assert.equal(replayDeliveries[0]?.payload.postReason, "recovery_candidate");
+    assert.equal(replayDeliveries[0]?.payload.observedAt, pending.firstEvidenceSnapshot.observedAt);
+    assert.equal(queueStore.load().length, 0, "accepted replay clears the durable item");
+    assert.ok(replayDiagnostics.some((event) => event.event === "diagnostic_webhook_result" && event.status === "success" && event.reason === "recovery_candidate" && event.recoveryOutcome === "confirmed"));
   } finally {
     firstController.abort();
     rmSync(localAppData, { recursive: true, force: true });

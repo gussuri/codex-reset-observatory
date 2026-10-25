@@ -1557,3 +1557,277 @@ test("recovery candidate GUI audit logs expose only safe fields without credenti
   assert.equal(cancelled.event, "recovery_candidate_cancelled");
   assert.equal(cancelled.reason, "usage_reverted");
 });
+
+test("incident rolling weekly resetsAt sequence confirms without changing first evidence", () => {
+  const baseline = snapshot({
+    observedAt: "2026-10-25T06:09:36.080Z",
+    usedPercent: 46,
+    resetsAt: 1_793_382_112,
+  });
+  const evidence = [
+    snapshot({ observedAt: "2026-10-25T06:11:35.968Z", usedPercent: 0, resetsAt: 1_793_513_498 }),
+    snapshot({ observedAt: "2026-10-25T06:13:35.922Z", usedPercent: 0, resetsAt: 1_793_513_618 }),
+    snapshot({ observedAt: "2026-10-25T06:15:36.214Z", usedPercent: 0, resetsAt: 1_793_513_738 }),
+  ];
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    baseline,
+    true,
+    Date.parse(baseline.observedAt),
+  );
+
+  const firstAt = Date.parse(evidence[0]!.observedAt);
+  assert.equal(getMonitorSnapshotPostReason(evidence[0]!, state, firstAt, "notification"), null);
+  state = updateMonitorSnapshotState(state, evidence[0]!, false, firstAt, { nowMs: firstAt, trigger: "notification" });
+  assert.equal(state.pendingRecoveryCandidate?.firstEvidenceSnapshot.observedAt, evidence[0]!.observedAt);
+
+  const secondAt = Date.parse(evidence[1]!.observedAt);
+  assert.equal(getMonitorSnapshotPostReason(evidence[1]!, state, secondAt, "notification"), null,
+    "a notification can add rolling evidence but cannot confirm the recovery");
+  state = updateMonitorSnapshotState(state, evidence[1]!, false, secondAt, { nowMs: secondAt, trigger: "notification" });
+  assert.ok(state.pendingRecoveryCandidate);
+
+  const thirdAt = Date.parse(evidence[2]!.observedAt);
+  assert.equal(getMonitorSnapshotPostReason(evidence[2]!, state, thirdAt, "poll"), "recovery_candidate");
+  const post = getMonitorPostSnapshot(evidence[2]!, state, "recovery_candidate", thirdAt, "poll");
+  assert.equal(post.observedAt, evidence[0]!.observedAt);
+  assert.equal(post.usedPercent, 0);
+});
+
+test("short notifications keep fixed and rolling schedules ambiguous until observations separate them", () => {
+  const startMs = Date.parse("2026-10-25T06:00:00.000Z");
+  const baseline = snapshot({
+    observedAt: new Date(startMs).toISOString(),
+    usedPercent: 46,
+    resetsAt: Math.floor(startMs / 1000) + 120 + 604_800 - 3_600,
+  });
+  const first = snapshot({
+    observedAt: new Date(startMs + 120_000).toISOString(),
+    usedPercent: 0,
+    resetsAt: Math.floor(startMs / 1000) + 120 + 604_800,
+  });
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    baseline,
+    true,
+    startMs,
+  );
+  state = updateMonitorSnapshotState(state, first, false, startMs + 120_000, {
+    nowMs: startMs + 120_000,
+    trigger: "notification",
+  });
+
+  for (const offsetMs of [10_000, 20_000, 31_000]) {
+    const shortNotice = snapshot({
+      ...first,
+      observedAt: new Date(startMs + 120_000 + offsetMs).toISOString(),
+    });
+    assert.equal(getMonitorSnapshotPostReason(shortNotice, state, startMs + 120_000 + offsetMs, "notification"), null);
+    state = updateMonitorSnapshotState(state, shortNotice, false, startMs + 120_000 + offsetMs, {
+      nowMs: startMs + 120_000 + offsetMs,
+      trigger: "notification",
+    });
+    assert.ok(state.pendingRecoveryCandidate, "overlapping schedule evidence must not cancel or confirm the candidate");
+    assert.equal(state.pendingRecoveryCandidate?.scheduleMode, "undetermined",
+      "a fixed schedule is not locked before the 60-second disambiguation interval");
+  }
+
+  const fixedPoll = snapshot({
+    ...first,
+    observedAt: new Date(startMs + 240_000).toISOString(),
+  });
+  assert.equal(getMonitorSnapshotPostReason(fixedPoll, state, startMs + 240_000, "poll"), "recovery_candidate",
+    "a fixed schedule remains valid after the weekly rolling pattern is disambiguated");
+});
+
+test("an established rolling schedule may freeze after meaningful usage, then confirms on a later poll", () => {
+  const startMs = Date.parse("2026-10-25T06:00:00.000Z");
+  const baseline = snapshot({
+    observedAt: new Date(startMs).toISOString(),
+    usedPercent: 46,
+    resetsAt: Math.floor(startMs / 1000) + 600_000,
+  });
+  const first = snapshot({
+    observedAt: new Date(startMs + 120_000).toISOString(),
+    usedPercent: 0,
+    resetsAt: Math.floor(startMs / 1000) + 604_800 + 120,
+  });
+  let state = updateMonitorSnapshotState(
+    { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+    baseline,
+    true,
+    startMs,
+  );
+  state = updateMonitorSnapshotState(state, first, false, startMs + 120_000, { nowMs: startMs + 120_000 });
+
+  const rollingPoll = snapshot({
+    ...first,
+    observedAt: new Date(startMs + 180_000).toISOString(),
+    resetsAt: Math.floor(startMs / 1000) + 604_800 + 180,
+  });
+  assert.equal(getMonitorSnapshotPostReason(rollingPoll, state, startMs + 180_000, "notification"), null);
+  state = updateMonitorSnapshotState(state, rollingPoll, false, startMs + 180_000, {
+    nowMs: startMs + 180_000,
+    trigger: "notification",
+  });
+  assert.ok(state.pendingRecoveryCandidate);
+
+  const shortUsageNotice = snapshot({
+    ...rollingPoll,
+    observedAt: new Date(startMs + 200_000).toISOString(),
+    usedPercent: 1,
+  });
+  assert.equal(getMonitorSnapshotPostReason(shortUsageNotice, state, startMs + 200_000, "poll"), null,
+    "a poll cannot confirm a short timestamp freeze alongside a usage increase");
+  state = updateMonitorSnapshotState(state, shortUsageNotice, false, startMs + 200_000, {
+    nowMs: startMs + 200_000,
+    trigger: "poll",
+  });
+  assert.ok(state.pendingRecoveryCandidate);
+
+  const freezeEvidence = snapshot({
+    ...shortUsageNotice,
+    observedAt: new Date(startMs + 300_000).toISOString(),
+  });
+  const transition = evaluateMonitorRecoveryCandidate(freezeEvidence, state, startMs + 300_000, "notification");
+  assert.equal(transition.status, "pending_unconfirmed");
+  assert.equal((transition.nextPendingRecoveryCandidate as any)?.scheduleMode, "fixed_after_usage");
+  state = updateMonitorSnapshotState(state, freezeEvidence, false, startMs + 300_000, {
+    nowMs: startMs + 300_000,
+    trigger: "notification",
+  });
+
+  const confirmation = snapshot({
+    ...freezeEvidence,
+    observedAt: new Date(startMs + 360_000).toISOString(),
+  });
+  assert.equal(getMonitorSnapshotPostReason(confirmation, state, startMs + 360_000, "poll"), "recovery_candidate");
+  assert.equal(getMonitorPostSnapshot(confirmation, state, "recovery_candidate", startMs + 360_000).observedAt, first.observedAt);
+});
+
+test("fixed and rolling schedules accept exactly 30 seconds of jitter and reject 31 seconds", () => {
+  const makeCandidateState = (rolling: boolean) => {
+    const startMs = Date.parse("2026-10-25T06:00:00.000Z");
+    const firstAt = startMs + 120_000;
+    const firstResetAt = Math.floor(firstAt / 1000) + 604_800;
+    const baseline = snapshot({
+      observedAt: new Date(startMs).toISOString(),
+      usedPercent: 46,
+      resetsAt: firstResetAt - 3_600,
+    });
+    const first = snapshot({
+      observedAt: new Date(firstAt).toISOString(),
+      usedPercent: 0,
+      resetsAt: firstResetAt,
+    });
+    let state = updateMonitorSnapshotState(
+      { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+      baseline,
+      true,
+      startMs,
+    );
+    state = updateMonitorSnapshotState(state, first, false, firstAt, { nowMs: firstAt, trigger: "notification" });
+    if (rolling) {
+      const rollingEvidence = snapshot({
+        ...first,
+        observedAt: new Date(firstAt + 120_000).toISOString(),
+        resetsAt: firstResetAt + 120,
+      });
+      state = updateMonitorSnapshotState(state, rollingEvidence, false, firstAt + 120_000, {
+        nowMs: firstAt + 120_000,
+        trigger: "notification",
+      });
+    } else {
+      const fixedEvidence = snapshot({
+        ...first,
+        observedAt: new Date(firstAt + 120_000).toISOString(),
+      });
+      state = updateMonitorSnapshotState(state, fixedEvidence, false, firstAt + 120_000, {
+        nowMs: firstAt + 120_000,
+        trigger: "notification",
+      });
+    }
+    return { state, first, firstAt };
+  };
+
+  const fixed = makeCandidateState(false);
+  const fixedAtBoundary = snapshot({
+    ...fixed.first,
+    observedAt: new Date(fixed.firstAt + 240_000).toISOString(),
+    resetsAt: fixed.first.resetsAt + 30,
+  });
+  assert.equal(getMonitorSnapshotPostReason(fixedAtBoundary, fixed.state, fixed.firstAt + 240_000, "poll"), "recovery_candidate");
+  const fixedOutsideBoundary = { ...fixedAtBoundary, resetsAt: fixed.first.resetsAt + 31 };
+  assert.equal(evaluateMonitorRecoveryCandidate(fixedOutsideBoundary, fixed.state, fixed.firstAt + 240_000, "poll").cancellationReason, "reset_at_reverted");
+  const fixedToRolling = { ...fixedAtBoundary, resetsAt: fixed.first.resetsAt + 240 };
+  assert.equal(evaluateMonitorRecoveryCandidate(fixedToRolling, fixed.state, fixed.firstAt + 240_000, "poll").cancellationReason, "reset_at_reverted",
+    "an established fixed schedule cannot switch into rolling mode");
+
+  const rolling = makeCandidateState(true);
+  const rollingAtBoundary = snapshot({
+    ...rolling.first,
+    observedAt: new Date(rolling.firstAt + 240_000).toISOString(),
+    resetsAt: rolling.first.resetsAt + 240 + 30,
+  });
+  assert.equal(getMonitorSnapshotPostReason(rollingAtBoundary, rolling.state, rolling.firstAt + 240_000, "poll"), "recovery_candidate");
+  const rollingOutsideBoundary = { ...rollingAtBoundary, resetsAt: rolling.first.resetsAt + 240 + 31 };
+  assert.equal(evaluateMonitorRecoveryCandidate(rollingOutsideBoundary, rolling.state, rolling.firstAt + 240_000, "poll").cancellationReason, "reset_at_reverted");
+});
+
+test("rolling recovery rejects wrong window offsets, arbitrary shifts, backward movement, and sub-point usage changes", () => {
+  const makeRollingCandidate = (windowOffsetSec = 604_800) => {
+    const startMs = Date.parse("2026-10-25T06:00:00.000Z");
+    const firstAt = startMs + 120_000;
+    const firstResetAt = Math.floor(firstAt / 1000) + windowOffsetSec;
+    const baseline = snapshot({
+      observedAt: new Date(startMs).toISOString(),
+      usedPercent: 46,
+      resetsAt: firstResetAt - 3_600,
+    });
+    const first = snapshot({
+      observedAt: new Date(firstAt).toISOString(),
+      usedPercent: 0,
+      resetsAt: firstResetAt,
+    });
+    let state = updateMonitorSnapshotState(
+      { previousLocalSnapshot: null, lastSuccessfulPostAt: null },
+      baseline,
+      true,
+      startMs,
+    );
+    state = updateMonitorSnapshotState(state, first, false, firstAt, { nowMs: firstAt });
+    const rolling = snapshot({
+      ...first,
+      observedAt: new Date(firstAt + 120_000).toISOString(),
+      resetsAt: firstResetAt + 120,
+    });
+    const establishment = evaluateMonitorRecoveryCandidate(rolling, state, firstAt + 120_000, "notification");
+    state = updateMonitorSnapshotState(state, rolling, false, firstAt + 120_000, {
+      nowMs: firstAt + 120_000,
+      trigger: "notification",
+    });
+    return { state, first, firstAt, establishment };
+  };
+
+  const wrongWindow = makeRollingCandidate(604_800 + 600);
+  assert.equal(wrongWindow.establishment.cancellationReason, "reset_at_reverted");
+
+  const rolling = makeRollingCandidate();
+  for (const currentReset of [rolling.first.resetsAt + 3_600, rolling.first.resetsAt - 1]) {
+    const arbitrary = snapshot({
+      ...rolling.first,
+      observedAt: new Date(rolling.firstAt + 240_000).toISOString(),
+      resetsAt: currentReset,
+    });
+    assert.equal(evaluateMonitorRecoveryCandidate(arbitrary, rolling.state, rolling.firstAt + 240_000).cancellationReason, "reset_at_reverted");
+  }
+
+  const fractionalUsage = snapshot({
+    ...rolling.first,
+    observedAt: new Date(rolling.firstAt + 240_000).toISOString(),
+    usedPercent: 0.5,
+    resetsAt: rolling.first.resetsAt + 120,
+  });
+  assert.equal(evaluateMonitorRecoveryCandidate(fractionalUsage, rolling.state, rolling.firstAt + 240_000).cancellationReason, "reset_at_reverted",
+    "sub-1pp usage movement cannot establish the rolling-to-fixed-after-usage transition");
+});
