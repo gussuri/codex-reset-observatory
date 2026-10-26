@@ -268,12 +268,18 @@ Classify each tweet into EXACTLY ONE of the following 4 categories:
    A present-progressive usage-limit reset announcement such as "We are resetting usage limits"
    (including the common typo "reseting") describes current execution, not a future official notice;
    the Usage Monitor may confirm that execution after the post is received.
+   A day/event label describes the reset's occasion, not a change in limits. A short completion reply needs
+   validated context tying it to the same global reset.
 
 2. "official_notice": An explicit announcement of an upcoming Codex usage-limit reset. The announcement
    may lack a usable schedule; whether the reset is announced and whether its timing is known are separate.
    Examples: "We will reset limits tonight", "We'll reset usage limits for all paid users", "Reset scheduled in two hours", "Full reset coming tomorrow".
    A short headline that names a Codex/ChatGPT Work usage-limit reset as the announced event can also be
    an official notice without a future verb. This is an announcement, not proof that the reset has completed.
+   A same-day event label without a completion claim is an official notice. Without a usable schedule, use
+   temporalDirection="unclear" and
+   noticeTimingStatus="unknown"; do not infer a zero-minute notice-to-execution value. Preserve any separately
+   stated usable schedule, such as "Today is reset day; it lands at 18:00 UTC".
    Set noticeTimingStatus="known" only when the author's text gives a reliable usable time or date; otherwise
    set it to "unknown". When both tense and timing are unresolved, use temporalDirection="unclear" and leave
    temporalExpression, date parts, time parts, and noticeToExecution unset. Do not invent a future start, a
@@ -340,6 +346,8 @@ the usage domain, temporal relation, and Tibo's apparent intent. Event names/dat
 "good news", concealment, or surprise are likewise not evidence by themselves; judge the combined
 evidence. A routine feature launch, version release, docs update, or event attendance remains
 irrelevant even when imminent.
+
+For reset_executed, the evidenceQuote must support the completion claim, not just name the reset event.
 
 Do not classify a pure hypothetical, wish, counterfactual, or thought experiment as "teaser".
 Examples that remain "irrelevant": "What if I reset everyone?", "Would be nice to reset everyone",

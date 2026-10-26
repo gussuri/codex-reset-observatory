@@ -5,7 +5,7 @@
  * and an IANA timezone in this module.
  */
 
-export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v9";
+export const TIBO_TEMPORAL_RESOLUTION_VERSION = "tibo-temporal-v10";
 export const TIBO_TEMPORAL_DEADLINE_ESTIMATE_VERSION = "tibo-temporal-v9-deadline-start-estimate";
 export const TIBO_SOURCE_TIME_ZONE = "America/Los_Angeles";
 export const TIBO_NOTICE_GRACE_MS = 8 * 60 * 60 * 1000;
@@ -234,6 +234,14 @@ const DAY_COUNT_HEADING_PATTERN = /\bday\s*(\d{1,3})\s*[/|:—–-]/i;
 const SOURCE_SEGMENT_BREAK_PATTERN = /[.!?;,\n—–]+/g;
 const RESET_CUE_PATTERN =
   /\b(?:reset|resets|resetting|quota|usage limits?|rate limits?|land(?:s|ed|ing)?|refresh(?:ed|es|ing)?|performative)\b/i;
+const ANAPHORIC_RESET_EXECUTION_CLAUSE_PATTERN =
+  /^\s*it\s+(?:lands?|will\s+land)\s+at\b/i;
+const RESET_DAY_LABEL_SEGMENT_PATTERN =
+  /^\s*(?:today|tomorrow)\s+is\s+(?:(?:a|the)\s+)?reset\s+day(?:\s+for\s+(?:(?:all\s+paid\s+)?(?:Codex|ChatGPT\s+Work)(?:\s*(?:,|and)\s*(?:Codex|ChatGPT\s+Work))*(?:\s+users?)?|all\s+(?:paid\s+)?users))?\s*$/i;
+const CONDITIONAL_OR_UNCERTAIN_SCHEDULE_PATTERN =
+  /\b(?:if|unless|or|maybe|might|may|could|possibly|perhaps|not|never|no|isn['’]?t|wasn['’]?t|aren['’]?t|cannot|can['’]?t|won['’]?t|wouldn['’]?t|doesn['’]?t|didn['’]?t)\b/i;
+const TRAILING_AMBIGUOUS_SCHEDULE_PATTERN =
+  /^\s*(?:[.!?;,:—–]+\s*)?(?:or|maybe|perhaps|possibly|if|unless)\b/i;
 const NON_EXECUTION_CLOCK_CONTEXT_PATTERN =
   /\b(?:create|open|make)\s+(?:(?:a|an|the|your)\s+)?(?:new\s+)?account\b|\b(?:sign\s*up|signup|register(?:ed|ing)?|registration|apply|application|upgrade|subscribe|enroll(?:ed|ing)?|enrollment)\b/i;
 const RESET_BUTTON_REUSE_ACTION_PATTERN =
@@ -1350,6 +1358,104 @@ function isDayCountOnlyTemporalClaim(semantics: TiboTemporalSemantics, sourceTex
   return false;
 }
 
+/**
+ * Join one relative reset day to one explicit clock only when a standalone
+ * reset-day label is followed by "it lands at ...". Requiring the whole
+ * preceding clause to match prevents an adjacent event from owning the clock.
+ */
+function combineSemicolonRelativeDayClockCandidates(
+  sourceText: string,
+  segments: SourceSegment[],
+  candidates: SourceTemporalCandidate[],
+): SourceTemporalCandidate[] {
+  if (candidates.length !== 2) return candidates;
+
+  const dayOnly = candidates.filter((candidate) => candidate.day && !candidate.clock);
+  const clockOnly = candidates.filter((candidate) => candidate.clock && !candidate.day);
+  if (dayOnly.length !== 1 || clockOnly.length !== 1) return candidates;
+
+  const dayCandidate = dayOnly[0];
+  const clockCandidate = clockOnly[0];
+  const relativeDayOffset = dayCandidate.semantics.relativeDayOffset;
+  const day = dayCandidate.day;
+  const clock = clockCandidate.clock;
+  const timezone = clockCandidate.timezone;
+  if (
+    !day ||
+    relativeDayOffset === null ||
+    !clock ||
+    !timezone ||
+    clockCandidate.semantics.isDeadline ||
+    isDeadlineTimeExpression(clockCandidate.semantics.temporalExpression ?? "") ||
+    isInsideSourceQuote(sourceText, day.index) ||
+    isInsideSourceQuote(sourceText, clock.index)
+  ) {
+    return candidates;
+  }
+
+  const daySegment = segments.find((segment) => day.index >= segment.start && day.end <= segment.end);
+  const clockSegment = segments.find((segment) => clock.index >= segment.start && clock.end <= segment.end);
+  if (
+    !daySegment ||
+    !clockSegment ||
+    daySegment === clockSegment ||
+    daySegment.end >= clockSegment.start ||
+    !/^\s*;\s*$/.test(sourceText.slice(daySegment.end, clockSegment.start)) ||
+    !RESET_DAY_LABEL_SEGMENT_PATTERN.test(daySegment.text) ||
+    CONDITIONAL_OR_UNCERTAIN_SCHEDULE_PATTERN.test(clockSegment.text) ||
+    !ANAPHORIC_RESET_EXECUTION_CLAUSE_PATTERN.test(clockSegment.text)
+  ) {
+    return candidates;
+  }
+
+  const afterTimezone = sourceText.slice(timezone.end);
+  const sentenceBoundary = /[.!?\n—–]/.exec(afterTimezone);
+  const sameSentenceTail = sentenceBoundary
+    ? afterTimezone.slice(0, sentenceBoundary.index)
+    : afterTimezone;
+  const followingText = sentenceBoundary
+    ? afterTimezone.slice(sentenceBoundary.index + sentenceBoundary[0].length)
+    : "";
+  if (
+    /[A-Za-z0-9]/.test(sameSentenceTail) ||
+    TRAILING_AMBIGUOUS_SCHEDULE_PATTERN.test(followingText)
+  ) {
+    return candidates;
+  }
+
+  const sourceDays = segments.flatMap(getSourceDayMatches);
+  const sourceClocks = segments.flatMap((segment) => getSourceClockMatches(segment).clocks);
+  if (
+    sourceDays.length !== 1 ||
+    sourceClocks.length !== 1 ||
+    sourceClocks[0].index !== clock.index
+  ) {
+    return candidates;
+  }
+
+  const end = Math.max(clock.end, timezone.end);
+  return [{
+    ...clockCandidate,
+    day,
+    semantics: {
+      ...clockCandidate.semantics,
+      temporalExpression: sourceText.slice(day.index, end).trim(),
+      temporalKind: dayCandidate.semantics.temporalKind,
+      temporalPrecision: "exact_time",
+      weekday: dayCandidate.semantics.weekday,
+      relativeDayOffset,
+      explicitDateParts: null,
+      explicitTimeParts: clockCandidate.semantics.explicitTimeParts,
+      explicitTimezone: clockCandidate.semantics.explicitTimezone,
+      temporalConfidence: Math.min(
+        dayCandidate.semantics.temporalConfidence,
+        clockCandidate.semantics.temporalConfidence,
+      ),
+      resolutionSource: "deterministic",
+    },
+  }];
+}
+
 export function parseTiboTemporalSemantics(value: unknown, sourceText: string): TiboTemporalSemantics | null {
   if (RESET_CUE_PATTERN.test(sourceText) &&
     !NON_EXECUTION_CLOCK_CONTEXT_PATTERN.test(sourceText) &&
@@ -1361,7 +1467,11 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
 
   const geminiSemantics = parseGeminiTemporalSemantics(value, sourceText);
   if (geminiSemantics && isDayCountOnlyTemporalClaim(geminiSemantics, sourceText)) return null;
-  const candidates = filterConditionalTemporalCandidates(sourceText, sourceExtraction.candidates);
+  const candidates = combineSemicolonRelativeDayClockCandidates(
+    sourceText,
+    getSourceSegments(sourceText),
+    filterConditionalTemporalCandidates(sourceText, sourceExtraction.candidates),
+  );
   const hasEod = SOURCE_EOD_DEADLINE_PATTERN.test(sourceText);
   SOURCE_EOD_DEADLINE_PATTERN.lastIndex = 0;
   const eodCandidates = candidates.filter((candidate) => candidate.semantics.daypart === "day" && candidate.semantics.isDeadline);
@@ -1423,7 +1533,10 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
     if (geminiSemantics.weekday && geminiSemantics.weekday !== candidate.semantics.weekday) {
       return false;
     }
-    if (geminiSemantics.explicitDateParts) return false;
+    if (
+      geminiSemantics.explicitDateParts &&
+      (candidate.semantics.relativeDayOffset === null || candidate.semantics.explicitTimeParts === null)
+    ) return false;
     return true;
   };
   const matchesGeminiCandidate = (candidate: SourceTemporalCandidate) => {
@@ -1457,22 +1570,23 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
     if (candidate) {
       const needsSourceTimezone = !geminiSemantics.explicitTimezone && Boolean(candidate.semantics.explicitTimezone);
       const sourceDeadline = isDeadlineTimeExpression(candidate.semantics.temporalExpression ?? "");
+      const sourceRelativeDay = candidate.semantics.relativeDayOffset !== null;
       return {
         ...geminiSemantics,
         temporalExpression: sourceDeadline
           ? candidate.semantics.temporalExpression
           : geminiSemantics.temporalExpression,
-        temporalKind: sourceDeadline ? candidate.semantics.temporalKind : geminiSemantics.temporalKind,
-        temporalPrecision: sourceDeadline
+        temporalKind: sourceDeadline || sourceRelativeDay ? candidate.semantics.temporalKind : geminiSemantics.temporalKind,
+        temporalPrecision: sourceDeadline || sourceRelativeDay
           ? candidate.semantics.temporalPrecision
           : geminiSemantics.temporalPrecision,
-        weekday: sourceDeadline
+        weekday: sourceDeadline || sourceRelativeDay
           ? candidate.semantics.weekday
           : (geminiSemantics.weekday ?? candidate.semantics.weekday),
-        relativeDayOffset: sourceDeadline
+        relativeDayOffset: sourceDeadline || sourceRelativeDay
           ? candidate.semantics.relativeDayOffset
           : (geminiSemantics.relativeDayOffset ?? candidate.semantics.relativeDayOffset),
-        explicitDateParts: sourceDeadline
+        explicitDateParts: sourceDeadline || sourceRelativeDay
           ? candidate.semantics.explicitDateParts
           : geminiSemantics.explicitDateParts,
         explicitTimeParts: sourceDeadline
@@ -1483,10 +1597,10 @@ export function parseTiboTemporalSemantics(value: unknown, sourceText: string): 
         explicitTimezone: needsSourceTimezone
           ? candidate.semantics.explicitTimezone
           : geminiSemantics.explicitTimezone,
-        temporalConfidence: sourceDeadline
+        temporalConfidence: sourceDeadline || sourceRelativeDay
           ? Math.min(geminiSemantics.temporalConfidence, candidate.semantics.temporalConfidence)
           : geminiSemantics.temporalConfidence,
-        resolutionSource: sourceDeadline || needsSourceTimezone ? "merged" : "gemini",
+        resolutionSource: sourceDeadline || sourceRelativeDay || needsSourceTimezone ? "merged" : "gemini",
       };
     }
     if (!candidates.some((candidate) => Boolean(candidate.clock))) return null;

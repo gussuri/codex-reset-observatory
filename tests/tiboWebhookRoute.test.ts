@@ -1637,7 +1637,65 @@ test("source clock fallback resolves an official 14pm PST tomorrow notice when G
     assert.equal(upsertBody.expected_start_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-08-23T22:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v9");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v10");
+  } finally {
+    restoreGemini();
+    restoreFetch();
+    restoreEnvironment(previous);
+  }
+});
+
+test("persists the source-relative day schedule while retaining Gemini temporal audit fields", async () => {
+  const previous = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]])) as Partial<Record<(typeof ENV_KEYS)[number], string | undefined>>;
+  const requestBodies: unknown[] = [];
+  process.env.TIBO_WEBHOOK_SECRET = "test-webhook-secret";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash-lite";
+  process.env.GEMINI_TRANSLATION_MODE = "off";
+
+  const restoreFetch = installSupabaseWebhookMock(requestBodies);
+  const restoreGemini = installGeminiClassificationMock({
+    signalType: "official_notice",
+    confidence: 0.99,
+    temporalDirection: "future",
+    evidenceQuote: "Today is reset day; it lands at 18:00 UTC.",
+    reasonJa: "本日の18:00 UTCにリセットが実施される予告です。",
+    noticeTimingStatus: "known",
+    noticeToExecution: "18:00 UTC",
+    temporalExpression: "18:00 UTC",
+    temporalKind: "absolute",
+    temporalPrecision: "exact_time",
+    explicitDateParts: { year: null, month: 10, day: 26 },
+    explicitTimeParts: { hour: 18, minute: 0 },
+    explicitTimezone: "UTC",
+    temporalConfidence: 0.98,
+  });
+
+  try {
+    const response = await POST(buildRequest({
+      tweetId: "910000000000002005",
+      text: "Today is reset day; it lands at 18:00 UTC.",
+      tweetUrl: "https://x.com/thsottiaux/status/910000000000002005",
+      tweetCreatedAt: "2026-10-10T17:00:00.000Z",
+    }));
+
+    assert.equal(response.status, 200, await response.clone().text());
+    const body = requestBodies[0] as Record<string, unknown>;
+    assert.equal(body.signal_type, "official_notice");
+    assert.equal(body.ai_temporal_expression, "18:00 UTC");
+    assert.equal(body.ai_temporal_kind, "absolute");
+    assert.equal(body.ai_temporal_timezone, "UTC");
+    assert.equal(body.temporal_kind, "relative_day");
+    assert.equal(body.temporal_precision, "exact_time");
+    assert.equal(body.temporal_timezone, "UTC");
+    assert.equal(body.temporal_resolution_source, "merged");
+    assert.equal(body.expected_start_at, "2026-10-10T18:00:00.000Z");
+    assert.equal(body.expected_end_at, "2026-10-10T18:00:00.000Z");
+    assert.equal(body.temporal_resolution_status, "resolved");
+    assert.equal(body.temporal_resolution_version, "tibo-temporal-v10");
   } finally {
     restoreGemini();
     restoreFetch();
@@ -1683,7 +1741,7 @@ test("persists a source-grounded EOD deadline while retaining Gemini temporal au
     assert.equal(body.expected_start_at, "2026-10-10T22:16:20.000Z");
     assert.equal(body.expected_end_at, "2026-10-11T07:00:00.000Z");
     assert.equal(body.temporal_resolution_status, "resolved");
-    assert.equal(body.temporal_resolution_version, "tibo-temporal-v9");
+    assert.equal(body.temporal_resolution_version, "tibo-temporal-v10");
     assert.equal(body.expires_at, "2026-10-11T15:00:00.000Z");
   } finally {
     restoreGemini();
@@ -1798,7 +1856,7 @@ test("accepted concealed teaser persists its own today window without becoming a
     assert.equal(upsertBody.expected_start_at, "2026-09-29T07:00:00.000Z");
     assert.equal(upsertBody.expected_end_at, "2026-09-30T07:00:00.000Z");
     assert.equal(upsertBody.temporal_resolution_status, "resolved");
-    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v9");
+    assert.equal(upsertBody.temporal_resolution_version, "tibo-temporal-v10");
     assert.equal(upsertBody.codex_operational_status, null);
   } finally {
     restoreGemini();
@@ -2234,7 +2292,7 @@ test("does not estimate a deadline window for an unrelated account deadline", as
     ) as Record<string, unknown> | undefined;
     assert.ok(persisted);
     assert.equal(persisted.signal_type, "official_notice");
-    assert.equal(persisted.temporal_resolution_version, "tibo-temporal-v9");
+    assert.equal(persisted.temporal_resolution_version, "tibo-temporal-v10");
     assert.equal(persisted.expected_start_at, null);
     assert.equal(persisted.expected_end_at, null);
   } finally {

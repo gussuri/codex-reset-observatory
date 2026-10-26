@@ -139,7 +139,10 @@ test("explicit reset completion shorthand and usage restoration remain eligible"
       text,
     );
     assert.equal(
-      applyTiboClassificationSafetyGuard(text, geminiResult("reset_executed")).signalType,
+      applyTiboClassificationSafetyGuard(text, {
+        ...geminiResult("reset_executed"),
+        evidenceQuote: text,
+      }).signalType,
       "reset_executed",
       text,
     );
@@ -167,6 +170,88 @@ test("current usage-limit announcements are execution signals, while future and 
     classifyTiboTweet("We will reset usage limits tonight.", url).signalType,
     "official_notice",
   );
+});
+
+test("the safety guard preserves exact AI completion classifications and cross-clause evidence", () => {
+  const cases = [
+    "What would you like with your side of reset? It's done.",
+    "The reset is live for all paid users.",
+    "All paid users have their Codex quota back.",
+  ];
+
+  for (const text of cases) {
+    const guarded = applyTiboClassificationSafetyGuard(text, {
+      ...geminiResult("reset_executed"),
+      temporalDirection: "completed_now",
+      evidenceQuote: text,
+    });
+    assert.equal(guarded.signalType, "reset_executed", text);
+  }
+});
+
+test("a correctly classified official notice retains its explicit schedule", () => {
+  const text = "Today is reset day; it lands at 18:00 UTC.";
+  const guarded = applyTiboClassificationSafetyGuard(text, {
+    ...geminiResult("official_notice"),
+    temporalDirection: "future",
+    temporalExpression: "18:00 UTC",
+    temporalKind: "absolute",
+    temporalPrecision: "exact_time",
+    temporalConfidence: 0.95,
+    explicitTimeParts: { hour: 18, minute: 0 },
+    explicitTimezone: "UTC",
+    noticeTimingStatus: "known",
+    noticeToExecution: null,
+    evidenceQuote: text,
+  });
+
+  assert.equal(guarded.signalType, "official_notice");
+  assert.equal(guarded.temporalDirection, "future");
+  assert.equal(guarded.noticeTimingStatus, "known");
+  assert.deepEqual(guarded.explicitTimeParts, { hour: 18, minute: 0 });
+  assert.equal(guarded.explicitTimezone, "UTC");
+  assert.equal(guarded.noticeToExecution, null);
+
+  const tomorrowText = "Reset day is tomorrow; we have not done it yet.";
+  const tomorrow = applyTiboClassificationSafetyGuard(tomorrowText, {
+    ...geminiResult("official_notice"),
+    temporalDirection: "future",
+    temporalExpression: "tomorrow",
+    temporalKind: "relative_day",
+    temporalPrecision: "day",
+    temporalConfidence: 0.95,
+    relativeDayOffset: 1,
+    noticeTimingStatus: "known",
+    evidenceQuote: tomorrowText,
+  });
+  assert.equal(tomorrow.signalType, "official_notice");
+  assert.equal(tomorrow.temporalDirection, "future");
+  assert.equal(tomorrow.noticeTimingStatus, "known");
+  assert.equal(tomorrow.relativeDayOffset, 1);
+});
+
+test("a linked short completion reply and a completed parent with a future child stay intact", () => {
+  const shortReply = applyTiboClassificationSafetyGuard("Done and dusted.", {
+    ...geminiResult("reset_executed"),
+    temporalDirection: "completed_now",
+    evidenceQuote: "Done and dusted.",
+    contextualResetAssessment: "same_global_reset",
+    contextualResetTweetId: "2115000000000000102",
+  });
+  assert.equal(shortReply.signalType, "reset_executed");
+
+  const mixed = applyTiboClassificationSafetyGuard(
+    "Reset done. More to come tomorrow.",
+    {
+      ...geminiResult("reset_executed"),
+      temporalDirection: "completed_now",
+      evidenceQuote: "Reset done",
+      teaserStrength: "weak",
+      teaserStrengthEvidenceQuote: "More to come tomorrow",
+    },
+  );
+  assert.equal(mixed.signalType, "reset_executed");
+  assert.equal(mixed.teaserStrength, "weak");
 });
 
 test("the real apology notice remains future/global and keeps operational recovery independent", () => {
