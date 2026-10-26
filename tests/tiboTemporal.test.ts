@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -16,6 +17,13 @@ import {
 import { formatOfficialNoticeScheduleSubject } from "../lib/radar/officialNoticePresentation";
 
 const CREATED_AT = "2026-08-08T20:34:50.000Z";
+const SAME_DAY_18UTC_FIXTURE = JSON.parse(
+  readFileSync(new URL("./fixtures/tibo-temporal-same-day-18utc.json", import.meta.url), "utf8"),
+) as {
+  sourceText: string;
+  createdAt: string;
+  classification: Record<string, unknown>;
+};
 
 function semantics(overrides: Record<string, unknown> = {}) {
   return {
@@ -37,7 +45,129 @@ function semantics(overrides: Record<string, unknown> = {}) {
 }
 
 test("uses the current temporal resolver version for new resolutions", () => {
-  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v9");
+  assert.equal(TIBO_TEMPORAL_RESOLUTION_VERSION, "tibo-temporal-v10");
+});
+
+test("resolves a same-day UTC schedule from the captured Gemini response despite its inferred date", () => {
+  const parsed = parseTiboTemporalSemantics(
+    SAME_DAY_18UTC_FIXTURE.classification,
+    SAME_DAY_18UTC_FIXTURE.sourceText,
+  );
+
+  assert.ok(parsed);
+  assert.equal(parsed.relativeDayOffset, 0);
+  assert.equal(parsed.explicitDateParts, null);
+  assert.deepEqual(parsed.explicitTimeParts, { hour: 18, minute: 0 });
+  assert.equal(parsed.explicitTimezone, "UTC");
+  assert.equal(parsed.resolutionSource, "merged");
+  assert.deepEqual(SAME_DAY_18UTC_FIXTURE.classification.explicitDateParts, {
+    year: null,
+    month: 10,
+    day: 26,
+  });
+
+  const resolution = resolveTiboTemporalSchedule(
+    parsed,
+    SAME_DAY_18UTC_FIXTURE.createdAt,
+    TIBO_SOURCE_TIME_ZONE,
+  );
+  assert.equal(resolution.status, "resolved");
+  assert.equal(resolution.expectedStartAt, "2026-10-26T18:00:00.000Z");
+  assert.equal(resolution.expectedEndAt, "2026-10-26T18:00:00.000Z");
+});
+
+test("uses the source relative day instead of a conflicting Gemini-inferred calendar date", () => {
+  const parsed = parseTiboTemporalSemantics({
+    ...SAME_DAY_18UTC_FIXTURE.classification,
+    explicitDateParts: { year: null, month: 11, day: 2 },
+  }, SAME_DAY_18UTC_FIXTURE.sourceText);
+
+  assert.ok(parsed);
+  assert.equal(parsed.relativeDayOffset, 0);
+  assert.equal(parsed.explicitDateParts, null);
+  const resolution = resolveTiboTemporalSchedule(parsed, SAME_DAY_18UTC_FIXTURE.createdAt);
+  assert.equal(resolution.expectedStartAt, "2026-10-26T18:00:00.000Z");
+});
+
+test("does not treat an inferred calendar date as authoritative for a source-only relative day", () => {
+  const parsed = parseTiboTemporalSemantics({
+    temporalExpression: "tomorrow",
+    temporalKind: "absolute",
+    temporalPrecision: "day",
+    explicitDateParts: { year: null, month: 11, day: 2 },
+    temporalConfidence: 0.98,
+  }, "Reset tomorrow.");
+
+  assert.ok(parsed);
+  assert.equal(parsed.relativeDayOffset, 1);
+  assert.equal(parsed.explicitDateParts, null);
+  const resolution = resolveTiboTemporalSchedule(parsed, "2026-10-26T17:00:00.000Z");
+  assert.equal(resolution.expectedStartAt, "2026-10-27T07:00:00.000Z");
+});
+
+test("does not join a relative reset day to a different, ambiguous, negative, or deadline clock", () => {
+  const unsafeSources = [
+    "Today is not reset day; it lands at 18:00 UTC.",
+    "Today isn't reset day; it lands at 18:00 UTC.",
+    "Today is reset day; a meeting lands at 18:00 UTC.",
+    "Today is reset day; it lands at 18:00 UTC or 19:00 UTC.",
+    "Today is reset day; it lands at 18:00 UTC or maybe later.",
+    "Today is reset day; it lands at 18:00 UTC, or maybe later.",
+    "Today is reset day; it lands at 18:00 UTC. Or maybe later.",
+    "Today is reset day; it will not land at 18:00 UTC.",
+    "Today is reset day; it lands not at 18:00 UTC.",
+    "Today is reset day; it will land at 18:00 UTC if the tests pass.",
+    "Today is reset day; it lands at 18:00 UTC, if the tests pass.",
+    "Today is reset day and a new model is coming; it lands at 18:00 UTC.",
+    "Today is reset day and a release is coming; it lands at 18:00 UTC.",
+    "Today the feature launches before the reset; it lands at 18:00 UTC.",
+    "If today is reset day; it lands at 18:00 UTC.",
+    "Today is reset day; it lands by 18:00 UTC.",
+    "Today is reset day; it lands at 25:00 UTC.",
+    "Today is reset day; it arrives at 18:00 UTC.",
+  ];
+
+  for (const sourceText of unsafeSources) {
+    const parsed = parseTiboTemporalSemantics({
+      ...SAME_DAY_18UTC_FIXTURE.classification,
+      evidenceQuote: sourceText,
+    }, sourceText);
+    assert.equal(parsed, null, sourceText);
+  }
+});
+
+test("joins the clock when one relative reset day lists Codex and ChatGPT Work together", () => {
+  const sourceText = "Today is reset day for Codex and ChatGPT Work users; it lands at 18:00 UTC.";
+  const parsed = parseTiboTemporalSemantics({
+    ...SAME_DAY_18UTC_FIXTURE.classification,
+    evidenceQuote: sourceText,
+  }, sourceText);
+
+  assert.ok(parsed);
+  assert.equal(parsed.relativeDayOffset, 0);
+  assert.equal(parsed.explicitTimezone, "UTC");
+  assert.equal(
+    resolveTiboTemporalSchedule(parsed, SAME_DAY_18UTC_FIXTURE.createdAt).expectedStartAt,
+    "2026-10-26T18:00:00.000Z",
+  );
+});
+
+test("keeps an invalid timezone unresolved when joining a source relative day and clock", () => {
+  const sourceText = "Today is reset day; it lands at 18:00 Mars/Olympus.";
+  const parsed = parseTiboTemporalSemantics({
+    ...SAME_DAY_18UTC_FIXTURE.classification,
+    evidenceQuote: sourceText,
+    temporalExpression: "18:00 Mars/Olympus",
+    explicitTimezone: "Mars/Olympus",
+  }, sourceText);
+
+  assert.ok(parsed);
+  assert.equal(parsed.relativeDayOffset, 0);
+  assert.equal(parsed.explicitTimezone, "Mars/Olympus");
+  assert.equal(
+    resolveTiboTemporalSchedule(parsed, SAME_DAY_18UTC_FIXTURE.createdAt).status,
+    "unresolved",
+  );
 });
 
 test("resolves the Monday sample in Pacific Time without assuming Monday midnight UTC", () => {

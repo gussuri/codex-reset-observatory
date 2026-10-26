@@ -1,0 +1,59 @@
+{
+  "caseId": "same-day-reset-time-18utc-virtual",
+  "model": "gemini-3.5-flash-lite",
+  "sourceText": "Today is reset day; it lands at 18:00 UTC.",
+  "createdAt": "2026-10-26T17:00:00.000Z",
+  "classification": {
+    "signalType": "official_notice",
+    "confidence": 0.99,
+    "temporalDirection": "future",
+    "evidenceQuote": "Today is reset day; it lands at 18:00 UTC.",
+    "contextualResetAssessment": "not_applicable",
+    "contextualResetTweetId": null,
+    "noticeTimingStatus": "known",
+    "resetMeaning": {
+      "method": "regular_scheduled",
+      "methodEvidence": {
+        "tweetId": "current",
+        "quote": "Today is reset day"
+      },
+      "scope": "all_paid_users",
+      "scopeEvidence": {
+        "tweetId": "current",
+        "quote": "reset day"
+      }
+    },
+    "reasonJa": "Codexの使用量リセットが本日18:00 UTCに行われることを明確に予告しているため、公式の事前通知（official_notice）となります。",
+    "resetTypeJa": null,
+    "noticeToExecution": "18:00 UTC",
+    "teaserStrength": null,
+    "teaserStrengthConfidence": null,
+    "teaserStrengthEvidenceQuote": null,
+    "teaserStrengthReasonJa": null,
+    "futureSignal": null,
+    "temporalExpression": "18:00 UTC",
+    "temporalKind": "absolute",
+    "temporalPrecision": "exact_time",
+    "weekday": null,
+    "relativeDayOffset": null,
+    "relativeAmount": null,
+    "relativeUnit": null,
+    "explicitDateParts": {
+      "year": null,
+      "month": 10,
+      "day": 26
+    },
+    "explicitTimeParts": {
+      "hour": 18,
+      "minute": 0
+    },
+    "daypart": null,
+    "rangeKind": null,
+    "explicitTimezone": "UTC",
+    "temporalConfidence": 0.98,
+    "codexOperationalStatus": "none",
+    "codexOperationalConfidence": 0.95,
+    "codexOperationalEvidenceQuote": null,
+    "codexOperationalReasonJa": "通常の利用制限リセットの告知であり、サービスの障害や復旧に関する言及はありません。"
+  }
+}

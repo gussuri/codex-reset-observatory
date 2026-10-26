@@ -796,7 +796,7 @@
     {
       "id": "reply-03",
       "category": "reply_context",
-      "description": "Reply reports completion",
+      "description": "Reply reports completion; formal admission still requires validated global context",
       "tweetText": "Done.",
       "tweetCreatedAt": "2026-08-14T11:04:00.000Z",
       "tweetUrl": "https://x.com/thsottiaux/status/910000000000001003",
@@ -804,7 +804,7 @@
       "replyToHandles": ["@alice"],
       "replyContextText": "Reset us please!",
       "sourceTimeline": "with_replies",
-      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" },
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": false },
       "pipeline": true,
       "ambiguous": true
     },
@@ -896,7 +896,7 @@
     {
       "id": "quote-03",
       "category": "quote_context",
-      "description": "Quoted request and author says done",
+      "description": "Quoted request and author reports completion; external quote is not formal global proof",
       "tweetText": "Done.",
       "tweetCreatedAt": "2026-08-14T12:04:00.000Z",
       "tweetUrl": "https://x.com/thsottiaux/status/910000000000001013",
@@ -904,7 +904,7 @@
       "quoteAuthorHandle": "@alice",
       "quoteContextText": "We need a reset.",
       "quoteTweetUrl": "https://x.com/alice/status/990000000000000003",
-      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" },
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now", "shouldCreateResetHistoryEvent": false },
       "pipeline": true,
       "ambiguous": true
     },
@@ -1553,6 +1553,76 @@
       "expected": { "signalType": "irrelevant", "temporalDirection": "unclear", "teaserStrength": "none", "shouldCreateActiveNotice": false, "shouldCreateTeaser": false, "shouldCreateResetHistoryEvent": false, "shouldRemainActive": false },
       "pipeline": true,
       "regressionGroup": "concealed-imminent-release-teaser"
+    },
+    {
+      "id": "day21-reset-label-real-2026-10-26",
+      "category": "official_notice",
+      "description": "Real post 2114588174249071102: Day 21 and 'today is a reset' announce an event without asserting completion.",
+      "tweetText": "Day 21/ Wonder what happens the remaining seven days. But today is a reset.",
+      "tweetCreatedAt": "2026-10-26T05:21:22.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2114588174249071102",
+      "expected": { "signalType": "official_notice", "temporalDirection": "unclear" },
+      "regressionGroup": "day-reset-announcement-v1"
+    },
+    {
+      "id": "day06-reset-heading-virtual",
+      "category": "official_notice",
+      "description": "Virtual day-count reset headline; it identifies the announced event but gives no completion or schedule.",
+      "tweetText": "Day 6/ Reset",
+      "tweetCreatedAt": "2026-10-20T12:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000002001",
+      "expected": { "signalType": "official_notice", "temporalDirection": "unclear" },
+      "regressionGroup": "day-reset-announcement-v1"
+    },
+    {
+      "id": "day08-reset-heading-virtual",
+      "category": "official_notice",
+      "description": "Virtual day-count reset headline; the day number is a series label, not a completed-reset claim or timestamp.",
+      "tweetText": "Day 8/ Reset",
+      "tweetCreatedAt": "2026-10-22T12:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000002002",
+      "expected": { "signalType": "official_notice", "temporalDirection": "unclear" },
+      "regressionGroup": "day-reset-announcement-v1"
+    },
+    {
+      "id": "completion-side-of-reset-real-2026-10-13",
+      "category": "reset_executed",
+      "description": "Real post 2109873287853707513: a cross-clause question and 'It's done' report completion.",
+      "tweetText": "What would you like with your side of reset? It's done.",
+      "tweetCreatedAt": "2026-10-13T05:06:06.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/2109873287853707513",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" },
+      "regressionGroup": "semantic-reset-completion-v1"
+    },
+    {
+      "id": "reset-live-paid-users-virtual",
+      "category": "reset_executed",
+      "description": "Virtual completion paraphrase: a reset is live for all paid users.",
+      "tweetText": "The reset is live for all paid users.",
+      "tweetCreatedAt": "2026-10-27T05:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000002003",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" },
+      "regressionGroup": "semantic-reset-completion-v1"
+    },
+    {
+      "id": "codex-quota-back-virtual",
+      "category": "reset_executed",
+      "description": "Virtual completion paraphrase: paid users' Codex quotas are back.",
+      "tweetText": "All paid users have their Codex quota back.",
+      "tweetCreatedAt": "2026-10-27T05:10:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000002004",
+      "expected": { "signalType": "reset_executed", "temporalDirection": "completed_now" },
+      "regressionGroup": "semantic-reset-completion-v1"
+    },
+    {
+      "id": "same-day-reset-time-18utc-virtual",
+      "category": "official_notice",
+      "description": "Virtual same-day reset notice with an explicit UTC schedule.",
+      "tweetText": "Today is reset day; it lands at 18:00 UTC.",
+      "tweetCreatedAt": "2026-10-26T17:00:00.000Z",
+      "tweetUrl": "https://x.com/thsottiaux/status/910000000000002005",
+      "expected": { "signalType": "official_notice", "temporalDirection": "future", "temporalResolutionStatus": "resolved", "temporalPrecision": "exact_time" },
+      "regressionGroup": "same-day-reset-schedule-v1"
     }
   ]
 }
