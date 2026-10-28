@@ -1499,6 +1499,12 @@ test("regular recovery records the observation and canonical event without match
     if (method === "POST" && url.includes("codex_usage_monitor_state")) {
       return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
     }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response("[]", { status: 200 });
+    }
+    if (method === "GET" && url.includes("codex_recovery_observations")) {
+      return new Response("[]", { status: 200 });
+    }
     return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
   };
 
@@ -1525,6 +1531,193 @@ test("regular recovery records the observation and canonical event without match
     assert.equal(regularCompletion?.completed_at, "2026-08-11T00:02:00.000Z");
     assert.notEqual(regularCompletion?.scheduled_at, regularCompletion?.completed_at);
     assert.equal(getAtomicPlanFromRequests(requests).promotion, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("a prior monitor reset excludes consumed notices but preserves a future scheduled one-shot notice", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const originalFetch = globalThis.fetch;
+  const observedAt = "2026-10-28T08:08:00.000Z";
+  const priorObservedAt = "2026-10-27T10:00:00.000Z";
+  const priorPreviousObservedAt = "2026-10-27T09:58:00.000Z";
+  const previousResetsAt = Math.floor(Date.parse("2026-10-31T06:30:00.000Z") / 1000);
+  const currentResetsAt = Math.floor(Date.parse("2026-11-07T06:30:00.000Z") / 1000);
+  const priorEstimateRow = {
+    id: "prior-estimate",
+    reset_event_key: "usage-reset-prior-monitor",
+    display_execution_at: priorObservedAt,
+    execution_time_source: "usage_observation",
+    execution_time_confidence: "high",
+    execution_time_precision: "approximate",
+    execution_window_start_at: priorPreviousObservedAt,
+    execution_window_end_at: priorObservedAt,
+    recovery_observation_id: "prior-monitor-observation",
+    recovery_previous_observed_at: priorPreviousObservedAt,
+    recovery_observed_at: priorObservedAt,
+    tibo_announced_at: null,
+    tibo_primary_tweet_id: null,
+    tibo_source_tweet_ids: [],
+    official_notice_tweet_id: null,
+    official_notice_at: null,
+    estimator_version: "usage-execution-monitor-v1",
+    manual_override_at: null,
+    manual_override_by: null,
+    manual_override_reason: null,
+    manual_execution_at: null,
+    manual_execution_precision: null,
+    created_at: priorObservedAt,
+    updated_at: priorObservedAt,
+  };
+  const priorObservationRow = {
+    id: "prior-monitor-observation",
+    source_key: "local-codex-app-server",
+    observed_at: priorObservedAt,
+    previous_observed_at: priorPreviousObservedAt,
+    previous_used_percent: 80,
+    current_used_percent: 0,
+    previous_resets_at: 1_788_000_000,
+    current_resets_at: 1_788_604_800,
+    cycle_hint: "unexpected",
+    confidence: "strong",
+    status: "observed",
+    matched_tibo_tweet_id: null,
+    confirmed_at: null,
+    created_at: priorObservedAt,
+    updated_at: priorObservedAt,
+  };
+  const oldNotice = {
+    tweet_id: "2119999999999999999",
+    text: "Day 21/ the reset is coming soon.",
+    tweet_url: "https://x.com/thsottiaux/status/2119999999999999999",
+    tweet_created_at: "2026-10-26T05:40:00.000Z",
+    expires_at: "2026-10-30T05:40:00.000Z",
+    signal_type: "official_notice",
+    confidence: 0.99,
+    verification_status: "confirmed",
+    is_reply: false,
+  };
+  const scheduledNotice = {
+    tweet_id: "2110000000000000000",
+    text: "We will reset Codex usage limits for everyone between 08:00 and 10:00 UTC.",
+    tweet_url: "https://x.com/thsottiaux/status/2110000000000000000",
+    tweet_created_at: "2026-10-27T01:00:00.000Z",
+    expires_at: "2026-10-28T09:00:00.000Z",
+    signal_type: "official_notice",
+    confidence: 0.99,
+    verification_status: "confirmed",
+    is_reply: false,
+    temporal_resolution_status: "resolved",
+    temporal_precision: "range",
+    expected_start_at: "2026-10-28T07:00:00.000Z",
+    expected_end_at: "2026-10-28T09:00:00.000Z",
+  };
+  const requests: MockRequest[] = [];
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body, "current-monitor-observation");
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-10-28T08:06:00.000Z",
+        received_at: "2026-10-28T08:06:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 80,
+        window_duration_mins: 10080,
+        resets_at: previousResetsAt,
+        coverage_started_at: "2026-10-21T06:30:00.000Z",
+        banked_reset_available_count: 0,
+        last_banked_grant_at: null,
+        updated_at: "2026-10-28T06:30:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      const query = new URL(url);
+      const formalResetQuery = query.searchParams.getAll("or")
+        .some((value) => value.includes("signal_type.eq.reset_executed"));
+      return new Response(JSON.stringify(formalResetQuery ? [] : [oldNotice, scheduledNotice]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("regular_reset_events")) {
+      return new Response("[]", { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      const query = new URL(url);
+      const recoveryOnly = query.searchParams.get("recovery_observation_id") === "not.is.null";
+      const filtered = query.searchParams.has("reset_event_key") ||
+        (query.searchParams.has("recovery_observation_id") && !recoveryOnly);
+      return new Response(JSON.stringify(filtered ? [] : [priorEstimateRow]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("codex_recovery_observations")) {
+      const query = new URL(url);
+      const observationIdFilter = query.searchParams.get("id") ?? "";
+      return new Response(JSON.stringify(
+        !observationIdFilter || observationIdFilter.includes(priorObservationRow.id)
+          ? [priorObservationRow]
+          : [],
+      ), { status: 200 });
+    }
+    return new Response("[]", { status: method === "POST" ? 201 : 200 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt,
+      usedPercent: 0,
+      resetsAt: currentResetsAt,
+    }));
+
+    const responseBody = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(responseBody));
+    assert.deepEqual(responseBody, { accepted: true, recovery: "observed_unconfirmed" });
+    const estimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(estimate?.reset_event_key, "tibo-reset-2110000000000000000");
+    assert.equal(estimate?.tibo_primary_tweet_id, scheduledNotice.tweet_id);
+    assert.deepEqual(estimate?.tibo_source_tweet_ids, [scheduledNotice.tweet_id]);
+    assert.equal(estimate?.tibo_announced_at, scheduledNotice.tweet_created_at);
+    const recoveryHistoryRequest = requests.find((request) => {
+      if (request.method !== "GET" || !request.url.includes("reset_execution_estimates")) return false;
+      return new URL(request.url).searchParams.has("recovery_observation_id");
+    });
+    assert.ok(
+      recoveryHistoryRequest,
+      `the prior boundary should read recovery-backed estimates: ${JSON.stringify(
+        requests.filter((request) => request.url.includes("reset_execution_estimates")).map((request) => request.url),
+      )}`,
+    );
+    const recoveryHistoryQuery = new URL(recoveryHistoryRequest.url).searchParams;
+    assert.equal(
+      recoveryHistoryQuery.get("recovery_observation_id"),
+      "not.is.null",
+      recoveryHistoryRequest.url,
+    );
+    const executionTimeFilters = recoveryHistoryQuery.getAll("display_execution_at");
+    assert.ok(executionTimeFilters.some((filter) => filter.startsWith("gte.")));
+    assert.ok(executionTimeFilters.some((filter) => filter.startsWith("lte.")));
+    const observationHistoryRequest = requests.find((request) =>
+      request.method === "GET" && request.url.includes("codex_recovery_observations"),
+    );
+    assert.ok(observationHistoryRequest, "prior monitor observations should be loaded by estimate ID");
+    assert.ok(
+      new URL(observationHistoryRequest.url).searchParams.get("id")?.includes(priorObservationRow.id),
+    );
+    assert.equal(
+      requests.some((request) => request.url.includes("read_banked_reset_publication_state")),
+      false,
+      "the forced recovery boundary lookup must not depend on BANKED publication state",
+    );
   } finally {
     globalThis.fetch = originalFetch;
     restore();
@@ -1582,6 +1775,12 @@ test("regular recovery with an official notice records regular history without p
     }
     if (method === "GET" && url.includes("regular_reset_events")) {
       return new Response(JSON.stringify([]), { status: 200 });
+    }
+    if (method === "GET" && url.includes("reset_execution_estimates")) {
+      return new Response("[]", { status: 200 });
+    }
+    if (method === "GET" && url.includes("codex_recovery_observations")) {
+      return new Response("[]", { status: 200 });
     }
     if (method === "POST" && url.includes("codex_recovery_observations")) {
       return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
@@ -1695,7 +1894,10 @@ test("teaser plus strong unexpected recovery persists an immediate history estim
       return new Response(JSON.stringify([]), { status: 200 });
     }
     if (method === "GET" && url.includes("reset_execution_estimates")) {
-      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+      return new Response("[]", { status: 200 });
+    }
+    if (method === "GET" && url.includes("codex_recovery_observations")) {
+      return new Response("[]", { status: 200 });
     }
     if (method === "POST" && url.includes("codex_recovery_observations")) {
       return new Response(JSON.stringify({
@@ -2446,7 +2648,10 @@ function createMockSupabaseFetch(options?: {
       return new Response(JSON.stringify(options?.regularEvents ?? []), { status: 200 });
     }
     if (method === "GET" && url.includes("reset_execution_estimates")) {
-      return new Response(JSON.stringify({ data: null, error: null }), { status: 200 });
+      return new Response("[]", { status: 200 });
+    }
+    if (method === "GET" && url.includes("codex_recovery_observations")) {
+      return new Response("[]", { status: 200 });
     }
     return new Response(JSON.stringify({ data: null, error: null }), { status: 201 });
   };

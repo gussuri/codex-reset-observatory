@@ -373,6 +373,185 @@ test("forced recovery notice clusters exclude BANKED claims and reject a BANKED 
   );
 });
 
+test("forced recovery notice clusters require event evidence when schedules are unresolved", () => {
+  const parent = noticeSignal({
+    tweet_id: "2113162277688070445",
+    tweet_created_at: "2026-10-22T06:30:00.000Z",
+  });
+  const unrelated = noticeSignal({
+    tweet_id: "day21-reset-parent",
+    tweet_created_at: "2026-10-21T05:40:00.000Z",
+  });
+  const linkedReply = verifiedDeadlineReplyNotice({
+    tweet_created_at: "2026-10-22T06:55:54.000Z",
+  });
+  const notices = [unrelated, linkedReply, parent];
+
+  assert.deepEqual(
+    findRelatedTiboNoticeCluster(notices, parent.tweet_id, "2026-10-22T10:00:00.000Z")
+      .map((notice) => notice.tweet_id),
+    [parent.tweet_id, linkedReply.tweet_id],
+  );
+});
+
+test("resolved notices with incomplete or reversed schedules do not cluster", () => {
+  const unrelated = noticeSignal({
+    tweet_id: "unrelated-incomplete-schedule",
+    tweet_created_at: "2026-10-27T01:00:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_precision: "exact_time",
+    expected_start_at: "2026-10-27T09:00:00.000Z",
+    expected_end_at: null,
+  });
+  const current = noticeSignal({
+    tweet_id: "current-incomplete-schedule",
+    tweet_created_at: "2026-10-28T01:00:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_precision: "exact_time",
+    expected_start_at: "2026-10-28T09:00:00.000Z",
+    expected_end_at: null,
+  });
+
+  assert.deepEqual(
+    findRelatedTiboNoticeCluster(
+      [unrelated, current],
+      current.tweet_id,
+      "2026-10-28T09:01:00.000Z",
+    ).map((notice) => notice.tweet_id),
+    [current.tweet_id],
+  );
+
+  const reversed = noticeSignal({
+    tweet_id: "reversed-schedule",
+    tweet_created_at: "2026-10-28T00:30:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_precision: "range",
+    expected_start_at: "2026-10-28T10:00:00.000Z",
+    expected_end_at: "2026-10-28T08:00:00.000Z",
+  });
+  const validOverlap = noticeSignal({
+    tweet_id: "valid-overlap-schedule",
+    tweet_created_at: "2026-10-28T00:45:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_precision: "range",
+    expected_start_at: "2026-10-28T08:30:00.000Z",
+    expected_end_at: "2026-10-28T09:30:00.000Z",
+  });
+  assert.deepEqual(
+    findRelatedTiboNoticeCluster(
+      [reversed, validOverlap],
+      validOverlap.tweet_id,
+      "2026-10-28T09:01:00.000Z",
+    ).map((notice) => notice.tweet_id),
+    [validOverlap.tweet_id],
+  );
+
+  const pointA = noticeSignal({
+    tweet_id: "explicit-point-a",
+    tweet_created_at: "2026-10-28T00:15:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_precision: "exact_time",
+    expected_start_at: "2026-10-28T09:00:00.000Z",
+    expected_end_at: "2026-10-28T09:00:00.000Z",
+  });
+  const pointB = noticeSignal({
+    tweet_id: "explicit-point-b",
+    tweet_created_at: "2026-10-28T00:30:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_precision: "exact_time",
+    expected_start_at: "2026-10-28T09:00:00.000Z",
+    expected_end_at: "2026-10-28T09:00:00.000Z",
+  });
+  assert.deepEqual(
+    findRelatedTiboNoticeCluster([pointA, pointB], pointB.tweet_id, "2026-10-28T09:01:00.000Z")
+      .map((notice) => notice.tweet_id),
+    [pointA.tweet_id, pointB.tweet_id],
+  );
+});
+
+test("a future one-shot notice remains eligible across an earlier monitor reset", () => {
+  const scheduled = noticeSignal({
+    tweet_id: "scheduled-next-one-shot",
+    tweet_created_at: "2026-10-27T01:00:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_precision: "range",
+    expected_start_at: "2026-10-28T08:00:00.000Z",
+    expected_end_at: "2026-10-28T10:00:00.000Z",
+  });
+  const previousResetWindow = {
+    executionWindowStartAt: "2026-10-27T09:58:00.000Z",
+    executionWindowEndAt: "2026-10-27T10:00:00.000Z",
+  };
+
+  assert.deepEqual(
+    findRelatedTiboNoticeCluster(
+      [scheduled],
+      scheduled.tweet_id,
+      "2026-10-28T09:00:00.000Z",
+      {
+        previousResetAt: previousResetWindow.executionWindowEndAt,
+        previousResetWindow,
+      },
+    ).map((notice) => notice.tweet_id),
+    [scheduled.tweet_id],
+  );
+
+  const consumed = noticeSignal({
+    tweet_id: "consumed-before-future-reset",
+    tweet_created_at: "2026-10-25T23:00:00.000Z",
+    temporal_resolution_status: "resolved",
+    temporal_precision: "range",
+    expected_start_at: "2026-10-26T00:00:00.000Z",
+    expected_end_at: "2026-10-26T01:00:00.000Z",
+  });
+  assert.deepEqual(
+    findRelatedTiboNoticeCluster(
+      [consumed],
+      consumed.tweet_id,
+      "2026-10-28T09:00:00.000Z",
+      {
+        previousResetAt: previousResetWindow.executionWindowEndAt,
+        previousResetWindow,
+      },
+    ),
+    [],
+  );
+});
+
+test("notice clusters do not reuse consumed one-shot sources across monitor recoveries", () => {
+  const consumed = noticeSignal({
+    tweet_id: "consumed-one-shot-notice",
+    tweet_created_at: "2026-10-22T08:00:00.000Z",
+  });
+  const current = noticeSignal({
+    tweet_id: "current-one-shot-notice",
+    tweet_created_at: "2026-10-22T09:00:00.000Z",
+  });
+  const persistent = noticeSignal({
+    tweet_id: "2095651088502591861",
+    tweet_created_at: "2026-10-22T09:00:00.000Z",
+  });
+
+  assert.deepEqual(
+    findRelatedTiboNoticeCluster(
+      [consumed, current],
+      current.tweet_id,
+      "2026-10-22T10:00:00.000Z",
+      { consumedOneShotTweetIds: new Set([consumed.tweet_id]) },
+    ).map((notice) => notice.tweet_id),
+    [current.tweet_id],
+  );
+  assert.deepEqual(
+    findRelatedTiboNoticeCluster(
+      [persistent],
+      persistent.tweet_id,
+      "2026-10-22T10:00:00.000Z",
+      { previousResetAt: "2026-10-22T09:30:00.000Z" },
+    ).map((notice) => notice.tweet_id),
+    [persistent.tweet_id],
+  );
+});
+
 test("associates an early reset with the source deadline notice before its estimated start", () => {
   const notice = verifiedDeadlineReplyNotice();
   const noticeId = notice.tweet_id;
@@ -601,7 +780,6 @@ test("history separates the first announcement from the most specific representa
   assert.deepEqual(related.map((notice) => notice.tweet_id), [
     "notice-first",
     "notice-deadline",
-    "notice-low-information",
   ]);
   assert.equal(representative?.tweet_id, "notice-deadline");
   assert.equal(event.opened_at, first.tweet_created_at);
@@ -611,7 +789,6 @@ test("history separates the first announcement from the most specific representa
   assert.deepEqual(event.sourceTweetIds, [
     "notice-first",
     "notice-deadline",
-    "notice-low-information",
     reset.tweet_id,
   ]);
 });

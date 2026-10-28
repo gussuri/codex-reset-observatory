@@ -154,6 +154,14 @@ monitor observation の `matchedTiboTweetId` は、実行済み投稿との一�
 
 AI confidence、`verification_status = confirmed`、manual execution-time override、adoption ledger、完了を示す投稿文だけではこの gate を通過しません。手動 estimate は monitor observation がない限り公開 completed history・確率境界へ入りません。invalid estimate の重複が先に届いても、後続の valid copy を捨てず、retry/duplicate delivery の順序で canonical event を変えません。
 
+### Notice-backed recovery のイベント分離
+
+Usage Monitor が recovery に結び付ける notice は、その実行窓に対して同一イベントと確認できる候補だけです。schedule による関連付けには、開始・終了の両時刻が有効で順序が正しい解決済み窓を使います。窓の重なり、同一投稿ID、または検証済みの将来reply関係を根拠にできます。時刻の欠落・逆転を「一致」とみなして複数告知を束ねません。開始と終了が同じ正確な時刻の点窓は有効です。
+
+one-shot notice は、前回の forced recovery の実行境界・実行窓に既存の temporal consumption 判定を適用します。前回の実行時点で予定時刻より前にあり、まだ消費されていない将来予定は次の recovery 用に残します。前回までの recovery で消費済みの notice や未解決の古い one-shot notice は、後続イベントへ再利用しません。既存の通常・早期 grace を維持し、persistent notice の扱いは明示 policy に従います。
+
+estimate に保存された official-notice ID と時刻は、元の signal row が読み込めない場合の provenance fallback に使えます。対応する現在の signal row がある場合は、その現在の分類・verification・本文が優先されます。rejected、irrelevant、BANKED、または履歴対象外の row を保存メタデータだけで official notice に戻しません。notice 時刻が実行時刻より後なら、その完了イベントを「公式予告あり」と表示しません。
+
 この gate は formal history の生成前に適用し、history 表示だけでなく共通 canonical history を使う probability boundary と public recovery projection に反映します。既存の `data/resetHistory.ts` にある static archive は legacy authority として維持し、遡及的な backfill / rewrite は行いません。static archive に入っていない legacy AI-confirmed signal を、AI確認済みという理由だけで例外扱いしません。regular reset と BANKED distribution はそれぞれ既存の専用経路を維持します。
 
 reset title/summary/note の生成は formal Tibo completion の admission とは別の gate です。既に保存された canonical monitor event、execution estimate、`observed` または `confirmed` の recovery observation が整合する場合に生成できます。`observed` は観測済みという意味で、`confirmedAt` や matched Tibo completion ID を要求しません。これだけで Tibo 投稿を formal completion へ昇格させることはありません。厳密に検証され、execution window と重なる将来の verified reply notice は source context として含められます。通常 reply、quote、古い proof、別 event の投稿は含めません。BANKED title/metadata は canonical grant-backed event とその official notice を別の authority として使い、global reset の monitor gate を置き換えません。

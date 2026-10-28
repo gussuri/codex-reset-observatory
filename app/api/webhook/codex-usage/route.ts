@@ -18,7 +18,9 @@ import {
   findBankedEstimateByExactObservation,
   findLatestBankedGrant,
   findRecentFormalTiboReset,
+  readCodexRecoveryObservationsByIds,
   readCodexUsageMonitorState,
+  readRecoveryResetExecutionEstimates,
 } from "@/lib/codexUsageRecoveryStore";
 import {
   applyCodexUsageAtomicWrite,
@@ -38,16 +40,21 @@ import {
   type ResetExecutionWindow,
 } from "@/lib/radar/tiboTemporal";
 import { buildResetExecutionEstimate } from "@/lib/radar/resetExecution";
+import { getLastForcedRecoveryResetWindow } from "@/lib/radar/recoveryBoundary";
 import {
   collectOfficialTiboNoticeSignals,
   findRelatedTiboNoticeCluster,
+  findNoticeBackedRecoveryEvents,
   selectRepresentativeTiboNotice,
   NOTICE_LOOKBACK_MS,
   type TiboNoticeSignal,
 } from "@/lib/radar/tiboHistory";
 import { generateMonitorResetCopyFromPersistedEvent } from "@/lib/radar/monitorResetCopyGeneration";
 import { claimTiboFormalAdoption } from "@/lib/radar/tiboFormalAdoptionStore";
-import { PERSISTENT_OFFICIAL_NOTICE_IDS } from "@/lib/radar/officialNoticePolicy";
+import {
+  getOfficialNoticeConsumption,
+  PERSISTENT_OFFICIAL_NOTICE_IDS,
+} from "@/lib/radar/officialNoticePolicy";
 import type { ActiveTiboSignal, RadarData } from "@/lib/radar/types";
 import { buildBankedGrantObservationWrite } from "@/lib/codexUsageBankedGrant";
 import { resolveBankedAssociation as resolveSharedBankedAssociation } from "@/lib/codexUsageBankedAssociation";
@@ -155,6 +162,9 @@ type OfficialNoticeLookup = {
   teaserSignal: ActiveTiboSignal | null;
   allSignals: ActiveTiboSignal[];
   futureReplyClaim: { eventKey: string; replyTweetId: string; replyProof: Record<string, unknown> } | null;
+  priorForcedResetAt?: string | null;
+  priorForcedResetWindow?: ResetExecutionWindow | null;
+  consumedOneShotTweetIds?: ReadonlySet<string>;
   error: unknown;
 };
 
@@ -273,6 +283,48 @@ async function hasActiveOfficialNotice(
     };
   }
 
+  const candidateSignals = [
+    ...((tiboResult.data ?? []) as unknown as ActiveTiboSignal[]),
+    ...((persistentTiboResult.data ?? []) as unknown as ActiveTiboSignal[]),
+  ];
+  const executionWindowStartTime = executionWindow
+    ? Date.parse(executionWindow.executionWindowStartAt ?? "")
+    : null;
+  const hasOlderOneShotOfficialNotice = candidateSignals.some((signal) => {
+    const signalTime = Date.parse(signal.tweet_created_at ?? "");
+    return signal.signal_type === "official_notice" &&
+      getOfficialNoticeConsumption(signal.tweet_id) === "one_shot" &&
+      Number.isFinite(signalTime) &&
+      executionWindowStartTime !== null &&
+      Number.isFinite(executionWindowStartTime) &&
+      signalTime <= executionWindowStartTime;
+  });
+  const recoveryHistoryStartAt = new Date(
+    Math.max(0, observedAt.getTime() - NOTICE_LOOKBACK_MS),
+  ).toISOString();
+  const priorEstimatesResult = hasOlderOneShotOfficialNotice
+    ? await readRecoveryResetExecutionEstimates(client, recoveryHistoryStartAt, observedAtIso)
+    : { rows: [], error: null };
+  const priorObservationsResult = hasOlderOneShotOfficialNotice && !priorEstimatesResult.error
+    ? await readCodexRecoveryObservationsByIds(
+        client,
+        priorEstimatesResult.rows.flatMap((estimate) =>
+          estimate.recoveryObservationId ? [estimate.recoveryObservationId] : [],
+        ),
+      )
+    : { rows: [], error: null };
+  if (priorEstimatesResult.error || priorObservationsResult.error) {
+    return {
+      active: false,
+      noticeSignal: null,
+      noticeSignals: [],
+      teaserSignal: null,
+      allSignals: [],
+      futureReplyClaim: null,
+      error: priorEstimatesResult.error ?? priorObservationsResult.error,
+    };
+  }
+
   const signals = Array.from(new Map(
     [
       ...((tiboResult.data ?? []) as unknown as ActiveTiboSignal[]),
@@ -322,11 +374,32 @@ async function hasActiveOfficialNotice(
       })),
     regular_reset_events: regularResult.data as RadarData["regular_reset_events"],
   };
+  const priorForcedResetWindow = executionWindow
+    ? getLastForcedRecoveryResetWindow({
+        reset_execution_estimates: priorEstimatesResult.rows,
+        codex_recovery_observations: priorObservationsResult.rows,
+      }, observedAt)
+    : null;
+  const priorForcedResetAt = priorForcedResetWindow?.executionWindowEndAt ?? null;
+  const consumedOneShotTweetIds = new Set(
+    findNoticeBackedRecoveryEvents(
+      [],
+      priorObservationsResult.rows,
+      priorEstimatesResult.rows,
+    ).flatMap((event) => {
+      const officialNoticeTweetId = event.officialNoticeTweetId?.trim();
+      if (
+        !officialNoticeTweetId ||
+        getOfficialNoticeConsumption(officialNoticeTweetId) !== "one_shot"
+      ) return [];
+      return [officialNoticeTweetId, ...(event.sourceTweetIds ?? [])];
+    }),
+  );
   // A BANKED distribution is an individual grant, not evidence that global
   // quota was reset. Keep that notice out of the forced-recovery context.
   const activeNotice = getActiveOfficialNotice(
     data,
-    null,
+    priorForcedResetAt ? new Date(priorForcedResetAt) : null,
     observedAt,
     undefined,
     executionWindow,
@@ -359,6 +432,9 @@ async function hasActiveOfficialNotice(
           replyProof: futureReplyProof!,
         }
       : null,
+    priorForcedResetAt,
+    priorForcedResetWindow,
+    consumedOneShotTweetIds,
     error: null,
   };
 }
@@ -798,22 +874,28 @@ async function processCodexUsageSnapshot(
         noticeSignals,
         noticeSignal.id,
         snapshot.observedAt,
+        {
+          previousResetAt: recoveryNotice.priorForcedResetAt,
+          previousResetWindow: recoveryNotice.priorForcedResetWindow,
+          consumedOneShotTweetIds: recoveryNotice.consumedOneShotTweetIds,
+        },
       );
-      const normalizedRelatedNoticeSignals = relatedNoticeSignals.length > 0
-        ? relatedNoticeSignals
-        : [toTiboNoticeSignal(noticeSignal)];
-      const representativeNotice = selectRepresentativeTiboNotice(normalizedRelatedNoticeSignals)!;
-      const firstAnnouncement = normalizedRelatedNoticeSignals[0] ?? representativeNotice;
-      const eventAnchorTweetId = recoveryNotice.futureReplyClaim?.eventKey || firstAnnouncement.tweet_id;
-      const estimate = buildResetExecutionEstimate({
-        resetEventKey: `tibo-reset-${eventAnchorTweetId}`,
-        tiboAnnouncedAt: firstAnnouncement.tweet_created_at,
-        tiboPrimaryTweetId: representativeNotice.tweet_id,
-        tiboSourceTweetIds: normalizedRelatedNoticeSignals.map((relatedNotice) => relatedNotice.tweet_id),
-        usageObservation: observation,
-        officialNoticeTweetId: representativeNotice.tweet_id,
-        officialNoticeAt: representativeNotice.tweet_created_at,
-      });
+      const representativeNotice = selectRepresentativeTiboNotice(relatedNoticeSignals);
+      const estimate = representativeNotice
+        ? buildResetExecutionEstimate({
+            resetEventKey: `tibo-reset-${recoveryNotice.futureReplyClaim?.eventKey || relatedNoticeSignals[0]!.tweet_id}`,
+            tiboAnnouncedAt: relatedNoticeSignals[0]!.tweet_created_at,
+            tiboPrimaryTweetId: representativeNotice.tweet_id,
+            tiboSourceTweetIds: relatedNoticeSignals.map((relatedNotice) => relatedNotice.tweet_id),
+            usageObservation: observation,
+            officialNoticeTweetId: representativeNotice.tweet_id,
+            officialNoticeAt: representativeNotice.tweet_created_at,
+          })
+        : buildResetExecutionEstimate({
+            resetEventKey: "usage-reset-pending",
+            usageObservation: observation,
+            isMonitorObserved: true,
+          });
       if (!estimate) return NextResponse.json({ error: "Usage monitor storage unavailable" }, { status: 503 });
       executionEstimate = buildResetExecutionEstimateWrite(estimate);
       estimateObserved = true;
@@ -889,6 +971,7 @@ async function processCodexUsageSnapshot(
   });
   if (
     executionEstimate && noticeSignal &&
+    executionEstimate.official_notice_tweet_id &&
     recoveryNotice.futureReplyClaim?.replyTweetId === noticeSignal.id
   ) {
     const fallbackEstimate = buildResetExecutionEstimate({
