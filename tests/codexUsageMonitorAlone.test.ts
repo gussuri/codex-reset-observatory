@@ -58,7 +58,8 @@ describe("Usage Monitor Standalone Reset Detection Protocol", () => {
       currentResetsAt: 1788604800,
       cycleHint: "unexpected",
       confidence: "strong",
-      status: "confirmed",
+      status: "observed",
+      confirmedAt: null,
       matchedTiboTweetId: null,
     };
 
@@ -93,7 +94,8 @@ describe("Usage Monitor Standalone Reset Detection Protocol", () => {
       currentResetsAt: 1788604800,
       cycleHint: "unexpected",
       confidence: "strong",
-      status: "confirmed",
+      status: "observed",
+      confirmedAt: null,
       matchedTiboTweetId: null,
     };
 
@@ -506,6 +508,143 @@ describe("Usage Monitor Standalone Reset Detection Protocol", () => {
     assert.equal(events[0].details?.noticeType, "公式予告あり");
     assert.equal(events[0].details?.noticeToExecution, "2時間");
     assert.equal(events[0].window_minutes, 120);
+  });
+
+  it("keeps persisted official notice timing when the source row is no longer loaded", () => {
+    const announcedAt = "2026-10-28T02:42:53.000Z";
+    const replyAt = "2026-10-28T02:43:38.000Z";
+    const executedAt = "2026-10-28T06:35:40.653Z";
+    const recoveryObservation: CodexRecoveryObservation = {
+      id: "rec-day23-notice",
+      sourceKey: "local-codex-app-server",
+      observedAt: executedAt,
+      previousObservedAt: "2026-10-28T06:30:00.000Z",
+      previousUsedPercent: 80,
+      currentUsedPercent: 0,
+      previousResetsAt: 1788000000,
+      currentResetsAt: 1788604800,
+      cycleHint: "unexpected",
+      confidence: "strong",
+      status: "observed",
+      confirmedAt: null,
+      matchedTiboTweetId: null,
+    };
+    const estimate = buildResetExecutionEstimate({
+      resetEventKey: "tibo-reset-day23-reset-parent",
+      tiboAnnouncedAt: announcedAt,
+      tiboPrimaryTweetId: "day23-reset-reply",
+      tiboSourceTweetIds: ["day23-reset-parent", "day23-reset-reply"],
+      officialNoticeTweetId: "day23-reset-reply",
+      officialNoticeAt: replyAt,
+      usageObservation: recoveryObservation,
+    });
+
+    assert.ok(estimate);
+    const events = findNoticeBackedRecoveryEvents([], [recoveryObservation], [estimate!]);
+    assert.equal(events.length, 1);
+    assert.equal(events[0].details?.noticeType, "公式予告あり");
+    assert.equal(events[0].details?.noticeToExecution, "3時間53分");
+    assert.equal(events[0].window_minutes, 233);
+
+    const radarData = getLocalRadarData({
+      checkedAt: executedAt,
+      calculationNow: new Date(executedAt),
+      resetExecutionEstimates: [estimate!],
+      codexRecoveryObservations: [recoveryObservation],
+    });
+    const expectedByLocale = {
+      ja: { title: "ランダムリセット", noticeType: "告知あり", noticeToExecution: "3時間53分" },
+      en: { title: "Random reset", noticeType: "Announcement", noticeToExecution: "3 hours 53 minutes" },
+      zh: { title: "随机重置", noticeType: "有告知", noticeToExecution: "3 小时 53 分钟" },
+    } as const;
+    for (const locale of ["ja", "en", "zh"] as const) {
+      const snapshot = toPublicRadarSnapshot(radarData, locale, {
+        calculationNow: new Date(executedAt),
+      });
+      const historyItem: (typeof snapshot.viewModel.recentHistory)[number] | undefined =
+        snapshot.viewModel.recentHistory.find(
+        (item) => item.key === estimate!.resetEventKey,
+        );
+      assert.ok(historyItem, `${locale} public history should include the observed recovery`);
+      assert.equal(historyItem.title, expectedByLocale[locale].title);
+      assert.equal(historyItem.details?.noticeType, expectedByLocale[locale].noticeType);
+      assert.equal(historyItem.details?.noticeToExecution, expectedByLocale[locale].noticeToExecution);
+      assert.equal(historyItem.signalAt, announcedAt);
+      assert.equal(historyItem.resetAt, executedAt);
+    }
+  });
+
+  it("does not restore official notice metadata over an existing rejected, irrelevant, or BANKED source row", () => {
+    const announcedAt = "2026-10-28T02:42:53.000Z";
+    const executedAt = "2026-10-28T06:35:40.653Z";
+    const recoveryObservation: CodexRecoveryObservation = {
+      id: "rec-rejected-day23-notice",
+      sourceKey: "local-codex-app-server",
+      observedAt: executedAt,
+      previousObservedAt: "2026-10-28T06:30:00.000Z",
+      previousUsedPercent: 80,
+      currentUsedPercent: 0,
+      previousResetsAt: 1788000000,
+      currentResetsAt: 1788604800,
+      cycleHint: "unexpected",
+      confidence: "strong",
+      status: "observed",
+      confirmedAt: null,
+      matchedTiboTweetId: null,
+    };
+    const estimate = buildResetExecutionEstimate({
+      resetEventKey: "tibo-reset-rejected-day23-notice",
+      tiboAnnouncedAt: announcedAt,
+      tiboPrimaryTweetId: "day23-reset-reply",
+      tiboSourceTweetIds: ["day23-reset-parent", "day23-reset-reply"],
+      officialNoticeTweetId: "day23-reset-reply",
+      officialNoticeAt: "2026-10-28T02:43:38.000Z",
+      usageObservation: recoveryObservation,
+    });
+    assert.ok(estimate);
+
+    const sourceRows = [
+      {
+        tweet_id: "day23-reset-reply",
+        text: "We will reset usage limits soon.",
+        tweet_url: "https://x.com/thsottiaux/status/day23-reset-reply",
+        tweet_created_at: "2026-10-28T02:43:38.000Z",
+        signal_type: "official_notice",
+        confidence: 0.99,
+        verification_status: "rejected",
+      },
+      {
+        tweet_id: "day23-reset-reply",
+        text: "A post unrelated to any reset.",
+        tweet_url: "https://x.com/thsottiaux/status/day23-reset-reply",
+        tweet_created_at: "2026-10-28T02:43:38.000Z",
+        signal_type: "irrelevant",
+        confidence: 0.99,
+        verification_status: "confirmed",
+      },
+      {
+        tweet_id: "day23-reset-reply",
+        text: "We will distribute banked resets to all paid users tomorrow.",
+        tweet_url: "https://x.com/thsottiaux/status/day23-reset-reply",
+        tweet_created_at: "2026-10-28T02:43:38.000Z",
+        signal_type: "official_notice",
+        confidence: 0.99,
+        verification_status: "confirmed",
+      },
+    ];
+
+    for (const sourceRow of sourceRows) {
+      const events = findNoticeBackedRecoveryEvents(
+        [sourceRow as any],
+        [recoveryObservation],
+        [estimate],
+      );
+      assert.equal(events.length, 1);
+      assert.equal(events[0].officialNoticeTweetId, undefined);
+      assert.equal(events[0].details?.noticeType, "なし");
+      assert.equal(events[0].details?.noticeToExecution, "");
+      assert.equal(events[0].window_minutes, 0);
+    }
   });
 
   it("17. completion postだけ -> 告知から実施までの起点にしない & executionAt不変", () => {

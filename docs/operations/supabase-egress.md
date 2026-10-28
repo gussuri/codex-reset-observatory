@@ -40,6 +40,35 @@ operation, but normal routes use the narrower scopes above. A failed read still
 uses the existing degraded-data and stale-cache behavior; no cache change is
 treated as permission to replace healthy data with a partial result.
 
+## One-off Tibo event correction
+
+The 2026-10-28 Production correction separated the new notice-backed recovery
+from the existing 2026-10-26 event. The correction was applied once; the code
+change prevents the same notice-association and history-display errors from
+recurring. Publishing this code does not repeat a database update, backfill,
+or cache mutation.
+
+A read-only Production-row replay then confirmed that both events remain
+separate and that the new event's 233-minute notice lead appears in JA, EN, and
+ZH. It used three bounded reads for the two recovery estimates, two referenced
+observations, and three related signal rows; it performed no database writes.
+
+If an explicitly authorized one-off database correction succeeds but its
+cache refresh fails, do not run the database update again. Use the existing
+local CRON credential in process memory only to call the canonical
+`POST /api/internal/invalidate-radar-cache` route with `{"scope":"tibo-event"}`.
+Do not put `CRON_SECRET` in a command, file, log, or report. The `tibo-event`
+scope invalidates the Tibo active/history/timed, recovery-observation,
+execution-estimate, formal-adoption, display-name, and shared-core tags. If the
+POST fails, retry only that cache invalidation request and verify its response;
+do not repeat the already successful database mutation or use the broad `all`
+scope.
+
+The webhook's additional prior-recovery lookup runs only when it sees an
+older one-shot official-notice candidate. It reads recovery-backed estimates
+from the 72-hour lookback, capped at 100 rows, then fetches observations only
+by those estimate IDs. It does not call the BANKED publication-state RPC.
+
 ## Prediction-history calculation boundary
 
 The raw, explicitly selected `prediction_history` projection is cached for 15

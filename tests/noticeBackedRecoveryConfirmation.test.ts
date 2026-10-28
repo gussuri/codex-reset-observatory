@@ -263,16 +263,26 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
       tweet_created_at: "2026-08-23T06:29:05Z",
       expected_start_at: "2026-08-23T22:00:00Z",
     };
+    const recovery = {
+      ...sampleRecovery,
+      observedAt: "2026-08-23T22:05:00.000Z",
+      previousObservedAt: "2026-08-23T22:03:00.000Z",
+      previousResetsAt: 1787876725,
+      currentResetsAt: 1788060882,
+    };
     const estimate = {
       ...sampleEstimate,
       resetEventKey: "tibo-reset-2091412393368945027",
+      displayExecutionAt: recovery.observedAt,
+      executionWindowStartAt: recovery.previousObservedAt,
+      executionWindowEndAt: recovery.observedAt,
       tiboAnnouncedAt: notice.tweet_created_at,
       tiboPrimaryTweetId: notice.tweet_id,
       officialNoticeTweetId: notice.tweet_id,
       tiboSourceTweetIds: [notice.tweet_id],
     };
 
-    const event = findNoticeBackedRecoveryEvents([notice], [sampleRecovery], [estimate])[0];
+    const event = findNoticeBackedRecoveryEvents([notice], [recovery], [estimate])[0];
 
     assert.ok(event);
     assert.equal(event.title, "過剰消費のお詫びリセット");
@@ -284,7 +294,7 @@ describe("Notice-backed Usage Recovery Confirmation Policy (A - O)", () => {
 
     const data: RadarData = {
       recent_tibo_signals: [notice as any],
-      codex_recovery_observations: [sampleRecovery as any],
+      codex_recovery_observations: [recovery as any],
       reset_execution_estimates: [estimate as any],
     } as any;
     for (const [locale, expectedTitle, expectedReason, expectedNote] of [

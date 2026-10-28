@@ -32,6 +32,10 @@ import {
   getEffectiveTemporalPrecision,
   hasDeadlineSemantics,
   isTemporalNoticeConsumedAtReset,
+  getTemporalExecutionWindowRelation,
+  TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS,
+  TIBO_NOTICE_GRACE_MS,
+  type ResetExecutionWindow,
 } from "./tiboTemporal";
 import {
   inferResetCycleType,
@@ -579,6 +583,12 @@ function areTiboNoticeSchedulesCompatible(
   left: TiboNoticeSignal,
   right: TiboNoticeSignal,
 ) {
+  if (
+    left.temporal_resolution_status !== "resolved" ||
+    right.temporal_resolution_status !== "resolved"
+  ) {
+    return false;
+  }
   const leftStart = getTimestamp(left.expected_start_at);
   const leftEnd = getTimestamp(left.expected_end_at);
   const rightStart = getTimestamp(right.expected_start_at);
@@ -589,10 +599,38 @@ function areTiboNoticeSchedulesCompatible(
     rightStart === null ||
     rightEnd === null
   ) {
-    return true;
+    return false;
   }
 
-  return leftStart <= rightEnd && rightStart <= leftEnd;
+  return leftEnd >= leftStart && rightEnd >= rightStart &&
+    leftStart <= rightEnd && rightStart <= leftEnd;
+}
+
+function areTiboNoticesLinkedByVerifiedFutureReply(
+  left: TiboNoticeSignal,
+  right: TiboNoticeSignal,
+) {
+  const leftParentId = isVerifiedTiboFutureReplyNotice(left)
+    ? left.ai_contextual_reset_tweet_id?.trim()
+    : "";
+  const rightParentId = isVerifiedTiboFutureReplyNotice(right)
+    ? right.ai_contextual_reset_tweet_id?.trim()
+    : "";
+
+  return Boolean(
+    (leftParentId && leftParentId === right.tweet_id) ||
+      (rightParentId && rightParentId === left.tweet_id) ||
+      (leftParentId && leftParentId === rightParentId),
+  );
+}
+
+function areTiboNoticesInSameEvent(
+  left: TiboNoticeSignal,
+  right: TiboNoticeSignal,
+) {
+  return left.tweet_id === right.tweet_id ||
+    areTiboNoticesLinkedByVerifiedFutureReply(left, right) ||
+    areTiboNoticeSchedulesCompatible(left, right);
 }
 
 function getNoticeCluster(
@@ -603,18 +641,68 @@ function getNoticeCluster(
   return sortTiboNoticesChronologically(
     candidates.filter((candidate) =>
       isHistoryNoticeSignalEligible(candidate) &&
-      (candidate.tweet_id === representative.tweet_id ||
-        areTiboNoticeSchedulesCompatible(candidate, representative)),
+      areTiboNoticesInSameEvent(candidate, representative),
     ),
   );
+}
+
+export type TiboNoticeClusterOptions = {
+  previousResetAt?: string | null;
+  previousResetWindow?: ResetExecutionWindow | null;
+  consumedOneShotTweetIds?: ReadonlySet<string>;
+};
+
+function getTiboNoticeTemporalResolution(notice: TiboNoticeSignal) {
+  if (notice.temporal_resolution_status !== "resolved") return null;
+  const temporalExpression = notice.temporal_expression ?? notice.ai_temporal_expression ?? null;
+  const expectedStartAt = notice.expected_start_at ?? null;
+  const expectedEndAt = notice.expected_end_at ?? null;
+  return {
+    status: "resolved" as const,
+    temporalPrecision: getEffectiveTemporalPrecision({
+      status: "resolved",
+      temporalPrecision: notice.temporal_precision ?? notice.ai_temporal_precision,
+      expectedStartAt,
+      expectedEndAt,
+    }) ?? "unknown",
+    expectedStartAt,
+    expectedEndAt,
+    temporalExpression,
+    sourceStartAt: notice.tweet_created_at,
+    isDeadline: hasDeadlineSemantics({ temporalExpression, expectedStartAt, expectedEndAt }, notice.text),
+  };
+}
+
+function isOneShotNoticeConsumedBeforeNextRecovery(
+  notice: TiboNoticeSignal,
+  previousResetAt: string | null | undefined,
+  previousResetWindow: ResetExecutionWindow | null | undefined,
+) {
+  if (!previousResetAt) return false;
+  const resetTime = getTimestamp(previousResetAt);
+  if (resetTime === null) return false;
+  const resolution = getTiboNoticeTemporalResolution(notice);
+  const executionWindow = previousResetWindow ?? {
+    executionWindowStartAt: previousResetAt,
+    executionWindowEndAt: previousResetAt,
+  };
+  const temporalRelation = getTemporalExecutionWindowRelation(resolution, executionWindow, {
+    graceMs: TIBO_NOTICE_GRACE_MS,
+    earlyGraceMs: TIBO_NOTICE_EARLY_CONSUMPTION_GRACE_MS,
+  });
+  if (temporalRelation === "before") return false;
+  if (temporalRelation === "after" || temporalRelation === "unknown") return true;
+  return isTemporalNoticeConsumedAtReset(resolution, previousResetAt);
 }
 
 export function findRelatedTiboNoticeCluster(
   noticeSignals: ReadonlyArray<TiboNoticeSignal>,
   representativeTweetId: string,
   completedAt: string,
+  options: TiboNoticeClusterOptions = {},
 ) {
   const completedTime = getTimestamp(completedAt);
+  const previousResetTime = getTimestamp(options.previousResetAt);
   const representative = noticeSignals.find((notice) => notice.tweet_id === representativeTweetId) ?? null;
   if (
     !representative ||
@@ -625,10 +713,20 @@ export function findRelatedTiboNoticeCluster(
 
   const candidates = noticeSignals.filter((notice) => {
     const time = getTimestamp(notice.tweet_created_at);
+    const isOneShot = getOfficialNoticeConsumption(notice.tweet_id) === "one_shot";
+    const wasConsumedByPreviousReset = isOneShot && previousResetTime !== null &&
+      time !== null && time <= previousResetTime &&
+      isOneShotNoticeConsumedBeforeNextRecovery(
+        notice,
+        options.previousResetAt,
+        options.previousResetWindow,
+      );
     return Boolean(
       time !== null &&
         time < completedTime &&
         completedTime - time <= NOTICE_LOOKBACK_MS &&
+        !(isOneShot && options.consumedOneShotTweetIds?.has(notice.tweet_id)) &&
+        !wasConsumedByPreviousReset &&
         notice.signal_type === "official_notice" &&
         notice.verification_status !== "rejected" &&
         !isBankedDistributionNotice(notice.text) &&
@@ -636,6 +734,7 @@ export function findRelatedTiboNoticeCluster(
           isTiboUnscheduledOfficialNoticeEligible(notice)),
     );
   });
+  if (!candidates.some((notice) => notice.tweet_id === representative.tweet_id)) return [];
   return getNoticeCluster(candidates, representative);
 }
 
@@ -2162,6 +2261,19 @@ function isValidSupportingRecoveryObservation(
   );
 }
 
+function isUsablePersistedOfficialNoticeSource(
+  signal: TiboNoticeSignal | FormalTiboResetSignal,
+) {
+  if (signal.verification_status === "rejected" || isBankedDistributionNotice(signal.text ?? "")) {
+    return false;
+  }
+  if (signal.signal_type === "official_notice") {
+    return isHistoryNoticeSignalEligible(signal as TiboNoticeSignal);
+  }
+  return signal.signal_type === "reset_executed" &&
+    isCurrentUsageResetAnnouncement(signal.text ?? "");
+}
+
 export function getNoticeBackedRecoveryObservationIds(
   estimates: ReadonlyArray<ResetExecutionEstimate> = [],
   recoveryObservations: ReadonlyArray<CodexRecoveryObservationInput> = [],
@@ -2197,10 +2309,17 @@ function buildNoticeBackedRecoveryEvent(
     (observation) => observation.id === recoveryObservationId,
   );
   if (!isEstimateBackedByMonitorObservation(estimate, recoveryObservation)) return null;
-  const officialNoticeTweetId = estimate.officialNoticeTweetId?.trim() || null;
-  const teaserTweetId = (!officialNoticeTweetId && estimate.tiboPrimaryTweetId?.trim()) || null;
+  const persistedOfficialNoticeTweetId = estimate.officialNoticeTweetId?.trim() || null;
+  const persistedOfficialNoticeSource = persistedOfficialNoticeTweetId
+    ? noticeSignals.find((signal) => signal.tweet_id === persistedOfficialNoticeTweetId) ?? null
+    : null;
+  const officialNoticeTweetId = persistedOfficialNoticeTweetId &&
+      (!persistedOfficialNoticeSource || isUsablePersistedOfficialNoticeSource(persistedOfficialNoticeSource))
+    ? persistedOfficialNoticeTweetId
+    : null;
+  const teaserTweetId = (!persistedOfficialNoticeTweetId && estimate.tiboPrimaryTweetId?.trim()) || null;
   const isTeaserCorroborated =
-    !officialNoticeTweetId &&
+    !persistedOfficialNoticeTweetId &&
     estimate.estimatorVersion === TEASER_CORROBORATED_RESET_EXECUTION_ESTIMATOR_VERSION &&
     Boolean(teaserTweetId);
   const isMonitorObserved =
@@ -2215,15 +2334,15 @@ function buildNoticeBackedRecoveryEvent(
   const evidenceTweetId = officialNoticeTweetId ?? teaserTweetId ?? null;
 
   const rawNotice = evidenceTweetId
-    ? noticeSignals.find(
-        (signal) => signal.tweet_id === evidenceTweetId && (
-          signal.signal_type === "teaser" ||
+    ? noticeSignals.find((signal) => {
+        if (signal.tweet_id !== evidenceTweetId || signal.verification_status === "rejected") return false;
+        if (isBankedDistributionNotice(signal.text ?? "")) return false;
+        return signal.signal_type === "teaser" ||
           signal.signal_type === "official_notice" ||
           (officialNoticeTweetId &&
             signal.signal_type === "reset_executed" &&
-            isCurrentUsageResetAnnouncement(signal.text ?? ""))
-        ),
-      )
+            isCurrentUsageResetAnnouncement(signal.text ?? ""));
+      })
     : null;
   const isCurrentUsageResetAnnouncementNotice = Boolean(
     officialNoticeTweetId &&
@@ -2250,8 +2369,16 @@ function buildNoticeBackedRecoveryEvent(
   const completedAt = new Date(getTimestamp(estimate.displayExecutionAt)!).toISOString();
   const openedTime = getTimestamp(openedAt);
   const completedTime = getTimestamp(completedAt);
-
-  const hasOfficialNotice = Boolean(officialNoticeTweetId && notice?.signal_type === "official_notice");
+  const officialNoticeTime =
+    getTimestamp(estimate.officialNoticeAt) ?? getTimestamp(notice?.tweet_created_at);
+  const hasOfficialNotice = Boolean(
+    officialNoticeTweetId &&
+      officialNoticeTime !== null &&
+      completedTime !== null &&
+      officialNoticeTime <= completedTime &&
+      openedTime !== null &&
+      openedTime <= completedTime,
+  );
   const hasTeaserNotice = Boolean(
     !hasOfficialNotice &&
     notice?.signal_type === "teaser" &&

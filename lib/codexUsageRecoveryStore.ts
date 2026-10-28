@@ -104,6 +104,7 @@ const LEGACY_STATE_COLUMNS = "source_key,observed_at,received_at,limit_id,plan_t
 const OBSERVATION_COLUMNS = "id,source_key,observed_at,previous_observed_at,previous_used_percent,current_used_percent,previous_resets_at,current_resets_at,cycle_hint,confidence,status,matched_tibo_tweet_id,confirmed_at,created_at,updated_at";
 const EXECUTION_ESTIMATE_COLUMNS = "id,reset_event_key,display_execution_at,execution_time_source,execution_time_confidence,execution_time_precision,execution_window_start_at,execution_window_end_at,recovery_observation_id,recovery_previous_observed_at,recovery_observed_at,tibo_announced_at,tibo_primary_tweet_id,tibo_source_tweet_ids,official_notice_tweet_id,official_notice_at,estimator_version,manual_override_at,manual_override_by,manual_override_reason,manual_execution_at,manual_execution_precision,created_at,updated_at";
 const RESET_HISTORY_READ_LIMIT = 2_000;
+const RECOVERY_BOUNDARY_READ_LIMIT = 100;
 
 function isMissingBankedColumnError(
   error: { code?: string | null; message?: string | null; details?: string | null } | null | undefined,
@@ -1456,6 +1457,31 @@ export async function readResetExecutionEstimates(client: SupabaseClient<any>) {
   };
 }
 
+export async function readRecoveryResetExecutionEstimates(
+  client: SupabaseClient<any>,
+  sinceAt: string,
+  throughAt: string,
+) {
+  const result = await client
+    .from("reset_execution_estimates")
+    .select(EXECUTION_ESTIMATE_COLUMNS)
+    .not("recovery_observation_id", "is", null)
+    .gte("display_execution_at", sinceAt)
+    .lte("display_execution_at", throughAt)
+    .order("display_execution_at", { ascending: false })
+    .limit(RECOVERY_BOUNDARY_READ_LIMIT);
+
+  const rows = (result.data ?? [])
+    .map((row) => toResetExecutionEstimate(row as ResetExecutionEstimateRow))
+    .filter((row): row is ResetExecutionEstimate => Boolean(
+      row?.recoveryObservationId &&
+      !BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS.includes(
+        row.estimatorVersion as (typeof BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS)[number],
+      ),
+    ));
+  return { rows, error: result.error };
+}
+
 export async function fetchPublicCodexRecoveryObservation(
   client: SupabaseClient<any>,
   now: Date,
@@ -1542,5 +1568,34 @@ export async function readCodexRecoveryObservations(client: SupabaseClient<any>)
       .map((row) => toCodexRecoveryObservation(row as CodexRecoveryObservationRow))
       .filter((row): row is CodexRecoveryObservation => Boolean(row)),
     error: result.error,
+  };
+}
+
+export async function readCodexRecoveryObservationsByIds(
+  client: SupabaseClient<any>,
+  observationIds: ReadonlyArray<string>,
+) {
+  const ids = Array.from(new Set(observationIds.map((id) => id.trim()).filter(Boolean)));
+  if (ids.length === 0) return { rows: [], error: null };
+
+  const results = await Promise.all(
+    Array.from({ length: Math.ceil(ids.length / 100) }, (_, index) => {
+      const batch = ids.slice(index * 100, (index + 1) * 100);
+      return client
+        .from("codex_recovery_observations")
+        .select(OBSERVATION_COLUMNS)
+        .eq("source_key", CODEX_USAGE_SOURCE_KEY)
+        .in("id", batch)
+        .in("status", ["observed", "confirmed"])
+        .eq("confidence", "strong")
+        .eq("cycle_hint", "unexpected");
+    }),
+  );
+  const error = results.find((result) => result.error)?.error ?? null;
+  return {
+    rows: results.flatMap((result) => result.data ?? [])
+      .map((row) => toCodexRecoveryObservation(row as CodexRecoveryObservationRow))
+      .filter((row): row is CodexRecoveryObservation => Boolean(row)),
+    error,
   };
 }
