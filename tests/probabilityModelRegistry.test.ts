@@ -13,12 +13,17 @@ import {
 import { normalizeLineEndings } from "../scripts/normalizeLineEndings";
 import { getPublishedProbabilityPeriodAt } from "../lib/radar/publishedProbability";
 import {
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS,
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   ELAPSED_ONLY_MODEL_VERSION,
   NEXT_GENERATION_A_COMPONENT_VERSIONS,
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   SURVIVAL_CONDITIONED_MODEL_VERSION,
@@ -97,11 +102,55 @@ test("the current public model and pointer view resolve to registered identities
   assert.equal(PROBABILITY_MODEL_POINTERS.currentPublic, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.ok(getProbabilityModelByVersion(PROBABILITY_MODEL_POINTERS.previousPublic));
   assert.ok(getProbabilityModelByVersion(PROBABILITY_MODEL_POINTERS.stableFallback));
-  assert.equal(getCurrentPublicProbabilityPeriod().id, "survival-conditioned-v1");
+  assert.equal(PROBABILITY_MODEL_POINTERS.previousPublic, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(getCurrentPublicProbabilityPeriod().id, "adaptive-regime-survival-v2");
   assert.equal(getCurrentPublicProbabilityPeriod().modelVersion, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.equal(
     PUBLIC_PROBABILITY_PERIOD_REGISTRY.at(-1)?.modelVersion,
     PUBLISHED_PROBABILITY_MODEL_VERSION,
+  );
+});
+
+test("adaptive regime survival v2 is registered as the current public model at its explicit boundary", () => {
+  const candidate = getProbabilityModelByVersion(ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  const previous = getProbabilityModelByVersion(SURVIVAL_CONDITIONED_MODEL_VERSION);
+
+  assert.ok(candidate);
+  assert.ok(previous);
+  assert.equal(candidate.family, "adaptive-regime-survival");
+  assert.equal(candidate.publicStatus, "current");
+  assert.deepEqual(candidate.roles, ["public-runtime", "experimental-log"]);
+  assert.equal(candidate.parentModelVersion, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(previous.publicStatus, "historical");
+  assert.deepEqual(previous.roles, ["fallback", "experimental-log"]);
+  assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT, "2026-10-29T12:20:00.000Z");
+  assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE, "2026-10-29");
+  assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(getCurrentPublicProbabilityPeriod().id, "adaptive-regime-survival-v2");
+  assert.equal(
+    getPublishedProbabilityPeriodAt("2026-10-29T12:19:59.999Z"),
+    "survival-conditioned-v1",
+  );
+  assert.equal(
+    getPublishedProbabilityPeriodAt("2026-10-29T12:20:00.000Z"),
+    "adaptive-regime-survival-v2",
+  );
+  assert.equal(
+    getPublishedProbabilityPeriodAt("2026-10-29T12:20:00.001Z"),
+    "adaptive-regime-survival-v2",
+  );
+  assert.equal(
+    getPublishedProbabilityPeriodAt("2026-10-29T12:20:00.001Z", {
+      adaptiveRegimeSurvivalAdoptionAt: null,
+    }),
+    "survival-conditioned-v1",
+  );
+  assert.equal(
+    getPublishedProbabilityPeriodAt("2026-10-30T00:00:00.000Z", {
+      adaptiveRegimeSurvivalAdoptionAt: "2026-10-30T00:00:00.000Z",
+    }),
+    "adaptive-regime-survival-v2",
   );
 });
 
@@ -210,6 +259,18 @@ test("public probability period registry is contiguous with one open-ended curre
     PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   );
   assert.equal(
+    PUBLIC_PROBABILITY_PERIOD_REGISTRY.find((period) => period.id === "survival-conditioned-v1")?.endAt,
+    PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
+  );
+  assert.equal(
+    PUBLIC_PROBABILITY_PERIOD_REGISTRY.find((period) => period.id === "adaptive-regime-survival-v2")?.startAt,
+    PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
+  );
+  assert.equal(
+    PUBLIC_PROBABILITY_PERIOD_REGISTRY.find((period) => period.id === "adaptive-regime-survival-v2")?.modelVersion,
+    ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
+  );
+  assert.equal(
     PUBLIC_PROBABILITY_PERIOD_REGISTRY.find((period) => period.id === "broad-banked-v2")?.endAt,
     PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   );
@@ -246,11 +307,11 @@ test("registry period classification matches the unchanged public selector at ev
   );
   assert.equal(
     getProbabilityPeriodAt("2030-01-01T00:00:00.000Z")?.id,
-    "survival-conditioned-v1",
+    "adaptive-regime-survival-v2",
   );
   assert.equal(
     getPublishedProbabilityPeriodAt("2030-01-01T00:00:00.000Z"),
-    "survival-conditioned-v1",
+    "adaptive-regime-survival-v2",
   );
 });
 

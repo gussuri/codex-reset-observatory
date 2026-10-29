@@ -18,6 +18,7 @@ import {
 } from "../lib/radar/probability";
 import type { WindowEventLike } from "../lib/radar/types";
 import {
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
@@ -29,7 +30,6 @@ import {
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE,
   PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
-  SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
 
@@ -112,7 +112,7 @@ test("pre-adoption history classification uses the calibrated fallback under the
   );
   const published = calculatePublishedProbability(data, { now }, { logFallback: false });
 
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.source, "calibrated");
   assert.equal(viewModel.probability24h, published.probability24h);

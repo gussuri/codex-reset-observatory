@@ -338,13 +338,6 @@ export const SURVIVAL_CONTEXT_MODEL_VERSIONS = [
 export const SURVIVAL_CONTEXT_MIN_MULTIPLIER = 0.5;
 export const SURVIVAL_CONTEXT_MAX_MULTIPLIER = 2;
 
-// The current public identity is the frozen survival-conditioned v1 at its
-// explicit manual adoption boundary. Broad-banked v2 remains the previous
-// public period and the fallback/comparison baseline.
-export const PUBLISHED_PROBABILITY_MODEL_VERSION =
-  SURVIVAL_CONDITIONED_MODEL_VERSION;
-export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION =
-  BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION;
 export const PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT: string | null = "2026-09-17T05:45:00.000Z";
 export const PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE: string | null = "2026-09-17";
 export const PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_MODEL_VERSION =
@@ -361,6 +354,36 @@ export const PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_DATE: string | null =
   "2026-09-19";
 export const PUBLISHED_SURVIVAL_CONDITIONED_PREVIOUS_MODEL_VERSION =
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION;
+
+// Adaptive regime survival v2 is adopted at an explicit future boundary. Its
+// earlier forecasts retain the Survival-Conditioned v1 identity.
+export const ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION =
+  "hazard-adaptive-regime-survival-v2" as const;
+export const ADAPTIVE_REGIME_SURVIVAL_FREEZE_AT = "2026-10-29T10:26:53.000Z" as const;
+export const ADAPTIVE_REGIME_SURVIVAL_FREEZE_POLICY =
+  "Architecture and hyperparameters are frozen; observations may accumulate, but historical forecasts and parameters are never rewritten under this identity." as const;
+export const ADAPTIVE_REGIME_SURVIVAL_TARGET_DEFINITION =
+  "Broad-scope random reset probability using Survival v1 age hazard multiplied by an exponentially decayed, prior-shrunk recent event rate under the no-next-event path." as const;
+export const ADAPTIVE_REGIME_SURVIVAL_SHORT_HALF_LIFE_HOURS = 72 as const;
+export const ADAPTIVE_REGIME_SURVIVAL_PRIOR_EXPOSURE_HOURS = 48 as const;
+export const ADAPTIVE_REGIME_SURVIVAL_MIN_RATE_MULTIPLIER = 0.25 as const;
+export const ADAPTIVE_REGIME_SURVIVAL_MAX_RATE_MULTIPLIER = 4 as const;
+export const ADAPTIVE_REGIME_SURVIVAL_INTEGRATION_STEP_MINUTES = 10 as const;
+export const ADAPTIVE_REGIME_SURVIVAL_FORECAST_POLICY_VERSION =
+  "adaptive-regime-survival-audit-v2" as const;
+export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT: string | null =
+  "2026-10-29T12:20:00.000Z";
+export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE: string | null =
+  "2026-10-29";
+export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION =
+  SURVIVAL_CONDITIONED_MODEL_VERSION;
+
+// The current public identity is Adaptive Regime Survival v2. Survival v1
+// remains its immediate historical period and runtime fallback.
+export const PUBLISHED_PROBABILITY_MODEL_VERSION =
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION =
+  SURVIVAL_CONDITIONED_MODEL_VERSION;
 
 // Prospective context-aware shadow layered on the fixed 18/54 challenger.
 // This is intentionally a separate identity and freeze boundary; it is never

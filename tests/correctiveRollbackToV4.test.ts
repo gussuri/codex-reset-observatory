@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
@@ -16,7 +17,6 @@ import {
   PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
   ELAPSED_ONLY_MODEL_VERSION,
-  SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { buildNextGenerationExperimentalProbabilityForecasts } from "../lib/nextGenerationLogging";
 import { getLocalRadarData } from "../lib/radar";
@@ -99,7 +99,7 @@ function comparableV3Row(generatedAt: string) {
 test("corrective rollback rollout records a future boundary without changing the v3 identity", () => {
   assert.equal(PUBLISHED_PROBABILITY_V4_ROLLBACK_AT, "2026-09-11T02:20:00.000Z");
   assert.equal(PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT, "2026-08-20T11:21:37.105Z");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
   assert.equal(PUBLISHED_SELECTIVE_V3_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
 });
 

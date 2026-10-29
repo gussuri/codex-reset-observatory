@@ -10,6 +10,7 @@ import {
 import type { ActiveOfficialNotice } from "../lib/radar/probability";
 import {
   applyTimedTeaserProbabilityReallocation,
+  applyTimedTeaserProbabilityReallocationFromAudit,
   excludeTimedTeaserFromOrdinaryPath,
   getTimedTeaserReallocationWeight,
   getTimedTeaserCandidates,
@@ -152,6 +153,23 @@ test("timed evidence weight is derived from the shared interpretation", () => {
     text: "Maybe tomorrow.",
   }), NOW);
   assert.equal(getTimedTeaserReallocationWeight(weak), null);
+});
+
+test("saved timed-teaser audit replay matches the shared reallocation policy exactly", () => {
+  const data = survivalData([contextualSignal()]);
+  const candidate = getTimedTeaserCandidates(data, null, NOW)[0] ?? null;
+  assert.ok(candidate);
+  const baseline = {
+    probability12h: 0.2,
+    probability24h: 0.35,
+    probability48h: 0.6,
+    probability72h: 0.8,
+  };
+  const original = applyTimedTeaserProbabilityReallocation(baseline, candidate, NOW);
+  const replayed = applyTimedTeaserProbabilityReallocationFromAudit(baseline, original.audit);
+
+  assert.deepEqual(replayed, original);
+  assert.equal(replayed.audit.applied, true);
 });
 
 test("a resolved direct teaser uses the existing strong-direct weight and lifts 24h versus the same unresolved baseline", () => {

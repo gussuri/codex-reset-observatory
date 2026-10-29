@@ -1,0 +1,711 @@
+{
+  "schemaVersion": "adaptive-regime-survival-v2-pit-replay-v1",
+  "modelVersion": "hazard-adaptive-regime-survival-v2",
+  "evaluationMode": "retrospective-point-in-time-replay",
+  "prospective": false,
+  "sourceEvidence": "evidence.json",
+  "compactAuditRows": 127,
+  "rawForecastRows": 139,
+  "policyMatchedRows": 136,
+  "sixHourOrigins": 127,
+  "compatibleOrigins": 127,
+  "incompatibleOrigins": [],
+  "asOf": "2026-10-29T10:13:42Z",
+  "campaignStart": "2026-10-05T17:20:29Z",
+  "canonicalRandomEventCount": 46,
+  "v1Replay": {
+    "tolerance": 1e-9,
+    "maxForecastError": 0,
+    "maxBaselineError": 0,
+    "maxLongTermHazardError": 0,
+    "maxRandomAgeErrorHours": 0,
+    "passed": true
+  },
+  "metrics": {
+    "12": {
+      "all": {
+        "v1": {
+          "n": 125,
+          "positive": 22,
+          "mean": 0.19239337279643678,
+          "rate": 0.176,
+          "brier": 0.13135570423100018,
+          "logLoss": 0.4172337478871825
+        },
+        "v2": {
+          "n": 125,
+          "positive": 22,
+          "mean": 0.19325683733568622,
+          "rate": 0.176,
+          "brier": 0.12508843841501222,
+          "logLoss": 0.39826100890759925
+        }
+      },
+      "campaign": {
+        "v1": {
+          "n": 74,
+          "positive": 19,
+          "mean": 0.1570389069311933,
+          "rate": 0.25675675675675674,
+          "brier": 0.1561178330276681,
+          "logLoss": 0.48579729962226387
+        },
+        "v2": {
+          "n": 74,
+          "positive": 19,
+          "mean": 0.17695749896150464,
+          "rate": 0.25675675675675674,
+          "brier": 0.15331745963745586,
+          "logLoss": 0.4777905438257717
+        }
+      },
+      "preCampaign": {
+        "v1": {
+          "n": 51,
+          "positive": 3,
+          "mean": 0.2436920095420843,
+          "rate": 0.058823529411764705,
+          "brier": 0.09542634087897237,
+          "logLoss": 0.31774937870294695
+        },
+        "v2": {
+          "n": 51,
+          "positive": 3,
+          "mean": 0.2169068577217538,
+          "rate": 0.058823529411764705,
+          "brier": 0.08412868213146661,
+          "logLoss": 0.2828652131439773
+        }
+      },
+      "recent7": {
+        "v1": {
+          "n": 22,
+          "positive": 9,
+          "mean": 0.21536291952715841,
+          "rate": 0.4090909090909091,
+          "brier": 0.17289637916528744,
+          "logLoss": 0.527425906112411
+        },
+        "v2": {
+          "n": 22,
+          "positive": 9,
+          "mean": 0.25628208829068344,
+          "rate": 0.4090909090909091,
+          "brier": 0.16152539251307207,
+          "logLoss": 0.4849237155983703
+        }
+      },
+      "noNotice": {
+        "v1": {
+          "n": 112,
+          "positive": 15,
+          "mean": 0.13827406163979902,
+          "rate": 0.13392857142857142,
+          "brier": 0.11428018331363092,
+          "logLoss": 0.3779239966413903
+        },
+        "v2": {
+          "n": 112,
+          "positive": 15,
+          "mean": 0.13923774974163988,
+          "rate": 0.13392857142857142,
+          "brier": 0.1072854670011443,
+          "logLoss": 0.3567490647445344
+        }
+      },
+      "ageUnder24h": {
+        "v1": {
+          "n": 50,
+          "positive": 4,
+          "mean": 0.09234854482251771,
+          "rate": 0.08,
+          "brier": 0.060029631422294914,
+          "logLoss": 0.2336031695360791
+        },
+        "v2": {
+          "n": 50,
+          "positive": 4,
+          "mean": 0.11624785681031541,
+          "rate": 0.08,
+          "brier": 0.06075508565605854,
+          "logLoss": 0.2375370919750625
+        }
+      },
+      "forcedOnlySensitivity": {
+        "v1": {
+          "n": 125,
+          "positive": 18,
+          "mean": 0.19239337279643678,
+          "rate": 0.144,
+          "brier": 0.12776174339741123,
+          "logLoss": 0.40061862655872
+        },
+        "v2": {
+          "n": 125,
+          "positive": 18,
+          "mean": 0.19325683733568622,
+          "rate": 0.144,
+          "brier": 0.12124831557043965,
+          "logLoss": 0.38182259228099896
+        }
+      },
+      "nonoverlap": {
+        "v1": {
+          "n": 57,
+          "positive": 10,
+          "mean": 0.18255019411116455,
+          "rate": 0.17543859649122806,
+          "brier": 0.13485888536036902,
+          "logLoss": 0.4169993013325741
+        },
+        "v2": {
+          "n": 57,
+          "positive": 10,
+          "mean": 0.18236635115569214,
+          "rate": 0.17543859649122806,
+          "brier": 0.1290128328078586,
+          "logLoss": 0.39717492231614554
+        }
+      },
+      "nonoverlapCount": 57
+    },
+    "24": {
+      "all": {
+        "v1": {
+          "n": 124,
+          "positive": 41,
+          "mean": 0.345314880419459,
+          "rate": 0.33064516129032256,
+          "brier": 0.2216785903379535,
+          "logLoss": 0.6533181352364894
+        },
+        "v2": {
+          "n": 124,
+          "positive": 41,
+          "mean": 0.3457958955958485,
+          "rate": 0.33064516129032256,
+          "brier": 0.20496683389941805,
+          "logLoss": 0.6117096595028163
+        }
+      },
+      "campaign": {
+        "v1": {
+          "n": 73,
+          "positive": 34,
+          "mean": 0.3029748293459519,
+          "rate": 0.4657534246575342,
+          "brier": 0.24656411918948004,
+          "logLoss": 0.6948844224427972
+        },
+        "v2": {
+          "n": 73,
+          "positive": 34,
+          "mean": 0.33606187698191786,
+          "rate": 0.4657534246575342,
+          "brier": 0.23276522098143407,
+          "logLoss": 0.6589054464546332
+        }
+      },
+      "preCampaign": {
+        "v1": {
+          "n": 51,
+          "positive": 7,
+          "mean": 0.4059192672501648,
+          "rate": 0.13725490196078433,
+          "brier": 0.1860581274720432,
+          "logLoss": 0.5938212927647166
+        },
+        "v2": {
+          "n": 51,
+          "positive": 7,
+          "mean": 0.35972890263147483,
+          "rate": 0.13725490196078433,
+          "brier": 0.16517698572319908,
+          "logLoss": 0.5441549056306073
+        }
+      },
+      "recent7": {
+        "v1": {
+          "n": 21,
+          "positive": 16,
+          "mean": 0.3759588554738934,
+          "rate": 0.7619047619047619,
+          "brier": 0.3359875705277827,
+          "logLoss": 0.9079739700192222
+        },
+        "v2": {
+          "n": 21,
+          "positive": 16,
+          "mean": 0.45418245156632153,
+          "rate": 0.7619047619047619,
+          "brier": 0.28265810389111806,
+          "logLoss": 0.7609820208824833
+        }
+      },
+      "noNotice": {
+        "v1": {
+          "n": 111,
+          "positive": 33,
+          "mean": 0.28234005320550626,
+          "rate": 0.2972972972972973,
+          "brier": 0.20997741071031514,
+          "logLoss": 0.616272980452102
+        },
+        "v2": {
+          "n": 111,
+          "positive": 33,
+          "mean": 0.2828774034926441,
+          "rate": 0.2972972972972973,
+          "brier": 0.191308421535735,
+          "logLoss": 0.5697914399928634
+        }
+      },
+      "ageUnder24h": {
+        "v1": {
+          "n": 49,
+          "positive": 11,
+          "mean": 0.20738650051835986,
+          "rate": 0.22448979591836735,
+          "brier": 0.169498381614737,
+          "logLoss": 0.5313088537305592
+        },
+        "v2": {
+          "n": 49,
+          "positive": 11,
+          "mean": 0.25081124597984006,
+          "rate": 0.22448979591836735,
+          "brier": 0.16108092862844237,
+          "logLoss": 0.504534791286934
+        }
+      },
+      "forcedOnlySensitivity": {
+        "v1": {
+          "n": 124,
+          "positive": 32,
+          "mean": 0.345314880419459,
+          "rate": 0.25806451612903225,
+          "brier": 0.22664608392051727,
+          "logLoss": 0.6672702118651206
+        },
+        "v2": {
+          "n": 124,
+          "positive": 32,
+          "mean": 0.3457958955958485,
+          "rate": 0.25806451612903225,
+          "brier": 0.20489176631194617,
+          "logLoss": 0.6129766774839923
+        }
+      },
+      "nonoverlap": {
+        "v1": {
+          "n": 34,
+          "positive": 10,
+          "mean": 0.34034266934088453,
+          "rate": 0.29411764705882354,
+          "brier": 0.15589957330241475,
+          "logLoss": 0.48372860640708537
+        },
+        "v2": {
+          "n": 34,
+          "positive": 10,
+          "mean": 0.3354066957032803,
+          "rate": 0.29411764705882354,
+          "brier": 0.14064903399472378,
+          "logLoss": 0.44940743915089626
+        }
+      },
+      "nonoverlapCount": 34
+    },
+    "48": {
+      "all": {
+        "v1": {
+          "n": 121,
+          "positive": 70,
+          "mean": 0.5721012303708863,
+          "rate": 0.5785123966942148,
+          "brier": 0.25381346543274996,
+          "logLoss": 0.7382469937417597
+        },
+        "v2": {
+          "n": 121,
+          "positive": 70,
+          "mean": 0.5548894970126352,
+          "rate": 0.5785123966942148,
+          "brier": 0.23039865074389823,
+          "logLoss": 0.6926178895428066
+        }
+      },
+      "campaign": {
+        "v1": {
+          "n": 70,
+          "positive": 57,
+          "mean": 0.5384515038578015,
+          "rate": 0.8142857142857143,
+          "brier": 0.22730286817840828,
+          "logLoss": 0.639953958909648
+        },
+        "v2": {
+          "n": 70,
+          "positive": 57,
+          "mean": 0.5622170296576511,
+          "rate": 0.8142857142857143,
+          "brier": 0.2087887125507902,
+          "logLoss": 0.601637708381737
+        }
+      },
+      "preCampaign": {
+        "v1": {
+          "n": 51,
+          "positive": 13,
+          "mean": 0.6182871295064926,
+          "rate": 0.2549019607843137,
+          "brier": 0.29020055970341496,
+          "logLoss": 0.8731590023348549
+        },
+        "v2": {
+          "n": 51,
+          "positive": 13,
+          "mean": 0.5448320992645738,
+          "rate": 0.2549019607843137,
+          "brier": 0.2600593502246349,
+          "logLoss": 0.8174926479991766
+        }
+      },
+      "recent7": {
+        "v1": {
+          "n": 18,
+          "positive": 18,
+          "mean": 0.5715560764505233,
+          "rate": 1,
+          "brier": 0.2273358391907302,
+          "logLoss": 0.6198849600579915
+        },
+        "v2": {
+          "n": 18,
+          "positive": 18,
+          "mean": 0.6673858256575422,
+          "rate": 1,
+          "brier": 0.1391262087384707,
+          "logLoss": 0.43647785399101063
+        }
+      },
+      "noNotice": {
+        "v1": {
+          "n": 109,
+          "positive": 63,
+          "mean": 0.5304229927416394,
+          "rate": 0.5779816513761468,
+          "brier": 0.2392776970559016,
+          "logLoss": 0.6681663169532572
+        },
+        "v2": {
+          "n": 109,
+          "positive": 63,
+          "mean": 0.5113163896558746,
+          "rate": 0.5779816513761468,
+          "brier": 0.2132851046031396,
+          "logLoss": 0.6175138251360706
+        }
+      },
+      "ageUnder24h": {
+        "v1": {
+          "n": 49,
+          "positive": 29,
+          "mean": 0.4654183548064793,
+          "rate": 0.5918367346938775,
+          "brier": 0.25494599332381607,
+          "logLoss": 0.701465936565345
+        },
+        "v2": {
+          "n": 49,
+          "positive": 29,
+          "mean": 0.5061364701177086,
+          "rate": 0.5918367346938775,
+          "brier": 0.21361406304381547,
+          "logLoss": 0.6160110455468999
+        }
+      },
+      "forcedOnlySensitivity": {
+        "v1": {
+          "n": 121,
+          "positive": 52,
+          "mean": 0.5721012303708863,
+          "rate": 0.4297520661157025,
+          "brier": 0.30721504989435156,
+          "logLoss": 0.8931672489984142
+        },
+        "v2": {
+          "n": 121,
+          "positive": 52,
+          "mean": 0.5548894970126352,
+          "rate": 0.4297520661157025,
+          "brier": 0.2567788384484551,
+          "logLoss": 0.7755613638467692
+        }
+      },
+      "nonoverlap": {
+        "v1": {
+          "n": 18,
+          "positive": 10,
+          "mean": 0.5885095988257458,
+          "rate": 0.5555555555555556,
+          "brier": 0.2712231853409248,
+          "logLoss": 0.7864074713548755
+        },
+        "v2": {
+          "n": 18,
+          "positive": 10,
+          "mean": 0.5669995822337544,
+          "rate": 0.5555555555555556,
+          "brier": 0.2390044114004573,
+          "logLoss": 0.7198922964491502
+        }
+      },
+      "nonoverlapCount": 18
+    },
+    "72": {
+      "all": {
+        "v1": {
+          "n": 118,
+          "positive": 82,
+          "mean": 0.7261832516589027,
+          "rate": 0.6949152542372882,
+          "brier": 0.21491159400959836,
+          "logLoss": 0.7107863209715916
+        },
+        "v2": {
+          "n": 118,
+          "positive": 82,
+          "mean": 0.6848841208610058,
+          "rate": 0.6949152542372882,
+          "brier": 0.20266333209154083,
+          "logLoss": 0.6906823531169409
+        }
+      },
+      "campaign": {
+        "v1": {
+          "n": 67,
+          "positive": 61,
+          "mean": 0.7063503506594416,
+          "rate": 0.9104477611940298,
+          "brier": 0.12498603325470076,
+          "logLoss": 0.4176815455882773
+        },
+        "v2": {
+          "n": 67,
+          "positive": 61,
+          "mean": 0.7009983168972728,
+          "rate": 0.9104477611940298,
+          "brier": 0.12758662487021297,
+          "logLoss": 0.42470918343430053
+        }
+      },
+      "preCampaign": {
+        "v1": {
+          "n": 51,
+          "positive": 21,
+          "mean": 0.7522382392464297,
+          "rate": 0.4117647058823529,
+          "brier": 0.33304909539348365,
+          "logLoss": 1.0958455356908474
+        },
+        "v2": {
+          "n": 51,
+          "positive": 21,
+          "mean": 0.6637144907741456,
+          "rate": 0.4117647058823529,
+          "brier": 0.30129351608818755,
+          "logLoss": 1.0400980858372721
+        }
+      },
+      "recent7": {
+        "v1": {
+          "n": 15,
+          "positive": 15,
+          "mean": 0.7221991018237474,
+          "rate": 1,
+          "brier": 0.10274937823219853,
+          "logLoss": 0.3473578370351263
+        },
+        "v2": {
+          "n": 15,
+          "positive": 15,
+          "mean": 0.7905290455957982,
+          "rate": 1,
+          "brier": 0.05806532941785577,
+          "logLoss": 0.24553898985850722
+        }
+      },
+      "noNotice": {
+        "v1": {
+          "n": 106,
+          "positive": 75,
+          "mean": 0.6964404942611188,
+          "rate": 0.7075471698113207,
+          "brier": 0.192811153959961,
+          "logLoss": 0.5626180158378326
+        },
+        "v2": {
+          "n": 106,
+          "positive": 75,
+          "mean": 0.6504659901653471,
+          "rate": 0.7075471698113207,
+          "brier": 0.17917629635306684,
+          "logLoss": 0.5402381270939765
+        }
+      },
+      "ageUnder24h": {
+        "v1": {
+          "n": 46,
+          "positive": 33,
+          "mean": 0.6458881845823359,
+          "rate": 0.717391304347826,
+          "brier": 0.20106082294214628,
+          "logLoss": 0.5878998122842866
+        },
+        "v2": {
+          "n": 46,
+          "positive": 33,
+          "mean": 0.6528016913086085,
+          "rate": 0.717391304347826,
+          "brier": 0.17735385063067352,
+          "logLoss": 0.5354508740722683
+        }
+      },
+      "forcedOnlySensitivity": {
+        "v1": {
+          "n": 118,
+          "positive": 56,
+          "mean": 0.7261832516589027,
+          "rate": 0.4745762711864407,
+          "brier": 0.33383328236417764,
+          "logLoss": 1.102021337772363
+        },
+        "v2": {
+          "n": 118,
+          "positive": 56,
+          "mean": 0.6848841208610058,
+          "rate": 0.4745762711864407,
+          "brier": 0.2771838437713219,
+          "logLoss": 0.9177837466560025
+        }
+      },
+      "nonoverlap": {
+        "v1": {
+          "n": 12,
+          "positive": 7,
+          "mean": 0.7390566134544906,
+          "rate": 0.5833333333333334,
+          "brier": 0.2694559209504817,
+          "logLoss": 0.9363874193859977
+        },
+        "v2": {
+          "n": 12,
+          "positive": 7,
+          "mean": 0.6989813115474343,
+          "rate": 0.5833333333333334,
+          "brier": 0.2591446896912512,
+          "logLoss": 0.9221575451992522
+        }
+      },
+      "nonoverlapCount": 12
+    }
+  },
+  "resetCycleBootstrap": {
+    "draws": 2000,
+    "groupDefinition": "first canonical random boundary after each origin; censored tail grouped separately",
+    "results": {
+      "24": {
+        "all": {
+          "groups": 12,
+          "draws": 2000,
+          "deltaBrier": -0.016711756438535477,
+          "ci95": [
+            -0.03647005743198559,
+            -0.0027092999628756578
+          ],
+          "pV2Better": 0.991
+        },
+        "campaign": {
+          "groups": 10,
+          "draws": 2000,
+          "deltaBrier": -0.013798898208045966,
+          "ci95": [
+            -0.043951248086906654,
+            0.0028792066239082393
+          ],
+          "pV2Better": 0.933
+        },
+        "noNotice": {
+          "groups": 12,
+          "draws": 2000,
+          "deltaBrier": -0.01866898917458017,
+          "ci95": [
+            -0.04400042319877774,
+            -0.0030571673343062046
+          ],
+          "pV2Better": 0.99
+        }
+      },
+      "48": {
+        "all": {
+          "groups": 12,
+          "draws": 2000,
+          "deltaBrier": -0.023414814688851628,
+          "ci95": [
+            -0.04391807476599175,
+            -0.010766811913143735
+          ],
+          "pV2Better": 0.9995
+        },
+        "campaign": {
+          "groups": 10,
+          "draws": 2000,
+          "deltaBrier": -0.018514155627618042,
+          "ci95": [
+            -0.05290876602160357,
+            0.0044567232699260235
+          ],
+          "pV2Better": 0.9425
+        },
+        "noNotice": {
+          "groups": 12,
+          "draws": 2000,
+          "deltaBrier": -0.0259925924527619,
+          "ci95": [
+            -0.04767183497160531,
+            -0.011546401021372716
+          ],
+          "pV2Better": 1
+        }
+      }
+    }
+  },
+  "publicationGate": {
+    "checks": {
+      "fullBrierImproves24h": true,
+      "fullBrierImproves48h": true,
+      "campaignBrierImproves24h": true,
+      "campaignBrierImproves48h": true,
+      "noNoticeBrierImproves24h": true,
+      "noNoticeBrierImproves48h": true,
+      "preCampaignDegradation24hWithin005": true,
+      "preCampaignDegradation48hWithin005": true,
+      "campaignLogLossImproves24h": true,
+      "campaignLogLossImproves48h": true,
+      "fullLogLossNoWorse24h": true,
+      "fullLogLossNoWorse48h": true
+    },
+    "passed": true
+  },
+  "sensitivities": {
+    "forcedOnly": "Scored separately by excluding banked-reset-* outcomes; broad target remains primary.",
+    "manualSept26": "Not recomputed: the frozen evidence contains only aggregate v1 sensitivity metrics, not the manual event timestamp needed to score new v2 origins. It remains excluded from the primary gate.",
+    "recent7": "Descriptive only; it is not an independent holdout."
+  },
+  "limitations": [
+    "Rows are retrospective PIT replays from saved v1 boundary and policy audits, not saved v2 forecasts or prospective evidence.",
+    "The canonical reset audit may omit unobserved real-world events; overlapping six-hour origins are dependent.",
+    "Reset-cycle bootstrap uncertainty does not remove model-selection uncertainty."
+  ]
+}
