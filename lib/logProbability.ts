@@ -1,4 +1,5 @@
 import {
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   PUBLISHED_PROBABILITY_ADOPTION_DATE,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
@@ -10,6 +11,9 @@ import {
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE,
   PUBLISHED_BROAD_BANKED_V2_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_DATE,
   PUBLISHED_SURVIVAL_CONDITIONED_PREVIOUS_MODEL_VERSION,
@@ -32,6 +36,7 @@ import type { PublishedProbabilityCalculation } from "@/lib/radar/publishedProba
 import type { PublishedV3FeatureSnapshot } from "@/lib/radar/publishedV3FeatureSnapshot";
 import type { ContextAwareForecastAudit } from "@/lib/radar/contextAwareContinuousProbability";
 import type { SurvivalConditionedAudit } from "@/lib/radar/survivalConditionedProbability";
+import type { AdaptiveRegimeSurvivalAudit } from "@/lib/radar/adaptiveRegimeSurvivalProbability";
 import {
   calculateAllRecencyWeightedShadowProbabilities,
 } from "@/lib/radar/recencyWeightedProbability";
@@ -108,6 +113,7 @@ export type ExperimentalProbabilityForecast = {
   featureSnapshot?: PublishedV3FeatureSnapshot;
   contextAware?: ContextAwareForecastAudit;
   survivalConditioned?: SurvivalConditionedAudit;
+  adaptiveRegimeSurvival?: AdaptiveRegimeSurvivalAudit;
   survivalContextArm?: string;
   regimeMultiplierPolicyVersion?: string;
   randomEligibilityPolicyVersion?: string;
@@ -145,7 +151,7 @@ export type ExperimentalProbabilityForecast = {
     posteriorLambdaPerHour: number;
     impliedDailyProbability: number;
   }>;
-  estimator?: "piecewise" | "gaussian-kernel" | "survival-conditioned";
+  estimator?: "piecewise" | "gaussian-kernel" | "survival-conditioned" | "adaptive-regime-survival";
   kernelBandwidthHours?: number;
   kernelGridHours?: number;
   gridStepHours?: number;
@@ -172,7 +178,8 @@ export type ExperimentalProbabilityForecast = {
     | "candidate-c-v2"
     | "candidate-context-aware"
     | "late-age-regime-diagnostic"
-    | "survival-conditioned-shadow";
+    | "survival-conditioned-shadow"
+    | "adaptive-regime-survival-shadow";
   trainingReadStatus?: "ok" | "error";
   fallbackReason?: string | null;
   officialNoticeTimingPolicyVersion?: string;
@@ -488,9 +495,12 @@ export function buildProbabilityDebugInfo(
   const rawShadow = publishedProbability?.rawShadow ?? publishedProbability?.shadow ?? null;
   const publishedB = publishedProbability?.nextGenerationB ?? null;
   const broadBankedV2Published = publishedProbability?.adoptedModel === BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION;
+  const adaptiveRegimeSurvivalPublished = publishedProbability?.adoptedModel === ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION;
   const rawContinuousPublished = publishedProbability?.adoptedModel === RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION;
   const survivalConditionedPublished = publishedProbability?.adoptedModel === SURVIVAL_CONDITIONED_MODEL_VERSION;
-  const publishedConfidence = broadBankedV2Published
+  const publishedConfidence = adaptiveRegimeSurvivalPublished
+    ? publishedProbability?.adaptiveRegimeSurvival?.confidence ?? null
+    : broadBankedV2Published
     ? publishedProbability?.broadBankedV2?.confidence ?? null
     : survivalConditionedPublished
       ? publishedProbability?.survivalConditioned?.confidence ?? null
@@ -498,28 +508,36 @@ export function buildProbabilityDebugInfo(
       ?? publishedProbability?.rawContinuous?.confidence
       ?? rawShadow?.confidence
       ?? null;
-  const publishedAdoptionDate = broadBankedV2Published
+  const publishedAdoptionDate = adaptiveRegimeSurvivalPublished
+    ? PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE
+    : broadBankedV2Published
     ? PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE
     : rawContinuousPublished
     ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE
     : survivalConditionedPublished
     ? PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_DATE
     : PUBLISHED_PROBABILITY_ADOPTION_DATE;
-  const publishedAdoptionAt = broadBankedV2Published
+  const publishedAdoptionAt = adaptiveRegimeSurvivalPublished
+    ? PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT
+    : broadBankedV2Published
     ? PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT
     : rawContinuousPublished
     ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT
     : survivalConditionedPublished
     ? PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT
     : PUBLISHED_PROBABILITY_ADOPTION_AT;
-  const publishedPreviousModelVersion = broadBankedV2Published
+  const publishedPreviousModelVersion = adaptiveRegimeSurvivalPublished
+    ? PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION
+    : broadBankedV2Published
     ? PUBLISHED_BROAD_BANKED_V2_PREVIOUS_MODEL_VERSION
     : rawContinuousPublished
     ? PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_MODEL_VERSION
     : survivalConditionedPublished
     ? PUBLISHED_SURVIVAL_CONDITIONED_PREVIOUS_MODEL_VERSION
     : PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION;
-  const publishedPreviousAdoptionAt = broadBankedV2Published
+  const publishedPreviousAdoptionAt = adaptiveRegimeSurvivalPublished
+    ? PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT
+    : broadBankedV2Published
     ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT
     : rawContinuousPublished
     ? PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_ADOPTION_AT
@@ -561,7 +579,9 @@ export function buildProbabilityDebugInfo(
             previousAdoptionAt: publishedPreviousAdoptionAt,
             adoptionGateStatus: PUBLISHED_PROBABILITY_ADOPTION_GATE_STATUS,
             adoptionBoundaryStatus: PUBLISHED_PROBABILITY_ADOPTION_BOUNDARY_STATUS,
-            rawModelVersion: survivalConditionedPublished
+            rawModelVersion: adaptiveRegimeSurvivalPublished
+              ? publishedProbability?.adaptiveRegimeSurvival?.audit.baseModelVersion ?? null
+              : survivalConditionedPublished
               ? publishedProbability?.survivalConditioned?.modelVersion ?? null
               : broadBankedV2Published
                 ? publishedProbability?.broadBankedV2?.modelVersion ?? null
@@ -569,33 +589,40 @@ export function buildProbabilityDebugInfo(
                   ?? publishedProbability?.rawContinuous?.modelVersion
                   ?? rawShadow?.modelVersion
                   ?? null,
-            calibratedFallbackUsed: survivalConditionedPublished
+            calibratedFallbackUsed: adaptiveRegimeSurvivalPublished
+              ? publishedProbability?.adaptiveRegimeSurvival?.audit.fallbackUsed ?? null
+              : survivalConditionedPublished
               ? publishedProbability?.survivalConditioned?.survival.fallbackUsed ?? null
               : publishedB?.fallbackUsed ?? publishedProbability.calibrated?.fallbackUsed ?? null,
-            calibrationAlpha24h: survivalConditionedPublished ? null : publishedB?.alpha24h ?? publishedProbability.calibrated?.alpha24h ?? null,
-            calibrationAlpha48h: survivalConditionedPublished ? null : publishedB?.alpha48h ?? publishedProbability.calibrated?.alpha48h ?? null,
-            calibrationSampleCount24h: survivalConditionedPublished ? null : publishedB?.calibrationSampleCount24h ?? publishedProbability.calibrated?.calibrationSampleCount24h ?? null,
-            calibrationSampleCount48h: survivalConditionedPublished ? null : publishedB?.calibrationSampleCount48h ?? publishedProbability.calibrated?.calibrationSampleCount48h ?? null,
-            positiveCalibrationCount24h: survivalConditionedPublished ? null : publishedB?.positiveCalibrationCount24h ?? publishedProbability.calibrated?.positiveCalibrationCount24h ?? null,
-            positiveCalibrationCount48h: survivalConditionedPublished ? null : publishedB?.positiveCalibrationCount48h ?? publishedProbability.calibrated?.positiveCalibrationCount48h ?? null,
-            trainingReadStatus: survivalConditionedPublished
+            calibrationAlpha24h: survivalConditionedPublished || adaptiveRegimeSurvivalPublished ? null : publishedB?.alpha24h ?? publishedProbability.calibrated?.alpha24h ?? null,
+            calibrationAlpha48h: survivalConditionedPublished || adaptiveRegimeSurvivalPublished ? null : publishedB?.alpha48h ?? publishedProbability.calibrated?.alpha48h ?? null,
+            calibrationSampleCount24h: survivalConditionedPublished || adaptiveRegimeSurvivalPublished ? null : publishedB?.calibrationSampleCount24h ?? publishedProbability.calibrated?.calibrationSampleCount24h ?? null,
+            calibrationSampleCount48h: survivalConditionedPublished || adaptiveRegimeSurvivalPublished ? null : publishedB?.calibrationSampleCount48h ?? publishedProbability.calibrated?.calibrationSampleCount48h ?? null,
+            positiveCalibrationCount24h: survivalConditionedPublished || adaptiveRegimeSurvivalPublished ? null : publishedB?.positiveCalibrationCount24h ?? publishedProbability.calibrated?.positiveCalibrationCount24h ?? null,
+            positiveCalibrationCount48h: survivalConditionedPublished || adaptiveRegimeSurvivalPublished ? null : publishedB?.positiveCalibrationCount48h ?? publishedProbability.calibrated?.positiveCalibrationCount48h ?? null,
+            trainingReadStatus: survivalConditionedPublished || adaptiveRegimeSurvivalPublished
               ? null
               : publishedB?.trainingReadStatus ?? null,
-            modelFallbackReason: survivalConditionedPublished
+            modelFallbackReason: adaptiveRegimeSurvivalPublished
+              ? publishedProbability?.adaptiveRegimeSurvival?.audit.fallbackReason ?? null
+              : survivalConditionedPublished
               ? publishedProbability?.survivalConditioned?.survival.fallbackReason ?? null
               : publishedB?.fallbackReason ?? null,
             calibrationTrainingModelVersion:
-              survivalConditionedPublished
+              survivalConditionedPublished || adaptiveRegimeSurvivalPublished
                 ? null
                 : publishedB?.calibrationTrainingModelVersion
                   ?? PUBLISHED_PROBABILITY_CALIBRATION_TRAINING_MODEL_VERSION,
             regimeMultiplierPolicyVersion:
-              survivalConditionedPublished
+              adaptiveRegimeSurvivalPublished
+                ? publishedProbability?.adaptiveRegimeSurvival?.audit.randomEligibilityPolicyVersion ?? null
+                : survivalConditionedPublished
                 ? null
                 : broadBankedV2Published
                 ? publishedProbability?.broadBankedV2?.randomContinuous.regimeMultiplierPolicyVersion ?? null
                 : publishedB?.regimeMultiplierPolicyVersion ?? null,
             majorModelReleaseAdjustment: publishedProbability.majorModelReleaseAdjustment,
+            adaptiveRegimeSurvivalAudit: publishedProbability.adaptiveRegimeSurvival?.audit ?? null,
           },
         }
       : {}),

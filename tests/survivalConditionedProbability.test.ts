@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
@@ -43,8 +44,8 @@ function boundary(id: string, ageHours: number): RecoveryResetBoundary {
   };
 }
 
-test("Survival-Conditioned v1 is the configured current public model at its explicit adoption boundary", () => {
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+test("Survival-Conditioned v1 remains the historical baseline after Adaptive adoption", () => {
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
   assert.equal(SURVIVAL_CONDITIONED_MODEL_VERSION, "hazard-survival-conditioned-adaptive-h45-tail-h24-v1");
   assert.equal(PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT, "2026-09-19T06:00:00.000Z");
 });

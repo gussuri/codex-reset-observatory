@@ -15,6 +15,7 @@ import {
 } from "../lib/radar/publishedProbability";
 import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 import {
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION_V2,
@@ -27,9 +28,13 @@ import {
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
-  PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
   PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
   PUBLISHED_RECENCY_HALF_LIFE_DAYS,
   SHADOW_PROBABILITY_MODEL_VERSION,
@@ -47,6 +52,8 @@ import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedPro
 import { calculateRecencyWeightedShadowProbability } from "../lib/radar/recencyWeightedProbability";
 import { buildCanonicalResetHistoryContext } from "../lib/radar/tiboHistory";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
+import { calculateAdaptiveRegimeSurvivalProbability } from "../lib/radar/adaptiveRegimeSurvivalProbability";
+import { calculateSurvivalConditionedProbability } from "../lib/radar/survivalConditionedProbability";
 import type { WindowEventLike } from "../lib/radar/types";
 import { frozenSupportShapeSurvivalStaticHistory } from "./fixtures/survivalConditionedHistory";
 
@@ -95,11 +102,14 @@ function calculatePublishedSurvivalAt(now: Date, staticHistory: WindowEventLike[
   return published.survivalConditioned;
 }
 
-test("the current public model adopts Survival-Conditioned v1 with broad-banked v2 as its previous baseline", () => {
+test("the current public model is Adaptive Regime Survival v2 with Survival-Conditioned v1 as its previous baseline", () => {
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION, "hazard-odds-v4-logit-calibrated-prequential-v3");
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION_V2, "hazard-odds-v4-logit-calibrated-prequential-v2");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT, "2026-10-29T12:20:00.000Z");
+  assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE, "2026-10-29");
   assert.equal(PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
 });
 
@@ -141,7 +151,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.calibrated);
   assert.ok(published.rawShadow);
   assert.equal(ELAPSED_ONLY_MODEL_VERSION, "hazard-elapsed-v1");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.deepEqual(PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS, {
@@ -895,6 +905,276 @@ test("the future survival selector adopts a valid result without changing the fa
   assert.equal(selected.source, "survival-conditioned");
   assert.equal(selected.fallbackReason, null);
   assert.equal(selected.probability24h, 0.14);
+});
+
+test("adaptive regime survival remains shadowed until its explicit adoption boundary", () => {
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory();
+  const adoptionAt = "2026-09-20T00:00:00.000Z";
+  const beforeAt = new Date(Date.parse(adoptionAt) - 60_000);
+  const boundaryAt = new Date(adoptionAt);
+  const afterAt = new Date(Date.parse(adoptionAt) + 10 * 60_000);
+  const before = calculatePublishedProbability(null, {
+    now: beforeAt,
+    activeOfficialNotice: null,
+    staticHistory,
+    publishedAdaptiveRegimeSurvivalAdoptionAt: adoptionAt,
+  }, { logFallback: false });
+  const at = calculatePublishedProbability(null, {
+    now: boundaryAt,
+    activeOfficialNotice: null,
+    staticHistory,
+    publishedAdaptiveRegimeSurvivalAdoptionAt: adoptionAt,
+  }, { logFallback: false });
+  const after = calculatePublishedProbability(null, {
+    now: afterAt,
+    activeOfficialNotice: null,
+    staticHistory,
+    publishedAdaptiveRegimeSurvivalAdoptionAt: adoptionAt,
+  }, { logFallback: false });
+
+  assert.equal(before.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(before.adaptiveRegimeSurvival, null);
+  assert.equal(at.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(after.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(at.source, "adaptive-regime-survival");
+  assert.equal(at.fallbackReason, null);
+  assert.equal(at.adaptiveRegimeSurvival?.audit.fallbackUsed, false);
+});
+
+test("configured public boundary adopts v2 exactly at 12:20Z and null override rolls back to v1", () => {
+  const adoptionAt = PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT;
+  assert.ok(adoptionAt);
+  assert.equal(adoptionAt, "2026-10-29T12:20:00.000Z");
+  const adoptionTime = Date.parse(adoptionAt);
+  const beforeAt = new Date(adoptionTime - 1);
+  const boundaryAt = new Date(adoptionTime);
+  const afterAt = new Date(adoptionTime + 1);
+  const recentResetAt = new Date(adoptionTime - 24 * 60 * 60_000);
+  const staticHistory = [
+    ...frozenSupportShapeSurvivalStaticHistory(),
+    randomHistoryEvent("adaptive-v2-public-boundary-anchor", recentResetAt.toISOString()),
+  ];
+  const calculateAt = (now: Date, publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null) =>
+    calculatePublishedProbability(null, {
+      now,
+      activeOfficialNotice: null,
+      staticHistory,
+      ...(publishedAdaptiveRegimeSurvivalAdoptionAt === undefined
+        ? {}
+        : { publishedAdaptiveRegimeSurvivalAdoptionAt }),
+    }, { logFallback: false });
+
+  const before = calculateAt(beforeAt);
+  const at = calculateAt(boundaryAt);
+  const after = calculateAt(afterAt);
+  const rolledBack = calculateAt(afterAt, null);
+
+  assert.equal(before.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(at.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(after.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(rolledBack.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(rolledBack.adaptiveRegimeSurvival, null);
+  assert.equal(getPublishedProbabilityPeriodAt(beforeAt), "survival-conditioned-v1");
+  assert.equal(getPublishedProbabilityPeriodAt(boundaryAt), "adaptive-regime-survival-v2");
+  assert.equal(getPublishedProbabilityPeriodAt(afterAt), "adaptive-regime-survival-v2");
+  assert.equal(
+    getPublishedProbabilityPeriodAt(afterAt, { adaptiveRegimeSurvivalAdoptionAt: null }),
+    "survival-conditioned-v1",
+  );
+});
+
+test("the internal adaptive v2 override reaches public DTO calculation without exposing diagnostics", () => {
+  const now = new Date("2026-09-20T00:00:00.000Z");
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory();
+  const data = getLocalRadarData({ calculationNow: now });
+  const canonicalHistoryContext = buildCanonicalResetHistoryContext(null, {
+    defaultStaticHistory: staticHistory,
+    displayStaticHistory: staticHistory,
+    dynamicStaticHistory: [],
+  });
+  let adaptiveCalculations = 0;
+
+  const snapshot = toPublicRadarSnapshot(data, "en", {
+    calculationNow: now,
+    limitHistory: false,
+    calculationContext: { source: null, canonicalHistoryContext },
+    publishedAdaptiveRegimeSurvivalAdoptionAt: now.toISOString(),
+    publishedProbabilityRuntime: {
+      logFallback: false,
+      survivalConditionedCalculator: (input, options) =>
+        calculateSurvivalConditionedProbability(input, options),
+      adaptiveRegimeSurvivalCalculator: (survivalBase) => {
+        adaptiveCalculations += 1;
+        return calculateAdaptiveRegimeSurvivalProbability(survivalBase);
+      },
+    },
+  });
+  const serialized = JSON.stringify(snapshot);
+
+  assert.ok(Number.isFinite(snapshot.viewModel.probability24h));
+  assert.equal(adaptiveCalculations, 1);
+  assert.doesNotMatch(
+    serialized,
+    /adaptive-regime-survival|adaptiveRegimeSurvival|publishedAdaptiveRegimeSurvivalAdoptionAt/,
+  );
+});
+
+test("invalid adaptive v2 falls back to valid Survival-Conditioned v1 with the v2 reason", () => {
+  const now = new Date("2026-09-20T00:00:00.000Z");
+  const primary = getLocalProbabilityCalculation(getLocalRadarData({ calculationNow: now }), { now });
+  const validSurvival = calculateSurvivalConditionedProbability(null, {
+    now,
+    staticHistory: frozenSupportShapeSurvivalStaticHistory(),
+  });
+  const invalidAdaptive = {
+    ...calculateAdaptiveRegimeSurvivalProbability(validSurvival),
+    predictions: {
+      probability12h: Number.NaN,
+      probability24h: Number.NaN,
+      probability48h: Number.NaN,
+      probability72h: Number.NaN,
+    },
+  } as never;
+
+  const selected = selectPublishedProbability(
+    primary,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    {
+      allowAdaptiveRegimeSurvival: true,
+      adaptiveRegimeSurvival: invalidAdaptive,
+      adaptiveRegimeSurvivalFailureReason: "adaptive_regime_survival_invalid_prediction",
+      allowSurvivalConditioned: true,
+      survivalConditioned: validSurvival,
+    },
+  );
+
+  assert.equal(selected.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(selected.source, "survival-conditioned");
+  assert.equal(selected.fallbackReason, "adaptive_regime_survival_invalid_prediction");
+});
+
+test("invalid adaptive v2 and v1 preserve the existing stable fallback identity and reason", () => {
+  const now = new Date("2026-09-20T00:00:00.000Z");
+  const primary = getLocalProbabilityCalculation(getLocalRadarData({ calculationNow: now }), { now });
+  const validSurvival = calculateSurvivalConditionedProbability(null, {
+    now,
+    staticHistory: frozenSupportShapeSurvivalStaticHistory(),
+  });
+  const invalidSurvival = {
+    ...validSurvival,
+    predictions: {
+      probability12h: Number.NaN,
+      probability24h: Number.NaN,
+      probability48h: Number.NaN,
+      probability72h: Number.NaN,
+    },
+  } as never;
+  const invalidAdaptive = {
+    ...calculateAdaptiveRegimeSurvivalProbability(validSurvival),
+    predictions: {
+      probability12h: Number.NaN,
+      probability24h: Number.NaN,
+      probability48h: Number.NaN,
+      probability72h: Number.NaN,
+    },
+  } as never;
+  const stableFallback = {
+    modelVersion: PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
+    predictions: {
+      probability12h: 0.03,
+      probability24h: 0.07,
+      probability48h: 0.14,
+      probability72h: 0.2,
+    },
+  } as never;
+
+  const selected = selectPublishedProbability(
+    primary,
+    null,
+    stableFallback,
+    null,
+    null,
+    null,
+    null,
+    {
+      allowAdaptiveRegimeSurvival: true,
+      adaptiveRegimeSurvival: invalidAdaptive,
+      adaptiveRegimeSurvivalFailureReason: "adaptive_regime_survival_invalid_prediction",
+      allowSurvivalConditioned: true,
+      survivalConditioned: invalidSurvival,
+      survivalConditionedFailureReason: "survival_conditioned_invalid_prediction",
+    },
+  );
+
+  assert.equal(selected.adoptedModel, PUBLISHED_STABLE_FALLBACK_MODEL_VERSION);
+  assert.equal(selected.source, "stable-shadow-fallback");
+  assert.equal(selected.fallbackReason, "adaptive_regime_survival_invalid_prediction");
+});
+
+test("adaptive v2 debug metadata uses its own identity and omits calibration fields", () => {
+  const now = new Date("2026-09-20T00:00:00.000Z");
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory();
+  const published = calculatePublishedProbability(null, {
+    now,
+    activeOfficialNotice: null,
+    staticHistory,
+    publishedAdaptiveRegimeSurvivalAdoptionAt: now.toISOString(),
+  }, { logFallback: false });
+  const debugInfo = buildProbabilityDebugInfo(
+    {},
+    published.primary,
+    now.toISOString(),
+    now,
+    null,
+    published,
+  );
+  const publishedDebug = debugInfo.publishedProbabilityModel as Record<string, unknown>;
+
+  assert.equal(published.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(publishedDebug.version, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(
+    (publishedDebug.adaptiveRegimeSurvivalAudit as { modelVersion: string }).modelVersion,
+    ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
+  );
+  for (const field of [
+    "calibrationAlpha24h",
+    "calibrationAlpha48h",
+    "calibrationSampleCount24h",
+    "calibrationSampleCount48h",
+    "positiveCalibrationCount24h",
+    "positiveCalibrationCount48h",
+    "trainingReadStatus",
+    "calibrationTrainingModelVersion",
+  ]) {
+    assert.equal(publishedDebug[field], null, field);
+  }
+});
+
+test("adaptive v2 public origin never rounds earlier than the latest recovery boundary", () => {
+  const now = new Date("2026-09-20T00:03:00.000Z");
+  const latestRecoveryBoundaryAt = new Date(now.getTime() - 2 * 60_000);
+  const staticHistory = [
+    ...frozenSupportShapeSurvivalStaticHistory(),
+    randomHistoryEvent("recent-recovery-boundary", latestRecoveryBoundaryAt.toISOString()),
+  ];
+  assert.ok(roundPublicProbabilityTime(now).getTime() < latestRecoveryBoundaryAt.getTime());
+
+  const published = calculatePublishedProbability(null, {
+    now,
+    activeOfficialNotice: null,
+    staticHistory,
+    publishedAdaptiveRegimeSurvivalAdoptionAt: "2026-09-19T00:00:00.000Z",
+  }, { logFallback: false });
+
+  assert.ok(published.adaptiveRegimeSurvival);
+  assert.ok(
+    Date.parse(published.adaptiveRegimeSurvival.audit.originAt) >= latestRecoveryBoundaryAt.getTime(),
+  );
 });
 
 test("an invalid survival result falls back to valid broad-banked v2 with a survival reason", () => {

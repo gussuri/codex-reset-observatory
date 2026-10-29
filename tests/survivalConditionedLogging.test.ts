@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ADAPTIVE_REGIME_SURVIVAL_FORECAST_POLICY_VERSION,
+  ADAPTIVE_REGIME_SURVIVAL_FREEZE_AT,
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
   NEXT_GENERATION_FREEZE_AT,
   SURVIVAL_CONDITIONED_FREEZE_AT,
   SURVIVAL_CONDITIONED_FORECAST_POLICY_VERSION,
@@ -13,6 +16,10 @@ import {
   buildNextGenerationExperimentalProbabilityForecasts,
 } from "../lib/nextGenerationLogging";
 import {
+  calculateAdaptiveRegimeSurvivalProbability,
+} from "../lib/radar/adaptiveRegimeSurvivalProbability";
+import {
+  calculateSurvivalConditionedContextArms,
   calculateSurvivalConditionedProbability,
   type SurvivalConditionedContextArm,
 } from "../lib/radar/survivalConditionedProbability";
@@ -105,6 +112,69 @@ test("post-freeze logging stores survival base and every context arm at one orig
     ).lambdaPerHour,
   );
   assert.notEqual(baseForecast.instantaneousHazardPerHour, base.hazard.longTermHazardPerHour);
+  assert.equal(forecasts[ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION], undefined);
+});
+
+test("adaptive regime survival logging obeys its own freeze boundary", () => {
+  const freezeTime = new Date(ADAPTIVE_REGIME_SURVIVAL_FREEZE_AT).getTime();
+  const staticHistory = supportedStaticHistory();
+  let adaptiveCalculations = 0;
+  const runAt = (timestamp: number) => {
+    const now = new Date(timestamp);
+    return buildNextGenerationExperimentalProbabilityForecasts({
+      data: null,
+      calculationOptions: { now, staticHistory },
+      existingForecasts: {},
+      trainingState: trainingState(),
+      survivalConditionedCalculator: (data, options) =>
+        calculateSurvivalConditionedProbability(data, options),
+      survivalConditionedContextArmsCalculator: () => ({}),
+      adaptiveRegimeSurvivalCalculator: (base) => {
+        adaptiveCalculations += 1;
+        return calculateAdaptiveRegimeSurvivalProbability(base);
+      },
+    });
+  };
+
+  const before = runAt(freezeTime - 1);
+  const at = runAt(freezeTime);
+  const after = runAt(freezeTime + 1);
+
+  assert.equal(before[SURVIVAL_CONDITIONED_MODEL_VERSION]?.modelVersion, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(before[ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION], undefined);
+  for (const forecasts of [at, after]) {
+    const forecast = forecasts[ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION];
+    assert.ok(forecast);
+    assert.equal(forecast.freezeAt, ADAPTIVE_REGIME_SURVIVAL_FREEZE_AT);
+    assert.equal(forecast.forecastPolicyVersion, ADAPTIVE_REGIME_SURVIVAL_FORECAST_POLICY_VERSION);
+    assert.equal(forecast.adaptiveRegimeSurvival?.fallbackUsed, false);
+  }
+  assert.equal(adaptiveCalculations, 2);
+});
+
+test("an adaptive v2 logging failure preserves the v1 base and context arms", () => {
+  const now = new Date(ADAPTIVE_REGIME_SURVIVAL_FREEZE_AT);
+  const staticHistory = supportedStaticHistory();
+  const base = calculateSurvivalConditionedProbability(null, { now, staticHistory });
+  const contextArms = calculateSurvivalConditionedContextArms(null, { now, staticHistory }, base);
+
+  const forecasts = buildNextGenerationExperimentalProbabilityForecasts({
+    data: null,
+    calculationOptions: { now, staticHistory },
+    existingForecasts: {},
+    trainingState: trainingState(),
+    survivalConditionedCalculator: () => base,
+    survivalConditionedContextArmsCalculator: () => contextArms,
+    adaptiveRegimeSurvivalCalculator: () => {
+      throw new Error("adaptive v2 transform failure");
+    },
+  });
+
+  assert.equal(forecasts[SURVIVAL_CONDITIONED_MODEL_VERSION]?.modelVersion, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  for (const modelVersion of SURVIVAL_CONTEXT_MODEL_VERSIONS) {
+    assert.equal(forecasts[modelVersion]?.modelVersion, modelVersion);
+  }
+  assert.equal(forecasts[ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION], undefined);
 });
 
 test("survival logging does not create a pre-freeze artifact", () => {
@@ -119,6 +189,7 @@ test("survival logging does not create a pre-freeze artifact", () => {
     },
   });
   assert.equal(forecasts[SURVIVAL_CONDITIONED_MODEL_VERSION], undefined);
+  assert.equal(forecasts[ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION], undefined);
   assert.ok(now.getTime() >= new Date(NEXT_GENERATION_FREEZE_AT).getTime());
 });
 

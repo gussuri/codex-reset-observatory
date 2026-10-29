@@ -111,6 +111,7 @@ import { getRandomElapsedBoundaries } from "./radar/randomElapsedProbability";
 import {
   calculatePublishedProbability,
   type PublishedProbabilityCalculation,
+  type PublishedProbabilityRuntime,
 } from "./radar/publishedProbability";
 import { integrateSurvivalConditionedHazard } from "./radar/survivalConditionedProbability";
 import {
@@ -396,6 +397,8 @@ export function getRadarViewModel(
   signalEvaluationOverride?: LocalSignalEvaluation,
   calculationNow: Date = new Date(),
   calculationContext?: RadarCalculationContext,
+  publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null,
+  publishedProbabilityRuntime?: PublishedProbabilityRuntime,
 ): RadarViewModel {
   const resolvedCalculationContext = calculationContext ?? createRadarCalculationContext(data, calculationNow);
   const source = resolvedCalculationContext.source;
@@ -453,7 +456,8 @@ export function getRadarViewModel(
     activeOfficialNotice: probabilityOfficialNotice,
     regularResetExpectedAt: regularResetForecast.expectedAt,
     canonicalHistoryContext,
-  });
+    publishedAdaptiveRegimeSurvivalAdoptionAt,
+  }, publishedProbabilityRuntime);
   const randomElapsedDiagnostics = getRandomElapsedDisplayDiagnostics(
     source,
     calculationNow,

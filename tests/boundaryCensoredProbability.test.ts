@@ -19,13 +19,13 @@ import {
 import type { WindowEventLike } from "../lib/radar/types";
 import { evaluateBoundaryCensoredProbability } from "../scripts/evaluateBoundaryCensoredProbability";
 import {
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
   NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION,
-  SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 
 function boundary(
@@ -275,7 +275,7 @@ test("candidate evaluation model stays separate from the public recency model", 
   const publicResult = calculatePublishedProbability(data, options, { logFallback: false });
   const candidateResult = calculateBoundaryCensoredProbability(data, options);
 
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
   assert.equal(publicResult.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(candidateResult.modelVersion, BOUNDARY_CENSORED_MODEL_VERSION);
 });

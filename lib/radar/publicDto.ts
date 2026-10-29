@@ -1,6 +1,7 @@
 import { getRadarViewModel } from "@/lib/radar";
 import { createRadarCalculationContext } from "@/lib/radar";
 import type { RadarCalculationContext } from "@/lib/radar";
+import type { PublishedProbabilityRuntime } from "./publishedProbability";
 import { translateTiboPostText, translateUI } from "./i18n";
 import { getLastResetBoundaryAt } from "./probability";
 import {
@@ -53,6 +54,10 @@ export type PublicRadarSnapshotOptions = {
   limitHistory?: boolean;
   calculationNow?: Date;
   calculationContext?: RadarCalculationContext;
+  /** Internal evaluation override; this value is never copied into the public DTO. */
+  publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null;
+  /** Internal calculation hooks for deterministic offline measurements. */
+  publishedProbabilityRuntime?: PublishedProbabilityRuntime;
 };
 
 function safeHttpUrl(value: string | null | undefined) {
@@ -528,6 +533,8 @@ export function toPublicRadarSnapshot(
     undefined,
     calculationNow,
     calculationContext,
+    options.publishedAdaptiveRegimeSurvivalAdoptionAt,
+    options.publishedProbabilityRuntime,
   );
   const latestResetAt = getLastResetBoundaryAt(
     internal,

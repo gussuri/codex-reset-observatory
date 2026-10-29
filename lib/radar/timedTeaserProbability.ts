@@ -283,6 +283,40 @@ function monotoneHorizons(values: ShadowProbabilityHorizons): ShadowProbabilityH
   return { probability12h, probability24h, probability48h, probability72h };
 }
 
+export function applyTimedTeaserProbabilityReallocationFromAudit(
+  base: ShadowProbabilityHorizons,
+  audit: TimedTeaserReallocationAudit | null,
+) {
+  const emptyAudit: TimedTeaserReallocationAudit = {
+    policyVersion: TIMED_TEASER_REALLOCATION_POLICY_VERSION,
+    applied: false,
+    contextDependence: null,
+    timedEvidenceClass: null,
+    reallocationWeight: null,
+    temporalPrecision: null,
+    cdf: null,
+  };
+  if (!audit) return { predictions: base, audit: emptyAudit };
+  if (
+    !audit.applied ||
+    audit.policyVersion !== TIMED_TEASER_REALLOCATION_POLICY_VERSION ||
+    !audit.cdf ||
+    !Number.isFinite(audit.reallocationWeight)
+  ) {
+    return { predictions: base, audit };
+  }
+  const weight = audit.reallocationWeight!;
+  return {
+    predictions: monotoneHorizons({
+      probability12h: mix(base.probability12h, audit.cdf.probability12h, weight),
+      probability24h: mix(base.probability24h, audit.cdf.probability24h, weight),
+      probability48h: mix(base.probability48h, audit.cdf.probability48h, weight),
+      probability72h: mix(base.probability72h, audit.cdf.probability72h, weight),
+    }),
+    audit,
+  };
+}
+
 /**
  * Reallocates a bounded amount of probability mass toward one resolved future
  * window. The caller removes a direct strong candidate from the ordinary
@@ -313,22 +347,13 @@ export function applyTimedTeaserProbabilityReallocation(
   if (!cdf) return { predictions: base, audit: emptyAudit };
 
   const weight = weightPolicy.reallocationWeight;
-  const predictions = monotoneHorizons({
-    probability12h: mix(base.probability12h, cdf.probability12h, weight),
-    probability24h: mix(base.probability24h, cdf.probability24h, weight),
-    probability48h: mix(base.probability48h, cdf.probability48h, weight),
-    probability72h: mix(base.probability72h, cdf.probability72h, weight),
-  });
-  return {
-    predictions,
-    audit: {
-      policyVersion: TIMED_TEASER_REALLOCATION_POLICY_VERSION,
-      applied: true,
-      contextDependence: candidate.interpretation.contextDependence,
-      timedEvidenceClass: weightPolicy.timedEvidenceClass,
-      reallocationWeight: weight,
-      temporalPrecision: candidate.signal.temporal_precision ?? null,
-      cdf,
-    } satisfies TimedTeaserReallocationAudit,
-  };
+  return applyTimedTeaserProbabilityReallocationFromAudit(base, {
+    policyVersion: TIMED_TEASER_REALLOCATION_POLICY_VERSION,
+    applied: true,
+    contextDependence: candidate.interpretation.contextDependence,
+    timedEvidenceClass: weightPolicy.timedEvidenceClass,
+    reallocationWeight: weight,
+    temporalPrecision: candidate.signal.temporal_precision ?? null,
+    cdf,
+  } satisfies TimedTeaserReallocationAudit);
 }
