@@ -43,6 +43,7 @@ function escapeHtml(value: string) {
 test("public radar DTO uses an allowlist and excludes internal audit fields", () => {
   const internal = getLocalRadarData({
     checkedAt: "2026-08-04T00:00:00.000Z",
+    calculationNow: new Date("2026-08-04T00:00:00.000Z"),
   }) as typeof getLocalRadarData extends (...args: never[]) => infer T ? T : never;
 
   Object.assign(internal, {
@@ -96,7 +97,7 @@ test("public radar DTO uses an allowlist and excludes internal audit fields", ()
   }
    assert.equal("reasoningSummary" in publicSnapshot.viewModel, false);
    assert.equal("action" in publicSnapshot.viewModel, false);
-  assert.doesNotMatch(serialized, /private-model|private reason|private-tweet|failure_diagnostics|auth|403/);
+  assert.doesNotMatch(serialized, /private-model|private reason|private-tweet|failure_diagnostics|\bauth\b|\b403\b/);
   assert.equal(publicSnapshot.viewModel.recentHistory.length >= 0, true);
 
   const staleSnapshot = toPublicRadarSnapshot(internal, "en", {

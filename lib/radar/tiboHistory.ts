@@ -2496,7 +2496,7 @@ function buildBankedDistributionEvent(
     notice.signal_type !== "official_notice" ||
     notice.verification_status === "rejected" ||
     (notice.confidence ?? 0) < FORMAL_RESET_CONFIDENCE ||
-    !isBroadBankedDistributionNotice(notice.text) ||
+    (!isManualBroadBankedScopeCorrection(estimate.resetEventKey) && !isBroadBankedDistributionNotice(notice.text)) ||
     displayTime === null ||
     noticeTime === null ||
     firstAnnouncementTime === null ||
