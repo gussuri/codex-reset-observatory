@@ -3,15 +3,19 @@ export const ASTRA_BANKED_SECOND_HISTORY_EVENT_KEY = `${ASTRA_BANKED_HISTORY_EVE
 export const ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID = "2095651088502591861";
 export const GPT61_BANKED_HISTORY_EVENT_KEY = `${ASTRA_BANKED_HISTORY_EVENT_KEY}-observation-20260929T184159778Z`;
 export const GPT61_BANKED_HISTORY_TEASER_TWEET_ID = "2104838506363408740";
+export const DAY26_BANKED_HISTORY_EVENT_KEY = "banked-reset-local-codex-app-server-observation-20261031T204018257Z";
+export const DAY26_BANKED_HISTORY_NOTICE_TWEET_ID = "2116405414921384099";
 
 type HistoricalResetTitleTranslationKey =
   | "astraBankedHistoryTitle"
   | "astraBankedHistorySecondTitle"
-  | "gpt61BankedHistoryTitle";
+  | "gpt61BankedHistoryTitle"
+  | "day26BankedHistoryTitle";
 
 type HistoricalResetNoteTranslationKey =
   | "astraBankedHistoryNote"
-  | "gpt61BankedHistoryNote";
+  | "gpt61BankedHistoryNote"
+  | "day26BankedHistoryNote";
 
 type HistoricalResetCorrection = {
   correctionId: string;
@@ -27,7 +31,7 @@ type HistoricalResetCorrection = {
     reasonType: "ご祝儀リセット";
     noteTranslationKey: HistoricalResetNoteTranslationKey;
     displayScope?: "全有料プラン";
-    displayNoticeType?: "匂わせ投稿あり";
+    displayNoticeType?: "匂わせ投稿あり" | "公式予告あり" | "告知投稿あり";
     sourceTweetId?: string;
     hideAnnouncementTiming?: boolean;
     hideSource?: boolean;
@@ -86,6 +90,25 @@ export const HISTORICAL_RESET_CORRECTIONS: readonly HistoricalResetCorrection[] 
       displayNoticeType: "匂わせ投稿あり",
     },
   },
+  {
+    correctionId: "day26-banked-history-observation",
+    scopeCorrectionEventKeys: [DAY26_BANKED_HISTORY_EVENT_KEY],
+    presentationEventKeys: [DAY26_BANKED_HISTORY_EVENT_KEY],
+    sourceTweetId: DAY26_BANKED_HISTORY_NOTICE_TWEET_ID,
+    presentation: {
+      defaultTitleTranslationKey: "day26BankedHistoryTitle",
+      titleTranslationKeysByEventKey: [
+        {
+          eventKey: DAY26_BANKED_HISTORY_EVENT_KEY,
+          translationKey: "day26BankedHistoryTitle",
+        },
+      ],
+      reasonType: "ご祝儀リセット",
+      noteTranslationKey: "day26BankedHistoryNote",
+      displayScope: "全有料プラン",
+      displayNoticeType: "公式予告あり",
+    },
+  },
 ];
 
 export type HistoricalResetPresentationLookup = {
@@ -101,7 +124,7 @@ export type HistoricalResetPresentationCorrection = {
   reasonType: "ご祝儀リセット";
   noteTranslationKey: HistoricalResetNoteTranslationKey;
   displayScope?: "全有料プラン";
-  displayNoticeType?: "匂わせ投稿あり";
+  displayNoticeType?: "匂わせ投稿あり" | "公式予告あり" | "告知投稿あり";
   sourceTweetId?: string;
   hideAnnouncementTiming?: boolean;
   hideSource?: boolean;

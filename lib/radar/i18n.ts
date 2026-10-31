@@ -747,6 +747,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "A BANKED Reset distribution marking the GPT-6.1 release was observed.",
     zh: "已确认一项纪念 GPT-6.1 发布的 BANKED 重置发放。",
   },
+  day26BankedHistoryTitle: {
+    ja: "アカウント切り替え機能公開記念BANKEDリセット",
+    en: "Account Switching Launch BANKED Reset",
+    zh: "账号切换功能上线纪念 BANKED 重置",
+  },
+  day26BankedHistoryNote: {
+    ja: "モバイルでのアカウント切り替え機能の公開に伴い、BANKEDリセット権（任意リセット）1回分の配布が確認されました。",
+    en: "Following the release of mobile account switching, a distribution of one BANKED Reset was confirmed.",
+    zh: "随着移动端账号切换功能的上线，已确认发放 1 次 BANKED 重置权。",
+  },
   historyNoticeToExecution: {
     ja: "告知から実施まで",
     en: "Time from notice to reset",

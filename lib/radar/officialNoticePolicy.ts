@@ -12,6 +12,7 @@ export type OfficialNoticeTermination = {
 
 export const PERSISTENT_OFFICIAL_NOTICE_IDS = [
   "2095651088502591861",
+  "2116405414921384099",
 ] as const;
 
 /** Explicit lifecycle corrections; signal text is never inspected to infer termination. */

@@ -1180,7 +1180,7 @@ test("registered persistent lookup still excludes an expired Astra notice from a
     }
     if (method === "GET" && url.includes("tibo_signals")) {
       const query = new URL(url);
-      const persistentLookup = query.searchParams.get("tweet_id") === "in.(2095651088502591861)";
+      const persistentLookup = query.searchParams.get("tweet_id")?.includes("2095651088502591861") ?? false;
       return new Response(JSON.stringify(persistentLookup ? [astraNotice] : []), { status: 200 });
     }
     if (method === "GET" && url.includes("regular_reset_events")) {
@@ -1206,7 +1206,7 @@ test("registered persistent lookup still excludes an expired Astra notice from a
     assert.equal(tiboRequests.length, 2);
     const boundedRequest = tiboRequests.find((request) => !new URL(request.url).searchParams.has("tweet_id"));
     assert.ok(boundedRequest);
-    const persistentRequest = tiboRequests.find((request) => new URL(request.url).searchParams.get("tweet_id") === "in.(2095651088502591861)");
+    const persistentRequest = tiboRequests.find((request) => new URL(request.url).searchParams.get("tweet_id")?.includes("2095651088502591861"));
     assert.ok(persistentRequest);
     const estimateWrite = getAtomicPlanPart(requests, "banked_distribution_estimate");
     assert.equal(estimateWrite, null);
