@@ -67,8 +67,7 @@ export type BankedNoticeTiming = {
   expectedEndAt?: string | null;
 };
 
-const BANKED_RESET_TERM_PATTERN =
-  /\bbanked\s+resets?\b|\breset\s+credits?\b|\bresets?[^\w\n]+banked\b|任意リセット権|リセット権/i;
+const BANKED_RESET_TERM_PATTERN = /\bbanked\s+resets?\b|\breset\s+credits?\b|任意リセット権|リセット権/i;
 const DISTRIBUTION_TERM_PATTERN = /\b(?:credit|grant|giv|gift|distribut|provide|deliver|issue|send)\w*\b|配布|付与|配る|プレゼント/i;
 const BROAD_ACCOUNT_LOAD_DISTRIBUTION_PATTERN =
   /\b(?:(?:am|is|are|'m|'re)\s+)?loading\b[\s\S]{0,100}\b(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,100}\b(?:into\s+(?:all|every)\s+accounts?|in\s+everyone['’]s\s+(?:paid\s+)?accounts?)\b/i;
@@ -109,7 +108,7 @@ function hasAdjacentConditionalCompensationDistribution(text: string) {
 const FUTURE_BANKED_ACTION_PATTERN =
   /\b(?:will|shall|(?:am|is|are)\s+going\s+to|gonna)\s+(?:do|run|perform|execute|issue|grant|give|distribut|provide|deliver|send)\w*\b[\s\S]{0,100}\b(?:banked\s+resets?|reset\s+credits?)\b/i;
 const FUTURE_BANKED_AVAILABILITY_PATTERN =
-  /\b(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,80}\b(?:will|shall|(?:is|are)\s+going\s+to|gonna)\s+(?:land|arrive|be\s+(?:there|available|ready)|be\s+(?:issued|delivered|distributed|granted|provided))\b|\b(?:will|shall|(?:is|are)\s+going\s+to|gonna)\s+be\b[\s\S]{0,40}\b(?:banked\s+resets?|reset\s+credits?|resets?[^\w\n]+banked)\b/i;
+  /\b(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,80}\b(?:will|shall|(?:is|are)\s+going\s+to|gonna)\s+(?:land|arrive|be\s+(?:there|available|ready)|be\s+(?:issued|delivered|distributed|granted|provided))\b/i;
 
 function hasFutureAvailabilityTerm(text: string) {
   return text.split(NOTICE_CLAUSE_SEPARATOR).some((clause) => FUTURE_BANKED_AVAILABILITY_PATTERN.test(clause));
