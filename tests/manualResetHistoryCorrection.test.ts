@@ -148,7 +148,7 @@ test("Day 26 BANKED distribution observation uses historical correction and pres
   const jaVm = getRadarViewModel(data, "ja", false, undefined, calculationNow);
   const jaItem = jaVm.recentHistory[0];
   assert.equal(jaItem.key, "banked-reset-local-codex-app-server-observation-20261031T204018257Z");
-  assert.equal(jaItem.title, "アカウント切り替え機能公開記念BANKEDリセット");
+  assert.equal(jaItem.title, "アカウント切り替え機能公開記念BANKEDリセット（1日目）");
   assert.equal(jaItem.recordKind, "banked_distribution");
   assert.equal(jaItem.details?.resetMethod, "任意リセット権配布");
   assert.equal(jaItem.details?.cycleType, "ランダムリセット");
@@ -157,4 +157,80 @@ test("Day 26 BANKED distribution observation uses historical correction and pres
   assert.equal(jaItem.details?.scope, "全有料プラン");
   assert.equal(jaVm.activeWindow.active, true);
   assert.equal(jaVm.activeWindow.kind, "official");
+});
+
+test("Day 26 Day 2 BANKED distribution observation uses historical correction and terminates notice window", () => {
+  const calculationNow = new Date("2026-11-01T22:20:00.000Z");
+  const day26Notice = {
+    tweet_id: "2116405414921384099",
+    text: "Day 26/ You can now easily switch between multiple accounts on mobile, and coming soon to desktop too. Next two days will be resets… banked… do with this what you may .",
+    tweet_url: "https://x.com/thsottiaux/status/2116405414921384099",
+    tweet_created_at: "2026-10-31T05:42:26+00:00",
+    signal_type: "official_notice" as const,
+    confidence: 0.98,
+    verification_status: "confirmed" as const,
+    classification_source: "manual" as const,
+    expected_start_at: "2026-11-01T07:00:00+00:00",
+    expected_end_at: "2026-11-02T07:00:00+00:00",
+    expires_at: "2026-11-02T15:00:00+00:00",
+    temporal_resolution_status: "resolved" as const,
+    temporal_expression: "Next two days",
+    temporal_kind: "relative_day",
+    temporal_precision: "day",
+    temporal_timezone: "America/Los_Angeles",
+    temporal_confidence: 0.95,
+  };
+
+  const day1Estimate = {
+    resetEventKey: "banked-reset-local-codex-app-server-observation-20261031T204018257Z",
+    displayExecutionAt: "2026-10-31T20:40:18.257+00:00",
+    executionTimeSource: "usage_observation" as const,
+    executionTimeConfidence: "high" as const,
+    executionTimePrecision: "approximate" as const,
+    tiboAnnouncedAt: "2026-10-31T05:42:26+00:00",
+    tiboPrimaryTweetId: "2116405414921384099",
+    tiboSourceTweetIds: ["2116405414921384099"],
+    officialNoticeTweetId: "2116405414921384099",
+    officialNoticeAt: "2026-10-31T05:42:26+00:00",
+    estimatorVersion: "banked-distribution-observation-v2" as const,
+  };
+
+  const day2Estimate = {
+    resetEventKey: "banked-reset-local-codex-app-server-observation-20261101T221624351Z",
+    displayExecutionAt: "2026-11-01T22:16:24.351+00:00",
+    executionTimeSource: "usage_observation" as const,
+    executionTimeConfidence: "high" as const,
+    executionTimePrecision: "approximate" as const,
+    tiboAnnouncedAt: "2026-10-31T05:42:26+00:00",
+    tiboPrimaryTweetId: "2116405414921384099",
+    tiboSourceTweetIds: ["2116405414921384099"],
+    officialNoticeTweetId: "2116405414921384099",
+    officialNoticeAt: "2026-10-31T05:42:26+00:00",
+    estimatorVersion: "banked-distribution-observation-v2" as const,
+  };
+
+  const data = getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [day26Notice as any],
+    recentTiboSignals: [day26Notice as any],
+    resetExecutionEstimates: [day1Estimate as any, day2Estimate as any],
+    regularResetEvents: [],
+  });
+
+  const jaVm = getRadarViewModel(data, "ja", false, undefined, calculationNow);
+  const day2Item = jaVm.recentHistory[0];
+  assert.equal(day2Item.key, "banked-reset-local-codex-app-server-observation-20261101T221624351Z");
+  assert.equal(day2Item.title, "アカウント切り替え機能公開記念BANKEDリセット（2日目）");
+  assert.equal(day2Item.recordKind, "banked_distribution");
+  assert.equal(day2Item.details?.resetMethod, "任意リセット権配布");
+  assert.equal(day2Item.details?.cycleType, "ランダムリセット");
+  assert.equal(day2Item.details?.reasonType, "ご祝儀リセット");
+  assert.equal(day2Item.scope, "全有料プラン");
+  assert.equal(day2Item.details?.scope, "全有料プラン");
+
+  const day1Item = jaVm.recentHistory.find((item) => item.key === "banked-reset-local-codex-app-server-observation-20261031T204018257Z");
+  assert.ok(day1Item);
+  assert.equal(day1Item.title, "アカウント切り替え機能公開記念BANKEDリセット（1日目）");
+
+  assert.equal(jaVm.activeWindow.active, false);
 });

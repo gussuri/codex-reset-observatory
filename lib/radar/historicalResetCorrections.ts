@@ -4,18 +4,22 @@ export const ASTRA_BANKED_HISTORY_SOURCE_TWEET_ID = "2095651088502591861";
 export const GPT61_BANKED_HISTORY_EVENT_KEY = `${ASTRA_BANKED_HISTORY_EVENT_KEY}-observation-20260929T184159778Z`;
 export const GPT61_BANKED_HISTORY_TEASER_TWEET_ID = "2104838506363408740";
 export const DAY26_BANKED_HISTORY_EVENT_KEY = "banked-reset-local-codex-app-server-observation-20261031T204018257Z";
+export const DAY26_BANKED_SECOND_HISTORY_EVENT_KEY = "banked-reset-local-codex-app-server-observation-20261101T221624351Z";
 export const DAY26_BANKED_HISTORY_NOTICE_TWEET_ID = "2116405414921384099";
 
 type HistoricalResetTitleTranslationKey =
   | "astraBankedHistoryTitle"
   | "astraBankedHistorySecondTitle"
   | "gpt61BankedHistoryTitle"
-  | "day26BankedHistoryTitle";
+  | "day26BankedHistoryTitle"
+  | "day26BankedHistoryFirstTitle"
+  | "day26BankedHistorySecondTitle";
 
 type HistoricalResetNoteTranslationKey =
   | "astraBankedHistoryNote"
   | "gpt61BankedHistoryNote"
-  | "day26BankedHistoryNote";
+  | "day26BankedHistoryNote"
+  | "day26BankedHistorySecondNote";
 
 type HistoricalResetCorrection = {
   correctionId: string;
@@ -96,15 +100,34 @@ export const HISTORICAL_RESET_CORRECTIONS: readonly HistoricalResetCorrection[] 
     presentationEventKeys: [DAY26_BANKED_HISTORY_EVENT_KEY],
     sourceTweetId: DAY26_BANKED_HISTORY_NOTICE_TWEET_ID,
     presentation: {
-      defaultTitleTranslationKey: "day26BankedHistoryTitle",
+      defaultTitleTranslationKey: "day26BankedHistoryFirstTitle",
       titleTranslationKeysByEventKey: [
         {
           eventKey: DAY26_BANKED_HISTORY_EVENT_KEY,
-          translationKey: "day26BankedHistoryTitle",
+          translationKey: "day26BankedHistoryFirstTitle",
         },
       ],
       reasonType: "ご祝儀リセット",
       noteTranslationKey: "day26BankedHistoryNote",
+      displayScope: "全有料プラン",
+      displayNoticeType: "公式予告あり",
+    },
+  },
+  {
+    correctionId: "day26-banked-second-history-observation",
+    scopeCorrectionEventKeys: [DAY26_BANKED_SECOND_HISTORY_EVENT_KEY],
+    presentationEventKeys: [DAY26_BANKED_SECOND_HISTORY_EVENT_KEY],
+    sourceTweetId: DAY26_BANKED_HISTORY_NOTICE_TWEET_ID,
+    presentation: {
+      defaultTitleTranslationKey: "day26BankedHistorySecondTitle",
+      titleTranslationKeysByEventKey: [
+        {
+          eventKey: DAY26_BANKED_SECOND_HISTORY_EVENT_KEY,
+          translationKey: "day26BankedHistorySecondTitle",
+        },
+      ],
+      reasonType: "ご祝儀リセット",
+      noteTranslationKey: "day26BankedHistorySecondNote",
       displayScope: "全有料プラン",
       displayNoticeType: "公式予告あり",
     },

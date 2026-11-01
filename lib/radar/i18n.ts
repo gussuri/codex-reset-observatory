@@ -752,10 +752,25 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Account Switching Launch BANKED Reset",
     zh: "账号切换功能上线纪念 BANKED 重置",
   },
+  day26BankedHistoryFirstTitle: {
+    ja: "アカウント切り替え機能公開記念BANKEDリセット（1日目）",
+    en: "Account Switching Launch BANKED Reset (Day 1)",
+    zh: "账号切换功能上线纪念 BANKED 重置（第1天）",
+  },
+  day26BankedHistorySecondTitle: {
+    ja: "アカウント切り替え機能公開記念BANKEDリセット（2日目）",
+    en: "Account Switching Launch BANKED Reset (Day 2)",
+    zh: "账号切换功能上线纪念 BANKED 重置（第2天）",
+  },
   day26BankedHistoryNote: {
-    ja: "モバイルでのアカウント切り替え機能の公開に伴い、BANKEDリセット権（任意リセット）1回分の配布が確認されました。",
-    en: "Following the release of mobile account switching, a distribution of one BANKED Reset was confirmed.",
-    zh: "随着移动端账号切换功能的上线，已确认发放 1 次 BANKED 重置权。",
+    ja: "モバイルでのアカウント切り替え機能の公開に伴い、BANKEDリセット権（任意リセット）1回目の配布が確認されました。",
+    en: "Following the release of mobile account switching, the first distribution of a BANKED Reset was confirmed.",
+    zh: "随着移动端账号切换功能的上线，已确认第1次发放 BANKED 重置权。",
+  },
+  day26BankedHistorySecondNote: {
+    ja: "モバイルでのアカウント切り替え機能の公開に伴う2日連続告知の2日目として、2回目となるBANKEDリセット権（任意リセット）の配布が確認されました。",
+    en: "As Day 2 of the two-day announcement following the mobile account switching release, a second distribution of a BANKED Reset was confirmed.",
+    zh: "作为移动端账号切换功能上线后连续两天预告的第2天，已确认第2次发放 BANKED 重置权。",
   },
   historyNoticeToExecution: {
     ja: "告知から実施まで",
