@@ -3,6 +3,7 @@ import type { Locale } from "@/lib/radar/types";
 import { translateUI } from "@/lib/radar/i18n";
 import { SITE_NAME, SITE_NAME_JA } from "@/lib/siteMetadata";
 import { DeveloperLink } from "./DeveloperLink";
+import { SponsorLink } from "./SponsorLink";
 import { TrackedLocaleLink } from "./TrackedLocaleLink";
 
 type AboutViewProps = {
@@ -64,6 +65,7 @@ export function AboutView({ locale }: AboutViewProps) {
       },
     },
   }[locale];
+  const googleHelpLocale = locale === "zh" ? "zh-CN" : locale;
 
   return (
     <main className="min-h-screen px-4 py-6 sm:px-6 lg:px-8" lang={locale}>
@@ -101,6 +103,62 @@ export function AboutView({ locale }: AboutViewProps) {
               by Gussuri Works
             </a>
           </div>
+        </section>
+
+        <section
+          aria-labelledby="about-support-title"
+          className="rounded-lg border border-fuchsia-200 bg-rose-50/75 p-5 shadow-sm"
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h2
+                className="text-lg font-semibold text-fuchsia-950"
+                id="about-support-title"
+              >
+                {translateUI("aboutSupportHeading", locale)}
+              </h2>
+              <p className="mt-2 text-sm leading-7 text-slate-700">
+                {translateUI("aboutSupportBody", locale)}
+              </p>
+            </div>
+            <SponsorLink
+              className="inline-flex min-h-11 w-full shrink-0 items-center justify-center rounded-md bg-fuchsia-700 px-4 py-2 text-center text-sm font-semibold leading-5 text-white shadow-sm transition-colors hover:bg-fuchsia-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700 focus-visible:ring-offset-2 sm:w-auto"
+              locale={locale}
+              pageType="about"
+              placement="about"
+            >
+              {translateUI("sponsorLink", locale)}
+            </SponsorLink>
+          </div>
+          <p className="mt-4 border-t border-fuchsia-200/80 pt-3 text-xs leading-5 text-slate-600">
+            {translateUI("analyticsMeasurementNote", locale)}{" "}
+            <a
+              className="font-medium text-slate-700 underline underline-offset-2 hover:text-fuchsia-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700"
+              href={`https://policies.google.com/technologies/partner-sites?hl=${googleHelpLocale}`}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {translateUI("googleSitesAndAppsInfo", locale)}
+            </a>
+            {" · "}
+            <a
+              className="font-medium text-slate-700 underline underline-offset-2 hover:text-fuchsia-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700"
+              href={`https://policies.google.com/privacy?hl=${googleHelpLocale}`}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {translateUI("googlePrivacyPolicy", locale)}
+            </a>
+            {" · "}
+            <a
+              className="font-medium text-slate-700 underline underline-offset-2 hover:text-fuchsia-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700"
+              href={`https://support.google.com/analytics/answer/181881?hl=${googleHelpLocale}`}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              {translateUI("googleAnalyticsOptOut", locale)}
+            </a>
+          </p>
         </section>
 
         <nav className="flex flex-wrap gap-3 text-sm">

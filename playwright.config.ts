@@ -42,6 +42,7 @@ export default defineConfig({
       TIBO_WEBHOOK_SECRET: "",
       CODEX_USAGE_MONITOR_SECRET: "",
       GEMINI_API_KEY: "",
+      NEXT_PUBLIC_GA_MEASUREMENT_ID: "",
     },
   },
 });

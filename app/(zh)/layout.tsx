@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { SiteJsonLd } from "@/components/SiteJsonLd";
+import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 import { getRootMetadata } from "@/lib/siteMetadata";
 import "../globals.css";
 
@@ -14,6 +15,7 @@ export default function ChineseRootLayout({ children }: { children: ReactNode })
       <body>
         <SiteJsonLd locale="zh" />
         {children}
+        <GoogleAnalytics />
         <Analytics />
         <SpeedInsights />
       </body>
