@@ -882,6 +882,61 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "Codex Reset Observatory is independently developed and operated. Its implementation and development history are available on GitHub.",
     zh: "Codex Reset Observatory 由个人独立开发和运营。实现代码和开发记录可在 GitHub 查看。",
   },
+  sponsorHeader: {
+    ja: "♡ 運営を支援",
+    en: "♡ Support the project",
+    zh: "♡ 支持本站运营",
+  },
+  sponsorPanelTitle: {
+    ja: "無料公開の継続を応援してください",
+    en: "Help support the work behind this site",
+    zh: "欢迎支持本站持续运营",
+  },
+  sponsorPanelBody: {
+    ja: "リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsでの支援を募集しています。少額からの継続支援が、開発・運営の支えになります。",
+    en: "Voluntary support through GitHub Sponsors helps sustain the work of collecting reset information, organizing history, and improving forecasts. Recurring support at any amount helps with development and operation.",
+    zh: "我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。任何金额的定期支持都有助于本站的开发与运营。",
+  },
+  sponsorLink: {
+    ja: "GitHub Sponsorsで支援する",
+    en: "Support on GitHub Sponsors",
+    zh: "在 GitHub Sponsors 上支持",
+  },
+  sponsorFooter: {
+    ja: "運営を支援",
+    en: "Support this project",
+    zh: "支持本站",
+  },
+  aboutSupportHeading: {
+    ja: "サイト運営への任意の支援",
+    en: "Voluntary support for this site",
+    zh: "自愿支持本站运营",
+  },
+  aboutSupportBody: {
+    ja: "本サイトは個人で開発・運営しています。リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsで任意の支援を募集しています。支援の有無によって予測や閲覧できる情報が変わることはありません。",
+    en: "This site is developed and operated independently. Voluntary support through GitHub Sponsors helps continue collecting reset information, organizing history, and improving forecasts. Sponsorship does not affect forecasts or access to information.",
+    zh: "本站由个人独立开发和运营。我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。是否支持不会影响预测结果或可查看的信息。",
+  },
+  analyticsMeasurementNote: {
+    ja: "Google Analyticsを設定している場合、ページ閲覧とスポンサーリンクのクリックを計測します。Googleのサービスを利用するサイトでは、訪問ページのURL、IPアドレスやCookie等がGoogleに送られることがあります。スポンサークリックイベントに含めるのは配置場所・表示言語・ページ種別です。詳しくはGoogleのサイト・アプリ情報の利用とプライバシーポリシーをご覧ください。計測を希望しない場合は、オプトアウト アドオンをご確認ください。",
+    en: "When configured, Google Analytics measures page views and sponsor-link clicks. Google may receive information such as pages visited, IP addresses, and cookies when you use sites that rely on Google services. Sponsor-click events include placement, language, and page type. See how Google uses information from sites and apps and its Privacy Policy; you can also use the Analytics opt-out add-on.",
+    zh: "启用 Google Analytics 后，本网站会统计页面浏览和赞助链接点击。访问集成 Google 服务的网站时，Google 可能会收到访问页面、IP 地址以及 Cookie 等信息。赞助点击事件包含展示位置、页面语言和页面类型。请参阅 Google 如何使用来自网站和应用的信息及其隐私权政策；也可使用 Analytics 退出浏览器插件。",
+  },
+  googleSitesAndAppsInfo: {
+    ja: "Googleのサイト・アプリ情報の利用",
+    en: "How Google uses information from sites and apps",
+    zh: "Google 如何使用来自网站和应用的信息",
+  },
+  googlePrivacyPolicy: {
+    ja: "Google プライバシー ポリシー",
+    en: "Google Privacy Policy",
+    zh: "Google 隐私权政策",
+  },
+  googleAnalyticsOptOut: {
+    ja: "Google Analytics オプトアウト アドオン",
+    en: "Google Analytics opt-out add-on",
+    zh: "Google Analytics 退出浏览器插件",
+  },
   languageName: {
     ja: "日本語",
     en: "English",

@@ -4,6 +4,7 @@ import type { Locale, PublicRadarSnapshot } from "@/lib/radar/types";
 import { translateUI } from "@/lib/radar/i18n";
 import { DeveloperLink } from "./DeveloperLink";
 import { LocalizedHistoryEvents } from "./LocalizedHistoryEvents";
+import { SponsorLink } from "./SponsorLink";
 import { TrackedLocaleLink } from "./TrackedLocaleLink";
 
 type HistoryViewProps = {
@@ -124,6 +125,14 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
             <Link className="underline-offset-4 hover:underline" href={locale === "ja" ? "/faq" : locale === "en" ? "/en/faq" : "/zh/faq"}>
               {translateUI("faq", locale)}
             </Link>
+            <SponsorLink
+              className="inline-flex min-h-11 items-center font-semibold text-fuchsia-200 underline-offset-4 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+              locale={locale}
+              pageType="history"
+              placement="footer"
+            >
+              {translateUI("sponsorFooter", locale)}
+            </SponsorLink>
             {locale === "ja" ? (
               <>
                 <TrackedLocaleLink fromLocale={locale} route="history" toLocale="en" className="underline-offset-4 hover:underline" href="/en/history">

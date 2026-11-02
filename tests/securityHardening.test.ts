@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import nextConfig from "../next.config.mjs";
 
 test("extension documentation does not claim local storage is encrypted", () => {
   const readme = readFileSync("extension/tibo-monitor/README.md", "utf8");
@@ -42,4 +43,37 @@ test("webhook secret remains persistent and trusted-context-only", () => {
   );
   assert.ok(settingsWrite >= 0);
   assert.ok(quarantineClear > settingsWrite);
+});
+
+test("GA4 CSP sources are limited to valid enabled analytics IDs", async () => {
+  const originalMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+  const readCsp = async () => {
+    const routes = await nextConfig.headers();
+    const responseHeaders = routes[0]?.headers ?? [];
+    const policy = responseHeaders.find((header) => header.key === "Content-Security-Policy");
+    assert.ok(policy);
+    return policy.value;
+  };
+
+  try {
+    delete process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+    assert.doesNotMatch(await readCsp(), /googletagmanager|google-analytics|analytics\.google\.com/i);
+
+    process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID = "G-TEST123456";
+    const enabledPolicy = await readCsp();
+    assert.match(enabledPolicy, /script-src[^;]*https:\/\/www\.googletagmanager\.com/i);
+    assert.match(enabledPolicy, /img-src[^;]*https:\/\/\*\.google-analytics\.com/i);
+    assert.match(enabledPolicy, /connect-src[^;]*https:\/\/\*\.google-analytics\.com/i);
+    assert.match(enabledPolicy, /connect-src[^;]*https:\/\/analytics\.google\.com/i);
+    assert.doesNotMatch(enabledPolicy, /doubleclick|googlesyndication|googleadservices/i);
+
+    process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID = "not-a-measurement-id";
+    assert.doesNotMatch(await readCsp(), /googletagmanager|google-analytics|analytics\.google\.com/i);
+  } finally {
+    if (originalMeasurementId === undefined) {
+      delete process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+    } else {
+      process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID = originalMeasurementId;
+    }
+  }
 });
