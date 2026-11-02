@@ -11,23 +11,23 @@ declare global {
 const localeHome = {
   ja: {
     path: "/",
-    panelTitle: "サイト運営について",
-    panelBody: "本サイトの開発・運営は、GitHub Sponsorsから任意にご支援いただけます。単発・月額のどちらも選べます。",
-    link: "GitHub Sponsors",
+    panelTitle: "無料公開の継続を応援してください",
+    panelBody: "リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsでの支援を募集しています。少額からの継続支援が、開発・運営の支えになります。",
+    link: "GitHub Sponsorsで支援する",
     footer: "運営を支援",
   },
   en: {
     path: "/en",
-    panelTitle: "Site support",
-    panelBody: "You may support the development and operation of this site through GitHub Sponsors, either once or monthly.",
-    link: "GitHub Sponsors",
+    panelTitle: "Help support the work behind this site",
+    panelBody: "Voluntary support through GitHub Sponsors helps sustain the work of collecting reset information, organizing history, and improving forecasts. Recurring support at any amount helps with development and operation.",
+    link: "Support on GitHub Sponsors",
     footer: "Support this project",
   },
   zh: {
     path: "/zh",
-    panelTitle: "关于本站运营",
-    panelBody: "您可以通过 GitHub Sponsors 自愿支持本站的开发和运营，单次或按月均可。",
-    link: "GitHub Sponsors",
+    panelTitle: "欢迎支持本站持续运营",
+    panelBody: "我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。任何金额的定期支持都有助于本站的开发与运营。",
+    link: "在 GitHub Sponsors 上支持",
     footer: "支持本站",
   },
 } as const;
@@ -35,18 +35,18 @@ const localeHome = {
 const localeAbout = {
   ja: {
     path: "/about",
-    heading: "サイト運営について",
-    body: "GitHub Sponsorsから単発・月額の任意のご支援を受け付けています。支援の有無で予測や閲覧できる情報は変わりません。",
+    heading: "サイト運営への任意の支援",
+    body: "本サイトは個人で開発・運営しています。リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsで任意の支援を募集しています。支援の有無によって予測や閲覧できる情報が変わることはありません。",
   },
   en: {
     path: "/en/about",
-    heading: "Site support",
-    body: "Optional one-time and monthly support is available through GitHub Sponsors. Support does not affect forecasts or access to information.",
+    heading: "Voluntary support for this site",
+    body: "This site is developed and operated independently. Voluntary support through GitHub Sponsors helps continue collecting reset information, organizing history, and improving forecasts. Sponsorship does not affect forecasts or access to information.",
   },
   zh: {
     path: "/zh/about",
-    heading: "关于本站运营",
-    body: "您可以通过 GitHub Sponsors 选择单次或按月自愿支持。是否支持不会影响预测结果或可查看的信息。",
+    heading: "自愿支持本站运营",
+    body: "本站由个人独立开发和运营。我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。是否支持不会影响预测结果或可查看的信息。",
   },
 } as const;
 
@@ -111,7 +111,7 @@ async function expectSponsorPopup(
   await popup.close();
 }
 
-test("home support link is localized, restrained, and fits mobile and desktop", async ({ page }) => {
+test("home sponsor button is localized, single, and fits mobile and desktop", async ({ page }) => {
   const browserErrors = await prepareSponsorPage(page);
 
   const screenshotDirectory = process.env.SPONSOR_SCREENSHOT_DIR;

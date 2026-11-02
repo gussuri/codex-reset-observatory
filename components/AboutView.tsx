@@ -107,35 +107,33 @@ export function AboutView({ locale }: AboutViewProps) {
 
         <section
           aria-labelledby="about-support-title"
-          className="rounded-lg border border-slate-200 bg-white/80 p-4 sm:p-5"
+          className="rounded-lg border border-fuchsia-200 bg-rose-50/75 p-5 shadow-sm"
         >
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <h2
-                className="text-sm font-medium text-slate-800"
+                className="text-lg font-semibold text-fuchsia-950"
                 id="about-support-title"
               >
                 {translateUI("aboutSupportHeading", locale)}
               </h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
+              <p className="mt-2 text-sm leading-7 text-slate-700">
                 {translateUI("aboutSupportBody", locale)}
               </p>
             </div>
-            <div className="shrink-0">
-              <SponsorLink
-                className="inline-flex min-h-11 items-center text-sm text-slate-700 underline underline-offset-4 transition-colors hover:text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2"
-                locale={locale}
-                pageType="about"
-                placement="about"
-              >
-                {translateUI("sponsorLink", locale)}
-              </SponsorLink>
-            </div>
+            <SponsorLink
+              className="inline-flex min-h-11 w-full shrink-0 items-center justify-center rounded-md bg-fuchsia-700 px-4 py-2 text-center text-sm font-semibold leading-5 text-white shadow-sm transition-colors hover:bg-fuchsia-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700 focus-visible:ring-offset-2 sm:w-auto"
+              locale={locale}
+              pageType="about"
+              placement="about"
+            >
+              {translateUI("sponsorLink", locale)}
+            </SponsorLink>
           </div>
-          <p className="mt-4 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-600">
+          <p className="mt-4 border-t border-fuchsia-200/80 pt-3 text-xs leading-5 text-slate-600">
             {translateUI("analyticsMeasurementNote", locale)}{" "}
             <a
-              className="font-medium text-slate-700 underline underline-offset-2 hover:text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+              className="font-medium text-slate-700 underline underline-offset-2 hover:text-fuchsia-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700"
               href={`https://policies.google.com/technologies/partner-sites?hl=${googleHelpLocale}`}
               rel="noopener noreferrer"
               target="_blank"
@@ -144,7 +142,7 @@ export function AboutView({ locale }: AboutViewProps) {
             </a>
             {" · "}
             <a
-              className="font-medium text-slate-700 underline underline-offset-2 hover:text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+              className="font-medium text-slate-700 underline underline-offset-2 hover:text-fuchsia-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700"
               href={`https://policies.google.com/privacy?hl=${googleHelpLocale}`}
               rel="noopener noreferrer"
               target="_blank"
@@ -153,7 +151,7 @@ export function AboutView({ locale }: AboutViewProps) {
             </a>
             {" · "}
             <a
-              className="font-medium text-slate-700 underline underline-offset-2 hover:text-teal-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700"
+              className="font-medium text-slate-700 underline underline-offset-2 hover:text-fuchsia-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700"
               href={`https://support.google.com/analytics/answer/181881?hl=${googleHelpLocale}`}
               rel="noopener noreferrer"
               target="_blank"
