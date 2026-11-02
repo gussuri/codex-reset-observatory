@@ -29,7 +29,7 @@ test("sponsor_click contains only placement, locale, and page type", () => {
 });
 
 test("sponsor click dispatches once and treats absent or throwing analytics as best effort", () => {
-  const event = createSponsorClickEvent("header", "en", "home");
+  const event = createSponsorClickEvent("panel", "en", "home");
   const calls: unknown[][] = [];
 
   dispatchSponsorClickEvent(event, (...args: unknown[]) => calls.push(args));

@@ -946,14 +946,6 @@ export function RadarDashboard({
             </div>
           </div>
           <div className="flex flex-wrap justify-end gap-2 sm:justify-start">
-            <SponsorLink
-              className="inline-flex min-h-11 w-fit max-w-full items-center rounded-md border border-fuchsia-200 bg-fuchsia-50 px-3 py-2 text-sm font-semibold leading-5 text-fuchsia-800 transition-colors hover:border-fuchsia-300 hover:bg-fuchsia-100 hover:text-fuchsia-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700 focus-visible:ring-offset-2"
-              locale={locale}
-              pageType="home"
-              placement="header"
-            >
-              {translateUI("sponsorHeader", locale)}
-            </SponsorLink>
             {locale !== "ja" && (
               <TrackedLocaleLink
                 className="inline-flex min-h-8 w-fit items-center rounded-md border border-transparent bg-transparent px-2.5 py-1 text-xs font-medium text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline sm:border-slate-200 sm:bg-white sm:px-3 sm:py-1.5 sm:text-xs sm:font-semibold sm:text-slate-700"
@@ -1407,7 +1399,7 @@ export function RadarDashboard({
               {translateUI("history", locale)}
             </Link>
             <SponsorLink
-              className="inline-flex min-h-11 items-center rounded-sm font-semibold text-fuchsia-200 underline-offset-4 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+              className="inline-flex min-h-11 items-center underline-offset-4 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
               locale={locale}
               pageType="home"
               placement="footer"
