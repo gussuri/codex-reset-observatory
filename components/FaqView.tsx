@@ -400,7 +400,7 @@ export function FaqView({ locale }: FaqViewProps) {
         </nav>
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
           <SponsorLink
-            className="inline-flex min-h-11 items-center font-semibold text-fuchsia-800 underline-offset-4 hover:text-fuchsia-950 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700 focus-visible:ring-offset-2"
+            className="inline-flex min-h-11 items-center text-slate-600 underline-offset-4 hover:text-teal-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2"
             locale={locale}
             pageType="faq"
             placement="footer"

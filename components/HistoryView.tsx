@@ -126,7 +126,7 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
               {translateUI("faq", locale)}
             </Link>
             <SponsorLink
-              className="inline-flex min-h-11 items-center font-semibold text-fuchsia-200 underline-offset-4 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
+              className="inline-flex min-h-11 items-center underline-offset-4 hover:text-white hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950"
               locale={locale}
               pageType="history"
               placement="footer"

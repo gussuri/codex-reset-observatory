@@ -1,21 +1,9 @@
 import type { Locale } from "./radar/types";
 
 export const GITHUB_SPONSORS_URL = "https://github.com/sponsors/gussuri";
-export const GITHUB_SPONSORS_ONE_TIME_URL =
-  `${GITHUB_SPONSORS_URL}?frequency=one-time` as const;
 export const SPONSOR_CLICK_EVENT_NAME = "sponsor_click" as const;
 
-export type SponsorFrequency = "monthly" | "one-time";
-
-export function getGitHubSponsorsUrl(
-  frequency: SponsorFrequency = "monthly",
-): string {
-  return frequency === "one-time"
-    ? GITHUB_SPONSORS_ONE_TIME_URL
-    : GITHUB_SPONSORS_URL;
-}
-
-export type SponsorPlacement = "header" | "panel" | "footer" | "about";
+export type SponsorPlacement = "panel" | "footer" | "about";
 export type SponsorPageType = "home" | "history" | "faq" | "about";
 
 export type SponsorClickEvent = {
