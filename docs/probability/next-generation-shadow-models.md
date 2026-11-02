@@ -2,7 +2,7 @@
 
 モデルidentityとpublic deployment periodのcanonical inventoryは[model-registry.md](model-registry.md)（machine-readable source: data/probabilityModelRegistry.ts）で管理します。この文書は運用上の説明と履歴記録です。
 
-公開モデルは、`2026-09-01T08:00:00.000Z`（UTC）までは `hazard-regime-random-continuous-calibrated-v1`（Model B v1）、その後`2026-09-10T01:00:00.000Z`までは `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（Model B v2）、その後`2026-09-11T02:20:00.000Z`までは `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（historical selective hybrid v3）、その後`2026-09-17T05:45:00.000Z`までは `hazard-odds-v4-logit-calibrated-prequential-v3`（corrective rollback V4）、その後`2026-09-18T06:00:00.000Z`までは `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（historical frozen raw continuous 18/54）、その後`2026-09-19T06:00:00.000Z`までは `hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2`（historical broad-banked random continuous 18/54）、その後`2026-10-29T12:20:00.000Z`までは `hazard-survival-conditioned-adaptive-h45-tail-h24-v1`（historical Survival-Conditioned v1）、それ以後は `hazard-adaptive-regime-survival-v2`（Adaptive Regime Survival v2）です。prospective gateは`not_met`ですが、manual governanceでは診断状態であり、自動publish/rollbackのswitchではありません。Model A/C、selective v3、raw 18/54、late-age diagnostic armsは採用期間以外ではshadowとして観測します。
+公開モデルは、`2026-09-01T08:00:00.000Z`（UTC）までは `hazard-regime-random-continuous-calibrated-v1`（Model B v1）、その後`2026-09-10T01:00:00.000Z`までは `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（Model B v2）、その後`2026-09-11T02:20:00.000Z`までは `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（historical selective hybrid v3）、その後`2026-09-17T05:45:00.000Z`までは `hazard-odds-v4-logit-calibrated-prequential-v3`（corrective rollback V4）、その後`2026-09-18T06:00:00.000Z`までは `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（historical frozen raw continuous 18/54）、その後`2026-09-19T06:00:00.000Z`までは `hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2`（historical broad-banked random continuous 18/54）、その後`2026-10-29T12:20:00.000Z`までは `hazard-survival-conditioned-adaptive-h45-tail-h24-v1`（original Survival-Conditioned v1 period）、その後`2026-11-02T15:30:00.000Z`までは `hazard-adaptive-regime-survival-v2`（historical Adaptive Regime Survival v2）、それ以後は同じ凍結済み`hazard-survival-conditioned-adaptive-h45-tail-h24-v1`（restored Survival-Conditioned v1 period）です。prospective gateは`not_met`ですが、manual governanceでは診断状態であり、自動publish/rollbackのswitchではありません。Model A/C、selective v3、raw 18/54、late-age diagnostic armsは採用期間以外ではshadowとして観測します。
 
 - B v1: `hazard-regime-random-continuous-calibrated-v1`（2026-08-23T02:04:00.000Z以後のhistorical public model）
 - B v2: `hazard-regime-random-continuous-calibrated-post-reset-age-v2`（2026-09-01T08:00:00.000Z以後、v3 boundary前のpublic model）
@@ -10,8 +10,9 @@
 - corrective rollback V4: `hazard-odds-v4-logit-calibrated-prequential-v3`（2026-09-11T02:20:00.000Z〜2026-09-17T05:45:00.000Z）
 - raw continuous 18/54: `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（2026-09-17T05:45:00.000Z〜2026-09-18T06:00:00.000Zのhistorical manual corrective public period; no calibration）
 - broad-banked random continuous v2: `hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2`（2026-09-18T06:00:00.000Z〜2026-09-19T06:00:00.000Zのhistorical manual public period; broad-banked-boundary-v2; no calibration; fallback/comparison baseline）
-- survival-conditioned v1: `hazard-survival-conditioned-adaptive-h45-tail-h24-v1`（2026-09-19T06:00:00.000Z〜2026-10-29T12:20:00.000Zのhistorical manual public period; H45 adaptive smoothing and H24 tail; no calibration; v2 fallback/baseline）
-- adaptive regime survival v2: `hazard-adaptive-regime-survival-v2`（2026-10-29T12:20:00.000Z以後のmanual public period; frozen regime correction around the Survival v1 age hazard）
+- survival-conditioned v1 (original period): `hazard-survival-conditioned-adaptive-h45-tail-h24-v1`（2026-09-19T06:00:00.000Z〜2026-10-29T12:20:00.000Z; historical manual period）
+- adaptive regime survival v2: `hazard-adaptive-regime-survival-v2`（2026-10-29T12:20:00.000Z〜2026-11-02T15:30:00.000Z; historical manual period）
+- survival-conditioned v1 (restored period): `hazard-survival-conditioned-adaptive-h45-tail-h24-v1`（2026-11-02T15:30:00.000Z以後; current manual public period; same frozen H45/H24 estimator and support gate）
 - A: `hazard-ensemble-logit-stack-v1`（shadow）
 - C: `hazard-contextual-burst-circadian-v1`（shadow）
 - A/B freeze: `2026-08-21T03:27:00.000Z`
@@ -32,6 +33,7 @@
 - survival-conditioned v1 freeze: `2026-09-18T18:55:00.000Z`; H45/H24 and the 36-completed-interval support gate remain frozen
 - adaptive regime survival v2 adoption boundary: `2026-10-29T12:20:00.000Z` (JST 21:20); manual, no backfill or auto-publish
 - adaptive regime survival v2 freeze: `2026-10-29T10:26:53.000Z`; v1 support gate, official notice and teaser policies remain unchanged
+- Survival-Conditioned v1 restoration boundary: `2026-11-02T15:30:00.000Z` (JST 2026-11-03 00:30); manual, no backfill/relabel, previous model Adaptive v2
 - v2 calibration training source: B v1
 - backfill: false
 
@@ -39,7 +41,7 @@
 
 B v1の公開forecastは公開確率pathで計算されます。logging cycleでは同一originについてB v1、B v2、selective hybrid v3、corrective V4、raw continuous 18/54を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存し、それぞれのProduction boundaryを分離して比較できるようにします。A/Cは`/api/log-probability`のlogging cycleでのみ計算・保存されるshadowです。`/api/current`、公開DTO、UIではA/Cのsolverや学習を実行しません。DB schemaも追加しません。
 
-Survival-Conditioned v1とAdaptive Regime Survival v2の公開期間は明示boundaryで分離し、同一originのexperimental forecast保存とprospective evaluationを継続します。過去のBroad-Banked v2およびSurvival v1 rowは書き換えず、保存済みモデルidentityを維持します。
+Survival-Conditioned v1の元の公開期間、Adaptive Regime Survival v2期間、v1復帰後の公開期間は明示boundaryで分離し、同一originのexperimental forecast保存とprospective evaluationを継続します。同じv1 model identityが二つの公開期間に現れますが、period identityで区別します。過去のBroad-Banked v2、元のSurvival v1、Adaptive v2 rowは書き換えません。
 
 B v2の差分は0–24h post-reset ageに対するregime multiplier attenuationだけです。selective hybrid v3はこの計算を継承し、24hのcalibrationをdiagnostic-only、48hのcalibrationをapplyします。prequential calibration rows、alpha、sample count、signal policy、official notice/teaser policyはB v1から継承し、過去training rowやprediction rowを再ラベルしません。prospective evaluatorは各明示boundary以後に生成された同一originの対象モデルだけを比較します。
 

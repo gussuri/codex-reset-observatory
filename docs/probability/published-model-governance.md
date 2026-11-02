@@ -1,6 +1,6 @@
 # 公開確率モデルのgovernance記録
 
-この文書は、2026-10-29時点の設定、runtime、prospective evaluation、リポジトリ履歴を照合した現行状態の監査記録です。過去時点のevaluation reportやdesign specは、その時点のスナップショットとして書き換えません。
+この文書は、2026-11-03時点の設定、runtime、prospective evaluation、リポジトリ履歴を照合した現行状態の監査記録です。過去時点のevaluation reportやdesign specは、その時点のスナップショットとして書き換えません。
 
 Canonical model inventory: [model-registry.md](model-registry.md)（machine-readable source: data/probabilityModelRegistry.ts）。
 
@@ -8,13 +8,14 @@ Canonical model inventory: [model-registry.md](model-registry.md)（machine-read
 
 | 役割 | model version / value |
 | --- | --- |
-| 公開モデル（2026-10-29T12:20:00.000Z以後） | `hazard-adaptive-regime-survival-v2`（Adaptive Regime Survival v2） |
-| 公開モデル（2026-09-19T06:00:00.000Z〜2026-10-29T12:20:00.000Z） | `hazard-survival-conditioned-adaptive-h45-tail-h24-v1`（historical Survival-Conditioned v1; immediate fallback/comparison baseline） |
+| 公開モデル（2026-11-02T15:30:00.000Z以後） | `hazard-survival-conditioned-adaptive-h45-tail-h24-v1`（restored frozen Survival-Conditioned v1） |
+| 公開モデル（2026-10-29T12:20:00.000Z〜2026-11-02T15:30:00.000Z） | `hazard-adaptive-regime-survival-v2`（historical Adaptive Regime Survival v2） |
+| 公開モデル（2026-09-19T06:00:00.000Z〜2026-10-29T12:20:00.000Z） | `hazard-survival-conditioned-adaptive-h45-tail-h24-v1`（original Survival-Conditioned v1 period） |
 | 公開モデル（2026-09-18T06:00:00.000Z〜2026-09-19T06:00:00.000Z） | `hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2`（historical broad-banked random continuous 18/54; fallback/comparison baseline） |
 | 公開モデル（2026-09-17T05:45:00.000Z〜2026-09-18T06:00:00.000Z） | `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（historical raw continuous 18/54） |
 | 公開モデル（2026-09-10T01:00:00.000Z〜2026-09-11T02:20:00.000Z） | `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（historical selective hybrid） |
 | 公開モデル（2026-09-11T02:20:00.000Z〜2026-09-17T05:45:00.000Z） | `hazard-odds-v4-logit-calibrated-prequential-v3`（corrective rollback V4） |
-| 比較用のprevious model（Adaptive v2採用後） | `hazard-survival-conditioned-adaptive-h45-tail-h24-v1` |
+| 比較用のprevious model（v1復帰後） | `hazard-adaptive-regime-survival-v2` |
 | v2より前のhistorical model | `hazard-regime-random-continuous-calibrated-v1`（Model B v1） |
 | 安定fallback | `hazard-elapsed-v1` |
 | adoption mode | `manual` |
@@ -39,16 +40,18 @@ Canonical model inventory: [model-registry.md](model-registry.md)（machine-read
 | Adaptive Regime Survival v2 adoption timestamp | `2026-10-29T12:20:00.000Z` |
 | Adaptive Regime Survival v2 adoption date | `2026-10-29` |
 | Adaptive Regime Survival v2 freeze timestamp | `2026-10-29T10:26:53.000Z` |
+| Survival-Conditioned v1 restoration boundary | `2026-11-02T15:30:00.000Z` (JST `2026-11-03 00:30`) |
+| restored v1 previous model | `hazard-adaptive-regime-survival-v2` |
 
-Model A（`hazard-ensemble-logit-stack-v1`）、Model C（`hazard-contextual-burst-circadian-v1`）、selective hybrid v3、raw 18/54 challengerは、採用期間以外ではshadow/evaluation用です。Adaptive Regime Survival v2は2026-10-29T12:20:00.000Zのmanual boundary以後に選択し、既存Survival v1のvalidity failureやruntime exception時はSurvival v1、Broad-Banked v2を含む既存fallback chainへ退避します。v2は同じoriginで計算したv1 baseを再利用し、H45/H24、36件のcompleted-interval support gate、既存のeligibility、signal、official notice、teaser、horizon coherence policyを維持します。late-age diagnostic arms、context arms、その他のexperiment-only fieldsはpublic selectorへ接続しません。過去のprediction rowとprospective scoreboardはadoption periodを分けて継続し、過去行をv2として再ラベルしません。
+Model A（`hazard-ensemble-logit-stack-v1`）、Model C（`hazard-contextual-burst-circadian-v1`）、selective hybrid v3、raw 18/54 challengerは、採用期間以外ではshadow/evaluation用です。Survival-Conditioned v1は2026-11-02T15:30:00.000Zのmanual restoration boundary以後に、元の36件support gateとfinite・monotonic validity条件を使って選択します。今回の切替はreset campaign終了後の手動運用判断であり、v1がv2を統計的に上回るという主張ではありません。v1の計算式、凍結済みパラメータ、eligibility、signal、official notice、teaser、horizon coherence policyは変更しません。Adaptive v2の過去期間と元のv1期間は別々に保持し、過去のprediction rowやprospective scoreboardを再ラベルしません。late-age diagnostic arms、context arms、その他のexperiment-only fieldsはpublic selectorへ接続しません。
 
 ## Gate and manual adoption
 
 `not_met` はprospective evaluationの診断状態であり、`adoption mode = manual` のときに公開モデルを自動的に無効化するruntime switchではありません。gateの結果だけでselective hybrid v3やraw 18/54を自動publishしたり、V4を自動rollbackしたりしません。
 
-selective hybrid v3のProduction adoption boundaryは`2026-09-10T01:00:00.000Z`（UTC）です。`2026-09-01T08:00:00.000Z`以後かつv3 boundary前はv2、その前はB v1を使用しました。v3 boundaryからrollback boundaryまではselective hybrid v3、rollback boundaryからraw boundaryまではcorrective rollback V4、raw boundaryからbroad-banked v2 boundaryまではhistorical raw 18/54を使用します。`2026-09-18T06:00:00.000Z`以後`2026-09-19T06:00:00.000Z`までは、凍結済みbroad-banked v2 challengerを選択しました。`2026-09-19T06:00:00.000Z`以後`2026-10-29T12:20:00.000Z`までは、Survival-Conditioned v1の予測が36件以上のcompleted interval support gateを満たし、finite・monotonic・その他のvalidity条件を満たす場合に選択します。Adaptive v2のboundary以後は、同じ有効なv1 baseへ固定済みのregime correctionを適用します。各期間は明示boundaryで分離し、無効・例外・非単調な候補はSurvival v1、Broad-Banked v2を含む既存fallback chainへ退避します。過去のforecast rowを新しいモデルとして再ラベルしません。
+selective hybrid v3のProduction adoption boundaryは`2026-09-10T01:00:00.000Z`（UTC）です。`2026-09-01T08:00:00.000Z`以後かつv3 boundary前はv2、その前はB v1を使用しました。v3 boundaryからrollback boundaryまではselective hybrid v3、rollback boundaryからraw boundaryまではcorrective rollback V4、raw boundaryからbroad-banked v2 boundaryまではhistorical raw 18/54を使用します。`2026-09-18T06:00:00.000Z`以後`2026-09-19T06:00:00.000Z`までは、凍結済みbroad-banked v2 challengerを選択しました。`2026-09-19T06:00:00.000Z`以後`2026-10-29T12:20:00.000Z`までは、Survival-Conditioned v1の予測が36件以上のcompleted interval support gateを満たし、finite・monotonic・その他のvalidity条件を満たす場合に選択します。Adaptive v2は`2026-10-29T12:20:00.000Z`以後`2026-11-02T15:30:00.000Z`未満の独立した期間です。復帰boundary以後は同じ凍結済みSurvival v1を選択します。各期間は明示boundaryで分離し、無効・例外・非単調な候補は既存fallback chainへ退避します。過去のforecast rowを新しいモデルとして再ラベルしません。
 
-logging cycleでは、同じoriginについてB v1、v2、selective hybrid v3、corrective V4、raw 18/54、Broad-Banked v2、Survival-Conditioned v1、Adaptive Regime Survival v2を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存します。prospective evaluatorは採用境界ごとに対象期間を分離し、過去boundary前のrowを現行モデルとして再利用しません。
+logging cycleでは、同じoriginについてB v1、v2、selective hybrid v3、corrective V4、raw 18/54、Broad-Banked v2、Survival-Conditioned v1、Adaptive Regime Survival v2を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存します。prospective evaluatorは新しい復帰boundary以後だけを現在の採用期間として評価し、元のv1・Adaptive v2期間と混ぜません。
 
 ## 2026-09-18 broad-banked random clock v2 adoption (historical)
 
@@ -98,6 +101,21 @@ The selector chooses Survival-Conditioned v1 only at or after the explicit bound
 - auto-publish: 実施しない
 
 The v2 selector reuses the same valid Survival v1 base at each origin and applies the frozen rate correction. Before this boundary the public model remains Survival v1; after it, v2 is selected when the v1 support and validity gate passes. If v2 is invalid or throws, the existing chain falls back to Survival v1 and earlier models. Experimental history and prior predictions retain their original identities.
+
+## 2026-11-03 Survival-Conditioned v1 prospective restoration
+
+- model identity: `hazard-survival-conditioned-adaptive-h45-tail-h24-v1`
+- previous public model: `hazard-adaptive-regime-survival-v2`
+- restoration boundary: `2026-11-02T15:30:00.000Z` (UTC), `2026-11-03 00:30` (JST)
+- adoption mode: `manual`
+- decision: return to the immediately previous frozen model after the reset campaign; this is not a statistical superiority claim
+- freeze: unchanged at `2026-09-18T18:55:00.000Z`; H45/H24, minimum interval support, estimator, and validity rules remain unchanged
+- previous model adoption boundary: `2026-10-29T12:20:00.000Z`
+- backfill/relabel: none; the original v1 and Adaptive v2 forecast periods remain historical
+- official notice, ordinary/timed teaser, BANKED eligibility, canonical reset clocks, and horizon coherence: unchanged
+- public-v1 API/DTO, database schema, migrations, and forecast-save behavior: unchanged
+
+The restored period has its own boundary-defined period identity even though it reuses the original v1 model identity. Audit metadata uses the restoration boundary and Adaptive v2 as its previous model for origins in this period. Older v1 origins retain the September 19 adoption metadata and Broad-Banked v2 predecessor.
 
 ## 2026-09-17 raw 18/54 corrective adoption
 

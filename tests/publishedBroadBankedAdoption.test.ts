@@ -32,12 +32,12 @@ import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 test("public governance retains broad-banked v2 as a historical period before Survival and Adaptive promotion", () => {
   assert.equal(PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT, "2026-09-18T06:00:00.000Z");
   assert.equal(PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE, "2026-09-18");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(
     PUBLISHED_BROAD_BANKED_V2_PREVIOUS_MODEL_VERSION,
     RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
   );
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
 });
 
 test("published period classification has a half-open raw-v1 period and exact v2 adoption", () => {

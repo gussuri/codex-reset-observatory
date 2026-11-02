@@ -121,14 +121,25 @@ export function AboutView({ locale }: AboutViewProps) {
                 {translateUI("aboutSupportBody", locale)}
               </p>
             </div>
-            <SponsorLink
-              className="inline-flex min-h-11 w-full shrink-0 items-center justify-center rounded-md bg-fuchsia-700 px-4 py-2 text-center text-sm font-semibold leading-5 text-white shadow-sm transition-colors hover:bg-fuchsia-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700 focus-visible:ring-offset-2 sm:w-auto"
-              locale={locale}
-              pageType="about"
-              placement="about"
-            >
-              {translateUI("sponsorLink", locale)}
-            </SponsorLink>
+            <div className="flex w-full shrink-0 flex-col gap-2 sm:w-60">
+              <SponsorLink
+                className="inline-flex min-h-11 w-full items-center justify-center rounded-md bg-fuchsia-700 px-4 py-2 text-center text-sm font-semibold leading-5 text-white shadow-sm transition-colors hover:bg-fuchsia-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700 focus-visible:ring-offset-2"
+                locale={locale}
+                pageType="about"
+                placement="about"
+              >
+                {translateUI("sponsorLink", locale)}
+              </SponsorLink>
+              <SponsorLink
+                className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-fuchsia-300 bg-white px-4 py-2 text-center text-sm font-medium leading-5 text-fuchsia-900 transition-colors hover:bg-fuchsia-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-fuchsia-700 focus-visible:ring-offset-2"
+                frequency="one-time"
+                locale={locale}
+                pageType="about"
+                placement="about"
+              >
+                {translateUI("sponsorOneTimeLink", locale)}
+              </SponsorLink>
+            </div>
           </div>
           <p className="mt-4 border-t border-fuchsia-200/80 pt-3 text-xs leading-5 text-slate-600">
             {translateUI("analyticsMeasurementNote", locale)}{" "}

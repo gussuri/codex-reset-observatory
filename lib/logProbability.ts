@@ -16,6 +16,10 @@ import {
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_DATE,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_DATE,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_ADOPTION_AT,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_MODEL_VERSION,
   PUBLISHED_SURVIVAL_CONDITIONED_PREVIOUS_MODEL_VERSION,
   SURVIVAL_CONDITIONED_MODEL_VERSION,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
@@ -498,6 +502,8 @@ export function buildProbabilityDebugInfo(
   const adaptiveRegimeSurvivalPublished = publishedProbability?.adoptedModel === ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION;
   const rawContinuousPublished = publishedProbability?.adoptedModel === RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION;
   const survivalConditionedPublished = publishedProbability?.adoptedModel === SURVIVAL_CONDITIONED_MODEL_VERSION;
+  const restoredSurvivalConditionedPublished = survivalConditionedPublished
+    && publishedProbability?.publicPeriod === "survival-conditioned-v1-restored";
   const publishedConfidence = adaptiveRegimeSurvivalPublished
     ? publishedProbability?.adaptiveRegimeSurvival?.confidence ?? null
     : broadBankedV2Published
@@ -515,7 +521,9 @@ export function buildProbabilityDebugInfo(
     : rawContinuousPublished
     ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE
     : survivalConditionedPublished
-    ? PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_DATE
+    ? restoredSurvivalConditionedPublished
+      ? PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_DATE
+      : PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_DATE
     : PUBLISHED_PROBABILITY_ADOPTION_DATE;
   const publishedAdoptionAt = adaptiveRegimeSurvivalPublished
     ? PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT
@@ -524,7 +532,9 @@ export function buildProbabilityDebugInfo(
     : rawContinuousPublished
     ? PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT
     : survivalConditionedPublished
-    ? PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT
+    ? restoredSurvivalConditionedPublished
+      ? PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT
+      : PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT
     : PUBLISHED_PROBABILITY_ADOPTION_AT;
   const publishedPreviousModelVersion = adaptiveRegimeSurvivalPublished
     ? PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION
@@ -533,7 +543,9 @@ export function buildProbabilityDebugInfo(
     : rawContinuousPublished
     ? PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_MODEL_VERSION
     : survivalConditionedPublished
-    ? PUBLISHED_SURVIVAL_CONDITIONED_PREVIOUS_MODEL_VERSION
+    ? restoredSurvivalConditionedPublished
+      ? PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_MODEL_VERSION
+      : PUBLISHED_SURVIVAL_CONDITIONED_PREVIOUS_MODEL_VERSION
     : PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION;
   const publishedPreviousAdoptionAt = adaptiveRegimeSurvivalPublished
     ? PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT
@@ -542,7 +554,9 @@ export function buildProbabilityDebugInfo(
     : rawContinuousPublished
     ? PUBLISHED_RAW_CONTINUOUS_18_54_PREVIOUS_ADOPTION_AT
     : survivalConditionedPublished
-    ? PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT
+    ? restoredSurvivalConditionedPublished
+      ? PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_ADOPTION_AT
+      : PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT
     : PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT;
 
   return {
