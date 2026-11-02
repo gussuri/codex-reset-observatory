@@ -9,19 +9,25 @@ const root = process.cwd();
 
 const expectedSupportCopy = {
   ja: {
-    title: "サイト運営について",
-    body: "本サイトの開発・運営は、GitHub Sponsorsから任意にご支援いただけます。単発・月額のどちらも選べます。",
-    aboutBody: "GitHub Sponsorsから単発・月額の任意のご支援を受け付けています。支援の有無で予測や閲覧できる情報は変わりません。",
+    title: "無料公開の継続を応援してください",
+    body: "リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsでの支援を募集しています。少額からの継続支援が、開発・運営の支えになります。",
+    link: "GitHub Sponsorsで支援する",
+    aboutTitle: "サイト運営への任意の支援",
+    aboutBody: "本サイトは個人で開発・運営しています。リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsで任意の支援を募集しています。支援の有無によって予測や閲覧できる情報が変わることはありません。",
   },
   en: {
-    title: "Site support",
-    body: "You may support the development and operation of this site through GitHub Sponsors, either once or monthly.",
-    aboutBody: "Optional one-time and monthly support is available through GitHub Sponsors. Support does not affect forecasts or access to information.",
+    title: "Help support the work behind this site",
+    body: "Voluntary support through GitHub Sponsors helps sustain the work of collecting reset information, organizing history, and improving forecasts. Recurring support at any amount helps with development and operation.",
+    link: "Support on GitHub Sponsors",
+    aboutTitle: "Voluntary support for this site",
+    aboutBody: "This site is developed and operated independently. Voluntary support through GitHub Sponsors helps continue collecting reset information, organizing history, and improving forecasts. Sponsorship does not affect forecasts or access to information.",
   },
   zh: {
-    title: "关于本站运营",
-    body: "您可以通过 GitHub Sponsors 自愿支持本站的开发和运营，单次或按月均可。",
-    aboutBody: "您可以通过 GitHub Sponsors 选择单次或按月自愿支持。是否支持不会影响预测结果或可查看的信息。",
+    title: "欢迎支持本站持续运营",
+    body: "我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。任何金额的定期支持都有助于本站的开发与运营。",
+    link: "在 GitHub Sponsors 上支持",
+    aboutTitle: "自愿支持本站运营",
+    aboutBody: "本站由个人独立开发和运营。我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。是否支持不会影响预测结果或可查看的信息。",
   },
 } as const;
 
@@ -36,14 +42,14 @@ test("SponsorLink uses the one canonical destination and safe native navigation"
   assert.equal(GITHUB_SPONSORS_URL, "https://github.com/sponsors/gussuri");
 });
 
-test("support copy is neutral, concise, and consistent in every locale", () => {
+test("support copy preserves the original purpose-focused wording in every locale", () => {
   for (const locale of ["ja", "en", "zh"] as const) {
     const expected = expectedSupportCopy[locale];
     assert.equal(translateUI("sponsorPanelTitle", locale), expected.title);
-    assert.equal(translateUI("aboutSupportHeading", locale), expected.title);
+    assert.equal(translateUI("aboutSupportHeading", locale), expected.aboutTitle);
     assert.equal(translateUI("sponsorPanelBody", locale), expected.body);
     assert.equal(translateUI("aboutSupportBody", locale), expected.aboutBody);
-    assert.equal(translateUI("sponsorLink", locale), "GitHub Sponsors");
+    assert.equal(translateUI("sponsorLink", locale), expected.link);
     assert.notEqual(translateUI("sponsorFooter", locale), "sponsorFooter");
 
     for (const key of [
