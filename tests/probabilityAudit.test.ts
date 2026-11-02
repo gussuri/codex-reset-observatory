@@ -26,12 +26,20 @@ import {
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE,
+  PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
+  PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_DATE,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_DATE,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_MODEL_VERSION,
   PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
+  SURVIVAL_CONDITIONED_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
 import { calculatePublishedProbability } from "../lib/radar/publishedProbability";
+import { frozenSupportShapeSurvivalStaticHistory } from "./fixtures/survivalConditionedHistory";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -112,7 +120,7 @@ test("pre-adoption history classification uses the calibrated fallback under the
   );
   const published = calculatePublishedProbability(data, { now }, { logFallback: false });
 
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.source, "calibrated");
   assert.equal(viewModel.probability24h, published.probability24h);
@@ -163,6 +171,48 @@ test("published audit metadata distinguishes broad-banked v2 from historical raw
   assert.equal(historicalAudit.adoptionAt, PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT);
   assert.equal(historicalAudit.previousModelVersion, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(historicalAudit.previousAdoptionAt, PUBLISHED_PROBABILITY_V4_ROLLBACK_AT);
+});
+
+test("Survival v1 audit metadata distinguishes its historical and restored public periods", () => {
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory();
+  const readAudit = (now: Date) => {
+    const published = calculatePublishedProbability(null, {
+      now,
+      staticHistory,
+      activeOfficialNotice: null,
+    }, { logFallback: false });
+    const debug = buildProbabilityDebugInfo(
+      {},
+      published.primary,
+      now.toISOString(),
+      now,
+      null,
+      published,
+    );
+    return { published, audit: debug.publishedProbabilityModel as Record<string, unknown> };
+  };
+
+  const historical = readAudit(new Date("2026-09-20T00:00:00.000Z"));
+  assert.equal(historical.published.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(historical.published.publicPeriod, "survival-conditioned-v1");
+  assert.equal(historical.audit.adoptionDate, PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_DATE);
+  assert.equal(historical.audit.adoptionAt, PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT);
+  assert.equal(historical.audit.previousModelVersion, BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION);
+  assert.equal(historical.audit.previousAdoptionAt, PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT);
+  assert.equal(Object.hasOwn(historical.audit, "publicPeriod"), false);
+
+  const restored = readAudit(new Date(PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT!));
+  assert.equal(restored.published.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(restored.published.publicPeriod, "survival-conditioned-v1-restored");
+  assert.equal(restored.audit.adoptionDate, PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_DATE);
+  assert.equal(restored.audit.adoptionAt, PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT);
+  assert.equal(
+    restored.audit.previousModelVersion,
+    PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_MODEL_VERSION,
+  );
+  assert.equal(restored.audit.previousModelVersion, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(restored.audit.previousAdoptionAt, PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT);
+  assert.equal(Object.hasOwn(restored.audit, "publicPeriod"), false);
 });
 
 test("elapsed reset time uses fractional real days rather than calendar days", () => {

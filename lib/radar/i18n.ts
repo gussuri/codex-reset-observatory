@@ -893,14 +893,19 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "欢迎支持本站持续运营",
   },
   sponsorPanelBody: {
-    ja: "リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsでの支援を募集しています。少額からの継続支援が、開発・運営の支えになります。",
-    en: "Voluntary support through GitHub Sponsors helps sustain the work of collecting reset information, organizing history, and improving forecasts. Recurring support at any amount helps with development and operation.",
-    zh: "我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。任何金额的定期支持都有助于本站的开发与运营。",
+    ja: "リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsで任意の支援を募集しています。一回だけでも月額でも、開発・運営の支えになります。",
+    en: "Voluntary support through GitHub Sponsors helps sustain the work of collecting reset information, organizing history, and improving forecasts. You can choose one-time or monthly support.",
+    zh: "我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。您可以选择一次性或按月支持。",
   },
   sponsorLink: {
     ja: "GitHub Sponsorsで支援する",
     en: "Support on GitHub Sponsors",
     zh: "在 GitHub Sponsors 上支持",
+  },
+  sponsorOneTimeLink: {
+    ja: "一回だけ支援する",
+    en: "Make a one-time contribution",
+    zh: "一次性支持",
   },
   sponsorFooter: {
     ja: "運営を支援",
@@ -913,9 +918,9 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "自愿支持本站运营",
   },
   aboutSupportBody: {
-    ja: "本サイトは個人で開発・運営しています。リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsで任意の支援を募集しています。支援の有無によって予測や閲覧できる情報が変わることはありません。",
-    en: "This site is developed and operated independently. Voluntary support through GitHub Sponsors helps continue collecting reset information, organizing history, and improving forecasts. Sponsorship does not affect forecasts or access to information.",
-    zh: "本站由个人独立开发和运营。我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。是否支持不会影响预测结果或可查看的信息。",
+    ja: "本サイトは個人で開発・運営しています。GitHub Sponsorsでは、一回だけの支援と月額支援を選べます。支援の有無によって予測や閲覧できる情報が変わることはありません。",
+    en: "This site is developed and operated independently. GitHub Sponsors offers both one-time and monthly support. Sponsorship does not affect forecasts or access to information.",
+    zh: "本站由个人独立开发和运营。您可以通过 GitHub Sponsors 选择一次性或按月支持。是否支持不会影响预测结果或可查看的信息。",
   },
   analyticsMeasurementNote: {
     ja: "Google Analyticsを設定している場合、ページ閲覧とスポンサーリンクのクリックを計測します。Googleのサービスを利用するサイトでは、訪問ページのURL、IPアドレスやCookie等がGoogleに送られることがあります。スポンサークリックイベントに含めるのは配置場所・表示言語・ページ種別です。詳しくはGoogleのサイト・アプリ情報の利用とプライバシーポリシーをご覧ください。計測を希望しない場合は、オプトアウト アドオンをご確認ください。",

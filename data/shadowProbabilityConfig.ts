@@ -378,12 +378,23 @@ export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE: string | null =
 export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION =
   SURVIVAL_CONDITIONED_MODEL_VERSION;
 
-// The current public identity is Adaptive Regime Survival v2. Survival v1
-// remains its immediate historical period and runtime fallback.
-export const PUBLISHED_PROBABILITY_MODEL_VERSION =
+// Survival v1 is restored prospectively at a distinct public boundary after
+// the Adaptive v2 campaign period. Neither historical period is rewritten.
+export const PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT: string | null =
+  "2026-11-02T15:30:00.000Z";
+export const PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_DATE: string | null =
+  "2026-11-03";
+export const PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_MODEL_VERSION =
   ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION;
-export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION =
+export const PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_ADOPTION_AT =
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT;
+
+// Current/previous aliases describe the latest public period, while the
+// adoption constants above preserve both earlier periods for replay and audit.
+export const PUBLISHED_PROBABILITY_MODEL_VERSION =
   SURVIVAL_CONDITIONED_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION =
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION;
 
 // Prospective context-aware shadow layered on the fixed 18/54 challenger.
 // This is intentionally a separate identity and freeze boundary; it is never

@@ -14,6 +14,7 @@ const localeHome = {
     header: "♡ 運営を支援",
     panel: "無料公開の継続を応援してください",
     link: "GitHub Sponsorsで支援する",
+    oneTimeLink: "一回だけ支援する",
     footer: "運営を支援",
   },
   en: {
@@ -21,6 +22,7 @@ const localeHome = {
     header: "♡ Support the project",
     panel: "Help support the work behind this site",
     link: "Support on GitHub Sponsors",
+    oneTimeLink: "Make a one-time contribution",
     footer: "Support this project",
   },
   zh: {
@@ -28,6 +30,7 @@ const localeHome = {
     header: "♡ 支持本站运营",
     panel: "欢迎支持本站持续运营",
     link: "在 GitHub Sponsors 上支持",
+    oneTimeLink: "一次性支持",
     footer: "支持本站",
   },
 } as const;
@@ -73,7 +76,7 @@ async function prepareSponsorPage(page: Page) {
       body: JSON.stringify({ schemaVersion: "reset-marker-v1", marker: null, resetAt: null }),
     }),
   );
-  await page.route("https://github.com/sponsors/gussuri", (route) =>
+  await page.route("https://github.com/sponsors/**", (route) =>
     route.fulfill({ status: 200, contentType: "text/html", body: "<title>Sponsors test</title>" }),
   );
   await page.route("https://www.googletagmanager.com/**", (route) => route.abort());
@@ -86,11 +89,15 @@ async function prepareSponsorPage(page: Page) {
   return browserErrors;
 }
 
-async function expectSponsorPopup(page: Page, link: Locator) {
+async function expectSponsorPopup(
+  page: Page,
+  link: Locator,
+  expectedUrl = "https://github.com/sponsors/gussuri",
+) {
   const popupPromise = page.waitForEvent("popup");
   await link.click();
   const popup = await popupPromise;
-  await expect(popup).toHaveURL("https://github.com/sponsors/gussuri");
+  await expect(popup).toHaveURL(expectedUrl);
   expect(await popup.evaluate(() => window.opener)).toBeNull();
   await popup.close();
 }
@@ -110,6 +117,10 @@ test("home support CTA is localized, prominent, and fits mobile and desktop", as
     await expect(page.getByRole("link", { name: copy.header, exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: copy.panel, exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: copy.link, exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: copy.oneTimeLink, exact: true })).toHaveAttribute(
+      "href",
+      "https://github.com/sponsors/gussuri?frequency=one-time",
+    );
     await expect(page.getByRole("link", { name: copy.footer, exact: true })).toBeAttached();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -153,6 +164,10 @@ test("About support and privacy information fit each locale", async ({ page }) =
     await page.goto(copy.path);
     await expect(page.getByRole("heading", { name: copy.heading, exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: localeHome[locale].link, exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: localeHome[locale].oneTimeLink, exact: true })).toHaveAttribute(
+      "href",
+      "https://github.com/sponsors/gussuri?frequency=one-time",
+    );
     await expect(page.getByRole("link", { name: /Google uses information|サイト・アプリ情報の利用|来自网站和应用的信息/ })).toHaveAttribute(
       "href",
       /https:\/\/policies\.google\.com\/technologies\/partner-sites\?hl=/,
@@ -215,10 +230,25 @@ test("sponsor links emit one low-cardinality event and preserve outbound navigat
     ["event", "sponsor_click", { placement: "panel", locale: "ja", page_type: "home" }],
   ]);
 
+  const oneTimeLink = page.getByRole("link", { name: localeHome.ja.oneTimeLink, exact: true });
+  await oneTimeLink.focus();
+  const oneTimeKeyboardPopup = page.waitForEvent("popup");
+  await page.keyboard.press("Enter");
+  const openedOneTimeFromKeyboard = await oneTimeKeyboardPopup;
+  await expect(openedOneTimeFromKeyboard).toHaveURL(
+    "https://github.com/sponsors/gussuri?frequency=one-time",
+  );
+  await openedOneTimeFromKeyboard.close();
+  expect(await page.evaluate(() => window.__sponsorEvents)).toEqual([
+    ["event", "sponsor_click", { placement: "header", locale: "ja", page_type: "home" }],
+    ["event", "sponsor_click", { placement: "panel", locale: "ja", page_type: "home" }],
+    ["event", "sponsor_click", { placement: "panel", locale: "ja", page_type: "home" }],
+  ]);
+
   const footerLink = page.getByRole("link", { name: localeHome.ja.footer, exact: true });
   await footerLink.scrollIntoViewIfNeeded();
   await expectSponsorPopup(page, footerLink);
-  expect(await page.evaluate(() => window.__sponsorEvents)).toHaveLength(3);
+  expect(await page.evaluate(() => window.__sponsorEvents)).toHaveLength(4);
 
   await page.goto("/en/about");
   await page.evaluate(() => {
@@ -227,6 +257,11 @@ test("sponsor links emit one low-cardinality event and preserve outbound navigat
     };
   });
   await expectSponsorPopup(page, page.getByRole("link", { name: localeHome.en.link, exact: true }));
+  await expectSponsorPopup(
+    page,
+    page.getByRole("link", { name: localeHome.en.oneTimeLink, exact: true }),
+    "https://github.com/sponsors/gussuri?frequency=one-time",
+  );
 
   await page.goto("/history");
   await page.evaluate(() => {

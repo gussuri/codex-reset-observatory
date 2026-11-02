@@ -28,10 +28,14 @@ import {
   PUBLISHED_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
+  PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_STABLE_FALLBACK_MODEL_VERSION,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_DATE,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_MODEL_VERSION,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_ADOPTION_AT,
@@ -102,14 +106,20 @@ function calculatePublishedSurvivalAt(now: Date, staticHistory: WindowEventLike[
   return published.survivalConditioned;
 }
 
-test("the current public model is Adaptive Regime Survival v2 with Survival-Conditioned v1 as its previous baseline", () => {
+test("the current public model is restored Survival-Conditioned v1 with Adaptive Regime Survival v2 as its previous baseline", () => {
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION, "hazard-odds-v4-logit-calibrated-prequential-v3");
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION_V2, "hazard-odds-v4-logit-calibrated-prequential-v2");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
   assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT, "2026-10-29T12:20:00.000Z");
   assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE, "2026-10-29");
+  assert.equal(PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT, "2026-11-02T15:30:00.000Z");
+  assert.equal(PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_DATE, "2026-11-03");
+  assert.equal(
+    PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_MODEL_VERSION,
+    ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
+  );
   assert.equal(PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION, NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION);
 });
 
@@ -151,7 +161,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.calibrated);
   assert.ok(published.rawShadow);
   assert.equal(ELAPSED_ONLY_MODEL_VERSION, "hazard-elapsed-v1");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.deepEqual(PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS, {
@@ -399,7 +409,7 @@ test("view model and public DTO share the actual completed reset boundary", () =
   assert.equal(snapshot.viewModel.probability24h, published.probability24h);
 });
 
-test("public DTO and UI expose v2 probabilities without diagnostic-only fields", () => {
+test("public DTO and UI expose forecast probabilities without diagnostic-only fields", () => {
   const now = new Date("2026-09-18T06:10:00.000Z");
   const data = getLocalRadarData({ calculationNow: now });
   const snapshot = toPublicRadarSnapshot(data, "ja", {
@@ -981,6 +991,82 @@ test("configured public boundary adopts v2 exactly at 12:20Z and null override r
     getPublishedProbabilityPeriodAt(afterAt, { adaptiveRegimeSurvivalAdoptionAt: null }),
     "survival-conditioned-v1",
   );
+});
+
+test("Survival v1 restoration has a distinct forward public period and preserves old boundaries", () => {
+  const restorationAt = PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT;
+  assert.ok(restorationAt);
+  assert.equal(PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT, "2026-09-19T06:00:00.000Z");
+  assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT, "2026-10-29T12:20:00.000Z");
+
+  const restorationTime = Date.parse(restorationAt);
+  const beforeAt = new Date(restorationTime - 1);
+  const boundaryAt = new Date(restorationTime);
+  const afterAt = new Date(restorationTime + 1);
+
+  assert.equal(getPublishedProbabilityPeriodAt("2026-09-19T05:59:59.999Z"), "broad-banked-v2");
+  assert.equal(getPublishedProbabilityPeriodAt("2026-09-19T06:00:00.000Z"), "survival-conditioned-v1");
+  assert.equal(getPublishedProbabilityPeriodAt("2026-10-29T12:19:59.999Z"), "survival-conditioned-v1");
+  assert.equal(getPublishedProbabilityPeriodAt("2026-10-29T12:20:00.000Z"), "adaptive-regime-survival-v2");
+  assert.equal(getPublishedProbabilityPeriodAt(beforeAt), "adaptive-regime-survival-v2");
+  assert.equal(getPublishedProbabilityPeriodAt(boundaryAt), "survival-conditioned-v1-restored");
+  assert.equal(getPublishedProbabilityPeriodAt(afterAt), "survival-conditioned-v1-restored");
+  assert.equal(
+    getPublishedProbabilityPeriodAt(boundaryAt, { survivalConditionedRestorationAt: null }),
+    "adaptive-regime-survival-v2",
+  );
+  assert.equal(
+    getPublishedProbabilityPeriodAt(boundaryAt, { survivalConditionedRestorationAt: "not-a-date" }),
+    "adaptive-regime-survival-v2",
+  );
+  assert.equal(getPublishedProbabilityPeriodAt("not-a-date"), null);
+});
+
+test("restored public period reuses frozen Survival v1 without invoking Adaptive v2", () => {
+  const now = new Date(PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT!);
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory();
+  let survivalCalls = 0;
+  let adaptiveCalls = 0;
+  const published = calculatePublishedProbability(null, {
+    now,
+    staticHistory,
+    activeOfficialNotice: null,
+  }, {
+    logFallback: false,
+    survivalConditionedCalculator: (data, options) => {
+      survivalCalls += 1;
+      return calculateSurvivalConditionedProbability(data, options);
+    },
+    adaptiveRegimeSurvivalCalculator: (survivalBase) => {
+      adaptiveCalls += 1;
+      return calculateAdaptiveRegimeSurvivalProbability(survivalBase);
+    },
+  });
+  const expected = calculateSurvivalConditionedProbability(null, {
+    now: roundPublicProbabilityTime(now),
+    staticHistory,
+    activeOfficialNotice: null,
+  });
+
+  assert.equal(published.publicPeriod, "survival-conditioned-v1-restored");
+  assert.equal(published.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(published.source, "survival-conditioned");
+  assert.equal(published.adaptiveRegimeSurvival, null);
+  assert.equal(survivalCalls, 1);
+  assert.equal(adaptiveCalls, 0);
+  assert.deepEqual(
+    [published.probability12h, published.probability24h, published.probability48h, published.probability72h],
+    [expected.predictions.probability12h, expected.predictions.probability24h, expected.predictions.probability48h, expected.predictions.probability72h],
+  );
+
+  const nullDisabled = calculatePublishedProbability(null, {
+    now,
+    staticHistory,
+    activeOfficialNotice: null,
+    publishedSurvivalConditionedRestorationAt: null,
+  }, { logFallback: false });
+  assert.equal(nullDisabled.publicPeriod, "adaptive-regime-survival-v2");
+  assert.equal(nullDisabled.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
 });
 
 test("the internal adaptive v2 override reaches public DTO calculation without exposing diagnostics", () => {

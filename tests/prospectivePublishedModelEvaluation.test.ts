@@ -21,6 +21,7 @@ import {
   NEXT_GENERATION_V3_MODEL_VERSION,
   PUBLISHED_PROBABILITY_MODEL_VERSION,
   PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
   PUBLISHED_SELECTIVE_V3_MODEL_VERSION,
   PUBLISHED_SELECTIVE_V3_PREVIOUS_MODEL_VERSION,
 } from "../data/shadowProbabilityConfig";
@@ -112,7 +113,7 @@ function emptyReport(rows: ProspectiveForecastRow[] = []) {
   return evaluatePublishedModelProspectively(rows, [], new Date("2026-08-05T00:00:00.000Z"), { adoptionAt: null });
 }
 
-test("published prospective evaluation uses Survival-Conditioned v1 after its boundary and broad-banked v2 as the baseline", () => {
+test("published prospective evaluation uses restored Survival v1 with Adaptive v2 as the baseline", () => {
   assert.equal(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, PUBLISHED_PROBABILITY_MODEL_VERSION);
   assert.notEqual(PROSPECTIVE_PUBLISHED_ACTIVE_MODEL_VERSION, NEXT_GENERATION_SELECTIVE_CALIBRATION_MODEL_VERSION);
   assert.equal(PROSPECTIVE_PUBLISHED_BASELINE_MODEL_VERSION, PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION);
@@ -134,17 +135,18 @@ test("the default prospective canonical truth uses the broad-banked v2 eligibili
   assert.equal(BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_POLICY, "broad-banked-boundary-v2");
 });
 
-test("the default prospective adoption boundary is the exact Survival-Conditioned v1 boundary", () => {
-  const generatedAt = "2026-09-19T06:00:00.000Z";
+test("the default prospective adoption boundary is the exact Survival v1 restoration boundary", () => {
+  const historicalAt = "2026-09-19T06:00:00.000Z";
+  const generatedAt = PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT!;
   const report = evaluatePublishedModelProspectively(
-    [forecastRow(generatedAt)],
+    [forecastRow(historicalAt), forecastRow(generatedAt)],
     [],
-    new Date("2026-09-20T00:00:00.000Z"),
+    new Date("2026-11-04T00:00:00.000Z"),
   );
 
   assert.equal(report.forecastCounts.comparable, 1);
   assert.equal(report.evaluationStartAt, generatedAt);
-  assert.match(report.notes.join("\n"), /2026-09-19T06:00:00\.000Z/);
+  assert.match(report.notes.join("\n"), /2026-11-02T15:30:00\.000Z/);
 });
 
 test("published metric formatting includes bias without breaking legacy metric callers", () => {

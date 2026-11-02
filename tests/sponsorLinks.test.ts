@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { GITHUB_SPONSORS_URL } from "../lib/sponsorAnalytics";
+import {
+  GITHUB_SPONSORS_ONE_TIME_URL,
+  GITHUB_SPONSORS_URL,
+  getGitHubSponsorsUrl,
+} from "../lib/sponsorAnalytics";
 import { translateUI } from "../lib/radar/i18n";
 
 const root = process.cwd();
@@ -10,12 +14,20 @@ const root = process.cwd();
 test("sponsor links use the fixed destination and safe native outbound navigation", () => {
   const source = readFileSync(join(root, "components/SponsorLink.tsx"), "utf8");
 
-  assert.match(source, /href={GITHUB_SPONSORS_URL}/);
+  assert.match(source, /frequency\?: SponsorFrequency/);
+  assert.match(source, /href={getGitHubSponsorsUrl\(frequency\)}/);
   assert.match(source, /target="_blank"/);
   assert.match(source, /rel="noopener noreferrer"/);
   assert.match(source, /onClick=\{\(\) => trackSponsorClick\(/);
   assert.doesNotMatch(source, /preventDefault|window\.location/);
   assert.equal(GITHUB_SPONSORS_URL, "https://github.com/sponsors/gussuri");
+  assert.equal(
+    GITHUB_SPONSORS_ONE_TIME_URL,
+    "https://github.com/sponsors/gussuri?frequency=one-time",
+  );
+  assert.equal(getGitHubSponsorsUrl(), GITHUB_SPONSORS_URL);
+  assert.equal(getGitHubSponsorsUrl("monthly"), GITHUB_SPONSORS_URL);
+  assert.equal(getGitHubSponsorsUrl("one-time"), GITHUB_SPONSORS_ONE_TIME_URL);
 });
 
 test("support copy is complete and natural in every supported locale", () => {
@@ -27,6 +39,9 @@ test("support copy is complete and natural in every supported locale", () => {
 
   for (const locale of ["ja", "en", "zh"] as const) {
     assert.equal(translateUI("sponsorLink", locale), expectedLabels[locale]);
+    assert.notEqual(translateUI("sponsorOneTimeLink", locale), "sponsorOneTimeLink");
+    assert.match(translateUI("sponsorPanelBody", locale), /one-time|一回|一次性/i);
+    assert.match(translateUI("aboutSupportBody", locale), /one-time|一回|一次性/i);
     for (const key of [
       "sponsorHeader",
       "sponsorPanelTitle",
@@ -34,6 +49,7 @@ test("support copy is complete and natural in every supported locale", () => {
       "sponsorFooter",
       "aboutSupportHeading",
       "aboutSupportBody",
+      "sponsorOneTimeLink",
       "analyticsMeasurementNote",
       "googleSitesAndAppsInfo",
       "googlePrivacyPolicy",

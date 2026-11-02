@@ -33,6 +33,7 @@ import {
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
+  PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
   PUBLISHED_PROBABILITY_B_MODEL_ADOPTION_AT,
   PUBLISHED_PROBABILITY_HISTORICAL_V4_ADOPTION_AT,
@@ -131,7 +132,8 @@ export type PublicProbabilityPeriodId =
   | "raw-continuous-18-54"
   | "broad-banked-v2"
   | "survival-conditioned-v1"
-  | "adaptive-regime-survival-v2";
+  | "adaptive-regime-survival-v2"
+  | "survival-conditioned-v1-restored";
 
 export type PublicProbabilityPeriodEntry = {
   id: PublicProbabilityPeriodId;
@@ -710,9 +712,9 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     variant: "adaptive-h45-tail-h24",
     revision: "v1",
     kind: "forecast",
-    publicStatus: "historical",
+    publicStatus: "current",
     status: "active",
-    roles: ["fallback", "experimental-log"],
+    roles: ["public-runtime", "fallback", "experimental-log"],
     parentModelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
     comparisonBaselineModelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
     freezeAt: SURVIVAL_CONDITIONED_FREEZE_AT,
@@ -721,7 +723,7 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     truncationHours: null,
     calibration: "none",
     differenceFromParent: "Conditions the random-reset hazard on survival age using completed broad-banked intervals, H45 recency weighting, adaptive 6-24h smoothing, and an H24 tail return toward the weighted long-run rate.",
-    notes: "Historical public model through the Adaptive Regime Survival v2 boundary; retained as its runtime fallback and comparison baseline.",
+    notes: "Current public identity, with the original September 19 period and a distinct restored period from the November 3 boundary; the frozen estimator is unchanged.",
   }),
   model({
     key: "adaptive-regime-survival/base/v2",
@@ -731,7 +733,7 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     variant: "base",
     revision: "v2",
     kind: "forecast",
-    publicStatus: "current",
+    publicStatus: "historical",
     status: "active",
     roles: ["public-runtime", "experimental-log"],
     parentModelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
@@ -741,7 +743,7 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     bandwidthHours: SURVIVAL_CONDITIONED_BIN_HOURS,
     calibration: "none",
     differenceFromParent: "Applies a 72h decayed, 48h-prior-shrunk recent random-boundary rate multiplier through the existing v1 age hazard, then reuses the v1 signal, teaser, and notice policies.",
-    notes: "Current public model from the explicit 2026-10-29T12:20:00.000Z adoption boundary; earlier origins retain the Survival-Conditioned v1 identity.",
+    notes: "Historical public model from the explicit 2026-10-29T12:20:00.000Z adoption boundary through the forward Survival-Conditioned v1 restoration boundary.",
   }),
   ...[
     ["previous-interval", SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION],
@@ -962,7 +964,7 @@ export const PUBLIC_PROBABILITY_PERIOD_REGISTRY: readonly PublicProbabilityPerio
         startAt: PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
         endAt: PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
         adoptionMode: "manual" as const,
-        note: "Promoted survival-conditioned public period; adoption is boundary-defined and does not rewrite earlier rows.",
+        note: "Original Survival-Conditioned v1 public period; its historical boundary and saved rows are retained unchanged.",
       }]),
   ...(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT === null
     ? []
@@ -970,9 +972,19 @@ export const PUBLIC_PROBABILITY_PERIOD_REGISTRY: readonly PublicProbabilityPerio
         id: "adaptive-regime-survival-v2" as const,
         modelVersion: ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
         startAt: PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
-        endAt: null,
+        endAt: PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
         adoptionMode: "manual" as const,
         note: "Adaptive regime survival v2 public period begins only at its explicit forward adoption boundary; earlier forecasts keep their saved identity.",
+      }]),
+  ...(PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT === null
+    ? []
+    : [{
+        id: "survival-conditioned-v1-restored" as const,
+        modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
+        startAt: PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
+        endAt: null,
+        adoptionMode: "manual" as const,
+        note: "Prospective restoration of the frozen Survival-Conditioned v1 identity; the new boundary distinguishes this period from its historical v1 period.",
       }]),
 ];
 
@@ -1001,9 +1013,9 @@ export function getPublicProbabilityPeriods() {
 }
 
 export function getCurrentPublicProbabilityPeriod() {
-  return PUBLIC_PROBABILITY_PERIOD_REGISTRY.find(
+  return PUBLIC_PROBABILITY_PERIOD_REGISTRY.filter(
     (period) => period.modelVersion === PROBABILITY_MODEL_POINTERS.currentPublic,
-  )!;
+  ).at(-1)!;
 }
 
 export function getProbabilityPeriodAt(value: Date | string) {
