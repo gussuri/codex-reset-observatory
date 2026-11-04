@@ -115,7 +115,7 @@ export function HistoryView({ data, locale }: HistoryViewProps) {
         />
 
         <footer className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-950 p-5 text-sm text-white shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <nav className="flex flex-wrap gap-3 text-slate-300">
+          <nav className="flex flex-wrap items-center gap-3 text-slate-300">
             <Link className="underline-offset-4 hover:underline" href={locale === "ja" ? "/" : locale === "en" ? "/en" : "/zh"}>
               {content.nav.top}
             </Link>
