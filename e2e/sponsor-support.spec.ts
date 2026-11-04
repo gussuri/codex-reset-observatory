@@ -111,7 +111,74 @@ async function expectSponsorPopup(
   await popup.close();
 }
 
-test("home sponsor button is localized, single, and fits mobile and desktop", async ({ page }) => {
+async function expectHomeSponsorPanelPlacement(page: Page) {
+  const placement = await page.evaluate(() => {
+    const explanation = document.querySelector('section[aria-labelledby="homepage-explanation-title"]');
+    const panel = document.querySelector('section[aria-labelledby="sponsor-support-title"]');
+    const footer = document.querySelector("main > div > footer");
+
+    return {
+      explanationImmediatelyBeforePanel: explanation?.nextElementSibling === panel,
+      panelImmediatelyBeforeFooter: panel?.nextElementSibling === footer,
+      panelCount: document.querySelectorAll('section[aria-labelledby="sponsor-support-title"]').length,
+    };
+  });
+
+  expect(placement).toEqual({
+    explanationImmediatelyBeforePanel: true,
+    panelImmediatelyBeforeFooter: true,
+    panelCount: 1,
+  });
+}
+
+async function expectFooterSponsorTextAligned(page: Page, sponsorLabel: string) {
+  const sponsor = page.getByRole("link", { name: sponsorLabel, exact: true });
+  const alignment = await sponsor.evaluate((element) => {
+    const container = element.parentElement;
+    const sponsorBox = element.getBoundingClientRect();
+
+    const getTextCenter = (anchor: Element) => {
+      const walker = document.createTreeWalker(anchor, NodeFilter.SHOW_TEXT);
+      let firstTop = Number.POSITIVE_INFINITY;
+      let lastBottom = Number.NEGATIVE_INFINITY;
+
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode;
+        if (!textNode.textContent?.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(textNode);
+        for (const rect of Array.from(range.getClientRects())) {
+          firstTop = Math.min(firstTop, rect.top);
+          lastBottom = Math.max(lastBottom, rect.bottom);
+        }
+      }
+
+      return (firstTop + lastBottom) / 2;
+    };
+
+    const peers = container
+      ? Array.from(container.querySelectorAll(":scope > a")).filter((peer) => {
+          if (peer === element) return false;
+          const peerBox = peer.getBoundingClientRect();
+          return peerBox.top < sponsorBox.bottom && peerBox.bottom > sponsorBox.top;
+        })
+      : [];
+
+    return {
+      alignItems: container ? getComputedStyle(container).alignItems : "missing",
+      sponsorCenter: getTextCenter(element),
+      peerCenters: peers.map(getTextCenter),
+    };
+  });
+
+  expect(alignment.alignItems).toBe("center");
+  expect(alignment.peerCenters.length).toBeGreaterThan(0);
+  for (const peerCenter of alignment.peerCenters) {
+    expect(Math.abs(alignment.sponsorCenter - peerCenter)).toBeLessThanOrEqual(1.5);
+  }
+}
+
+test("home support panel follows the explanation and footer links align across locales", async ({ page }) => {
   const browserErrors = await prepareSponsorPage(page);
 
   const screenshotDirectory = process.env.SPONSOR_SCREENSHOT_DIR;
@@ -152,6 +219,8 @@ test("home sponsor button is localized, single, and fits mobile and desktop", as
     ).toBe(true);
 
     await page.setViewportSize({ width: 375, height: 844 });
+    await expectHomeSponsorPanelPlacement(page);
+    await expectFooterSponsorTextAligned(page, copy.footer);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       `${locale} 375px layout has no horizontal overflow`,
@@ -166,6 +235,8 @@ test("home sponsor button is localized, single, and fits mobile and desktop", as
       page.locator("main > div > header").locator('a[href^="https://github.com/sponsors/"]'),
     ).toHaveCount(0);
     await expect(page.getByRole("region", { name: copy.panelTitle, exact: true })).toBeVisible();
+    await expectHomeSponsorPanelPlacement(page);
+    await expectFooterSponsorTextAligned(page, copy.footer);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       `${locale} desktop layout has no horizontal overflow`,
@@ -283,12 +354,14 @@ test("sponsor links emit one low-cardinality event and preserve outbound navigat
   await expectSponsorPopup(page, aboutSponsor);
 
   await page.goto("/history");
+  await expectFooterSponsorTextAligned(page, localeHome.ja.footer);
   await page.evaluate(() => {
     delete window.gtag;
   });
   await expectSponsorPopup(page, page.getByRole("link", { name: localeHome.ja.footer, exact: true }));
 
   await page.goto("/zh/faq");
+  await expectFooterSponsorTextAligned(page, localeHome.zh.footer);
   await expectSponsorPopup(page, page.getByRole("link", { name: localeHome.zh.footer, exact: true }));
   expect(await page.evaluate(() => window.__sponsorEvents)).toEqual([
     ["event", "sponsor_click", { placement: "footer", locale: "zh", page_type: "faq" }],

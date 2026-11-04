@@ -1209,8 +1209,6 @@ export function RadarDashboard({
 
         </section>
 
-        <SponsorSupportPanel locale={locale} />
-
         {shouldRenderRelatedTibo ? tiboActivityCard : null}
 
         {!isDataUnavailable &&
@@ -1384,10 +1382,12 @@ export function RadarDashboard({
           </nav>
         </section>
 
+        <SponsorSupportPanel locale={locale} />
+
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <nav
             aria-label={SITE_NAME}
-            className="flex flex-wrap gap-3 text-sm text-slate-300"
+            className="flex flex-wrap items-center gap-3 text-sm text-slate-300"
           >
             <Link className="underline-offset-4 hover:underline" href={locale === "ja" ? "/about" : `/${locale}/about`}>
               {translateUI("about", locale)}
