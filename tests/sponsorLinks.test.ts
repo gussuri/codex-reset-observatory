@@ -78,13 +78,19 @@ test("home has no header Sponsors CTA and each support section has one link", ()
   const about = read("components/AboutView.tsx");
   const sponsorLinkCount = (source: string) => (source.match(/<SponsorLink\b/g) ?? []).length;
 
+  const recentResetEventsIndex = home.indexOf('translateUI("recentResetEvents", locale)');
   const sponsorPanelIndex = home.indexOf("<SponsorSupportPanel locale={locale} />");
-  const observationGuideIndex = home.indexOf("<ObservationGuide locale={locale} />");
+  const heatmapIndex = home.indexOf("<RandomResetTimeHeatmap");
+  assert.ok(recentResetEventsIndex !== -1, "recentResetEvents should be present in RadarDashboard");
   assert.ok(sponsorPanelIndex !== -1, "SponsorSupportPanel should be present in RadarDashboard");
-  assert.ok(observationGuideIndex !== -1, "ObservationGuide should be present in RadarDashboard");
+  assert.ok(heatmapIndex !== -1, "RandomResetTimeHeatmap should be present in RadarDashboard");
   assert.ok(
-    sponsorPanelIndex < observationGuideIndex,
-    "SponsorSupportPanel must appear before ObservationGuide in RadarDashboard",
+    recentResetEventsIndex < sponsorPanelIndex,
+    "SponsorSupportPanel must appear after recentResetEvents in RadarDashboard",
+  );
+  assert.ok(
+    sponsorPanelIndex < heatmapIndex,
+    "SponsorSupportPanel must appear before RandomResetTimeHeatmap in RadarDashboard",
   );
 
   assert.doesNotMatch(home, /placement="header"/);

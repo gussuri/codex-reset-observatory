@@ -1342,14 +1342,14 @@ export function RadarDashboard({
           ) : null}
         </section>
 
+        <SponsorSupportPanel locale={locale} />
+
         <RandomResetTimeHeatmap
           eventTimes={randomResetHeatmapEventTimes}
           locale={locale}
         />
 
         {!shouldRenderRelatedTibo ? tiboActivityCard : null}
-
-        <SponsorSupportPanel locale={locale} />
 
         <ObservationGuide locale={locale} />
 

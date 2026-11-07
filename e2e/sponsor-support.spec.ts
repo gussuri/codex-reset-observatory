@@ -117,9 +117,11 @@ async function expectHomeSponsorPanelPlacement(page: Page) {
     const guide = document.querySelector('section[aria-labelledby="observation-guide-title"]');
     const explanation = document.querySelector('section[aria-labelledby="homepage-explanation-title"]');
     const footer = document.querySelector("main > div > footer");
+    const nextSibling = panel?.nextElementSibling;
+    const heatmapLabels = ["過去のランダムリセット時刻", "Past random reset times", "过去的随机重置时间"];
 
     return {
-      panelImmediatelyBeforeGuide: panel?.nextElementSibling === guide,
+      panelImmediatelyBeforeHeatmap: heatmapLabels.includes(nextSibling?.getAttribute("aria-label") ?? ""),
       guideImmediatelyBeforeExplanation: guide?.nextElementSibling === explanation,
       explanationImmediatelyBeforeFooter: explanation?.nextElementSibling === footer,
       panelCount: document.querySelectorAll('section[aria-labelledby="sponsor-support-title"]').length,
@@ -127,7 +129,7 @@ async function expectHomeSponsorPanelPlacement(page: Page) {
   });
 
   expect(placement).toEqual({
-    panelImmediatelyBeforeGuide: true,
+    panelImmediatelyBeforeHeatmap: true,
     guideImmediatelyBeforeExplanation: true,
     explanationImmediatelyBeforeFooter: true,
     panelCount: 1,
