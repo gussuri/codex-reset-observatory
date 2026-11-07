@@ -12,21 +12,21 @@ const localeHome = {
   ja: {
     path: "/",
     panelTitle: "無料公開の継続を応援してください",
-    panelBody: "リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsでの支援を募集しています。少額からの継続支援が、開発・運営の支えになります。",
+    panelBody: "リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsでの支援を募集しています。単発・月額を問わず、少額からのご支援がサーバー維持や開発・運営の支えになります。",
     link: "GitHub Sponsorsで支援する",
     footer: "運営を支援",
   },
   en: {
     path: "/en",
     panelTitle: "Help support the work behind this site",
-    panelBody: "Voluntary support through GitHub Sponsors helps sustain the work of collecting reset information, organizing history, and improving forecasts. Recurring support at any amount helps with development and operation.",
+    panelBody: "Voluntary support through GitHub Sponsors helps sustain the work of collecting reset information, organizing history, and improving forecasts. One-time or monthly support at any amount helps cover hosting, development, and operation.",
     link: "Support on GitHub Sponsors",
     footer: "Support this project",
   },
   zh: {
     path: "/zh",
     panelTitle: "欢迎支持本站持续运营",
-    panelBody: "我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。任何金额的定期支持都有助于本站的开发与运营。",
+    panelBody: "我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。无论是单次还是按月小额支持，都能帮助分担服务器与开发运营成本。",
     link: "在 GitHub Sponsors 上支持",
     footer: "支持本站",
   },
@@ -36,17 +36,17 @@ const localeAbout = {
   ja: {
     path: "/about",
     heading: "サイト運営への任意の支援",
-    body: "本サイトは個人で開発・運営しています。リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsで任意の支援を募集しています。支援の有無によって予測や閲覧できる情報が変わることはありません。",
+    body: "本サイトは個人で開発・運営しています。リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsで単発・月額の任意の支援を募集しています。支援の有無によって予測や閲覧できる情報が変わることはありません。",
   },
   en: {
     path: "/en/about",
     heading: "Voluntary support for this site",
-    body: "This site is developed and operated independently. Voluntary support through GitHub Sponsors helps continue collecting reset information, organizing history, and improving forecasts. Sponsorship does not affect forecasts or access to information.",
+    body: "This site is developed and operated independently. Voluntary one-time or monthly support through GitHub Sponsors helps continue collecting reset information, organizing history, and improving forecasts. Sponsorship does not affect forecasts or access to information.",
   },
   zh: {
     path: "/zh/about",
     heading: "自愿支持本站运营",
-    body: "本站由个人独立开发和运营。我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。是否支持不会影响预测结果或可查看的信息。",
+    body: "本站由个人独立开发和运营。我们通过 GitHub Sponsors 接受单次或按月的自愿支持，以便继续收集重置信息、整理历史记录并改进预测。是否支持不会影响预测结果或可查看的信息。",
   },
 } as const;
 
@@ -113,20 +113,23 @@ async function expectSponsorPopup(
 
 async function expectHomeSponsorPanelPlacement(page: Page) {
   const placement = await page.evaluate(() => {
-    const explanation = document.querySelector('section[aria-labelledby="homepage-explanation-title"]');
     const panel = document.querySelector('section[aria-labelledby="sponsor-support-title"]');
+    const guide = document.querySelector('section[aria-labelledby="observation-guide-title"]');
+    const explanation = document.querySelector('section[aria-labelledby="homepage-explanation-title"]');
     const footer = document.querySelector("main > div > footer");
 
     return {
-      explanationImmediatelyBeforePanel: explanation?.nextElementSibling === panel,
-      panelImmediatelyBeforeFooter: panel?.nextElementSibling === footer,
+      panelImmediatelyBeforeGuide: panel?.nextElementSibling === guide,
+      guideImmediatelyBeforeExplanation: guide?.nextElementSibling === explanation,
+      explanationImmediatelyBeforeFooter: explanation?.nextElementSibling === footer,
       panelCount: document.querySelectorAll('section[aria-labelledby="sponsor-support-title"]').length,
     };
   });
 
   expect(placement).toEqual({
-    explanationImmediatelyBeforePanel: true,
-    panelImmediatelyBeforeFooter: true,
+    panelImmediatelyBeforeGuide: true,
+    guideImmediatelyBeforeExplanation: true,
+    explanationImmediatelyBeforeFooter: true,
     panelCount: 1,
   });
 }

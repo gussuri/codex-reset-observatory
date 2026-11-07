@@ -10,24 +10,24 @@ const root = process.cwd();
 const expectedSupportCopy = {
   ja: {
     title: "無料公開の継続を応援してください",
-    body: "リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsでの支援を募集しています。少額からの継続支援が、開発・運営の支えになります。",
+    body: "リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsでの支援を募集しています。単発・月額を問わず、少額からのご支援がサーバー維持や開発・運営の支えになります。",
     link: "GitHub Sponsorsで支援する",
     aboutTitle: "サイト運営への任意の支援",
-    aboutBody: "本サイトは個人で開発・運営しています。リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsで任意の支援を募集しています。支援の有無によって予測や閲覧できる情報が変わることはありません。",
+    aboutBody: "本サイトは個人で開発・運営しています。リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsで単発・月額の任意の支援を募集しています。支援の有無によって予測や閲覧できる情報が変わることはありません。",
   },
   en: {
     title: "Help support the work behind this site",
-    body: "Voluntary support through GitHub Sponsors helps sustain the work of collecting reset information, organizing history, and improving forecasts. Recurring support at any amount helps with development and operation.",
+    body: "Voluntary support through GitHub Sponsors helps sustain the work of collecting reset information, organizing history, and improving forecasts. One-time or monthly support at any amount helps cover hosting, development, and operation.",
     link: "Support on GitHub Sponsors",
     aboutTitle: "Voluntary support for this site",
-    aboutBody: "This site is developed and operated independently. Voluntary support through GitHub Sponsors helps continue collecting reset information, organizing history, and improving forecasts. Sponsorship does not affect forecasts or access to information.",
+    aboutBody: "This site is developed and operated independently. Voluntary one-time or monthly support through GitHub Sponsors helps continue collecting reset information, organizing history, and improving forecasts. Sponsorship does not affect forecasts or access to information.",
   },
   zh: {
     title: "欢迎支持本站持续运营",
-    body: "我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。任何金额的定期支持都有助于本站的开发与运营。",
+    body: "我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。无论是单次还是按月小额支持，都能帮助分担服务器与开发运营成本。",
     link: "在 GitHub Sponsors 上支持",
     aboutTitle: "自愿支持本站运营",
-    aboutBody: "本站由个人独立开发和运营。我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。是否支持不会影响预测结果或可查看的信息。",
+    aboutBody: "本站由个人独立开发和运营。我们通过 GitHub Sponsors 接受单次或按月的自愿支持，以便继续收集重置信息、整理历史记录并改进预测。是否支持不会影响预测结果或可查看的信息。",
   },
 } as const;
 
@@ -77,6 +77,15 @@ test("home has no header Sponsors CTA and each support section has one link", ()
   const faq = read("components/FaqView.tsx");
   const about = read("components/AboutView.tsx");
   const sponsorLinkCount = (source: string) => (source.match(/<SponsorLink\b/g) ?? []).length;
+
+  const sponsorPanelIndex = home.indexOf("<SponsorSupportPanel locale={locale} />");
+  const observationGuideIndex = home.indexOf("<ObservationGuide locale={locale} />");
+  assert.ok(sponsorPanelIndex !== -1, "SponsorSupportPanel should be present in RadarDashboard");
+  assert.ok(observationGuideIndex !== -1, "ObservationGuide should be present in RadarDashboard");
+  assert.ok(
+    sponsorPanelIndex < observationGuideIndex,
+    "SponsorSupportPanel must appear before ObservationGuide in RadarDashboard",
+  );
 
   assert.doesNotMatch(home, /placement="header"/);
   assert.equal(sponsorLinkCount(supportPanel), 1);

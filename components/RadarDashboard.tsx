@@ -1349,6 +1349,8 @@ export function RadarDashboard({
 
         {!shouldRenderRelatedTibo ? tiboActivityCard : null}
 
+        <SponsorSupportPanel locale={locale} />
+
         <ObservationGuide locale={locale} />
 
         <section
@@ -1381,8 +1383,6 @@ export function RadarDashboard({
             ))}
           </nav>
         </section>
-
-        <SponsorSupportPanel locale={locale} />
 
         <footer className="rounded-lg border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
           <nav
