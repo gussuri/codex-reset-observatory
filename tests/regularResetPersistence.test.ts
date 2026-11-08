@@ -5,7 +5,7 @@ import {
   DEFAULT_REGULAR_RESET_SCHEDULE,
   createObservedRegularResetEventRow,
   getLatestRegularScheduleAnchorAt as getLatestAnchorFromEvents,
-  getDueRegularResetEventRows,
+  getDueRegularResetReferenceEvents,
   toRegularResetHistoryEvent,
 } from "../lib/radar/regularResetSchedule";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
@@ -56,29 +56,33 @@ function regularEvent(at: string, overrides: Record<string, unknown> = {}) {
   });
 }
 
-test("does not persist the next regular reset before the anchored weekly boundary", () => {
-  const rows = getDueRegularResetEventRows(
+test("does not project the next regular reference before its anchored weekly boundary", () => {
+  const references = getDueRegularResetReferenceEvents(
     new Date("2026-08-15T03:31:59.000Z"),
     INITIAL_ANCHOR_AT,
   );
 
-  assert.deepEqual(rows, []);
+  assert.deepEqual(references, []);
+  assert.deepEqual(
+    getDueRegularResetReferenceEvents(new Date("2026-08-15T03:32:00.000Z"), null),
+    [],
+  );
 });
 
-test("creates one completed regular event seven days after the latest anchor", () => {
-  const rows = getDueRegularResetEventRows(
+test("projects one reference seven days after the latest anchor without claiming completion", () => {
+  const references = getDueRegularResetReferenceEvents(
     new Date("2026-08-15T03:32:00.000Z"),
     INITIAL_ANCHOR_AT,
   );
 
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].schedule_key, "weekly-regular-reset:2026-08-15T03:32:00.000Z");
-  assert.equal(rows[0].scheduled_at, "2026-08-15T03:32:00.000Z");
-  assert.equal(rows[0].completed_at, "2026-08-15T03:32:00.000Z");
-  assert.equal(rows[0].cycle_type, "定期リセット");
-  assert.equal(rows[0].record_kind, "regular_completed");
-  assert.equal(rows[0].status, "completed");
-  assert.equal(rows[0].scope, "任意リセット未使用アカウント");
+  assert.equal(references.length, 1);
+  assert.equal(references[0].date, "2026-08-15T03:32:00.000Z");
+  assert.equal(references[0].recordKind, "reference");
+  assert.equal(references[0].status, "scheduled");
+  assert.equal(references[0].completed_at, null);
+  assert.equal(references[0].closed_at, null);
+  assert.equal(references[0].details?.cycleType, "定期リセット");
+  assert.equal(references[0].scope, "任意リセット未使用アカウント");
 });
 
 test("an observed regular recovery uses the monitor observation time, not the schedule time", () => {
@@ -93,38 +97,38 @@ test("an observed regular recovery uses the monitor observation time, not the sc
   assert.equal(row.status, "completed");
 });
 
-test("generates each missed weekly occurrence with a stable key", () => {
-  const rows = getDueRegularResetEventRows(
+test("generates each missed weekly reference with a stable id", () => {
+  const references = getDueRegularResetReferenceEvents(
     new Date("2026-08-22T03:32:00.000Z"),
     INITIAL_ANCHOR_AT,
   );
 
   assert.deepEqual(
-    rows.map((row) => row.scheduled_at),
+    references.map((event) => event.date),
     [
       "2026-08-15T03:32:00.000Z",
       "2026-08-22T03:32:00.000Z",
     ],
   );
   assert.deepEqual(
-    rows,
-    getDueRegularResetEventRows(
+    references,
+    getDueRegularResetReferenceEvents(
       new Date("2026-08-22T03:32:00.000Z"),
       INITIAL_ANCHOR_AT,
     ),
   );
-  assert.equal(new Set(rows.map((row) => row.schedule_key)).size, rows.length);
+  assert.equal(new Set(references.map((event) => event.id)).size, references.length);
 });
 
-test("a scheduled Banked Reset remains a regular event, not a random event", () => {
-  const rows = getDueRegularResetEventRows(new Date("2026-08-15T03:32:00.000Z"), INITIAL_ANCHOR_AT, {
+test("a weekly Banked Reset reference remains a reference, not a random reset", () => {
+  const references = getDueRegularResetReferenceEvents(new Date("2026-08-15T03:32:00.000Z"), INITIAL_ANCHOR_AT, {
     ...DEFAULT_REGULAR_RESET_SCHEDULE,
     reset_method: "任意リセット権配布",
     scope: "全有料プラン",
   });
 
-  const history = toRegularResetHistoryEvent(rows[0]);
-  assert.equal(history.recordKind, "regular_completed");
+  const history = references[0];
+  assert.equal(history.recordKind, "reference");
   assert.equal(history.details?.cycleType, "定期リセット");
   assert.equal(history.details?.resetMethod, "任意リセット権配布");
   assert.equal(history.scope, "全有料プラン");
@@ -133,7 +137,10 @@ test("a scheduled Banked Reset remains a regular event, not a random event", () 
 
 test("persisted regular reset restarts the elapsed-time boundary without becoming a random target", () => {
   const now = new Date("2026-08-15T05:00:00.000Z");
-  const row = getDueRegularResetEventRows(now, INITIAL_ANCHOR_AT)[0];
+  const row = createObservedRegularResetEventRow(
+    "2026-08-15T03:32:00.000Z",
+    "2026-08-15T03:32:00.000Z",
+  );
   const data = getLocalRadarData({
     calculationNow: now,
     regularResetEvents: [row],
@@ -143,13 +150,16 @@ test("persisted regular reset restarts the elapsed-time boundary without becomin
   assert.notEqual(getLastGlobalResetAt(data, now)?.toISOString(), "2026-08-15T03:32:00.000Z");
 
   const viewModel = getRadarViewModel(data, "ja", false, undefined, now);
-  assert.equal(viewModel.regularResetForecast.sourceResetAt, "2026-08-15T03:32:00.000Z");
-  assert.equal(viewModel.regularResetForecast.lastCompletedAt, "2026-08-15T03:32:00.000Z");
+  assert.notEqual(viewModel.regularResetForecast.sourceResetAt, row.completed_at);
+  assert.notEqual(viewModel.regularResetForecast.lastCompletedAt, row.completed_at);
 });
 
 test("a regular boundary does not consume earlier teaser strength and allows a later teaser", () => {
   const now = new Date("2026-08-15T05:00:00.000Z");
-  const row = getDueRegularResetEventRows(now, INITIAL_ANCHOR_AT)[0];
+  const row = createObservedRegularResetEventRow(
+    "2026-08-15T03:32:00.000Z",
+    "2026-08-15T03:32:00.000Z",
+  );
   const baseSignal = {
     tweet_id: "regular-boundary-teaser",
     signal_type: "irrelevant" as const,
@@ -193,17 +203,17 @@ test("uses the latest broad forced reset as the new schedule anchor", () => {
   );
 
   assert.deepEqual(
-    getDueRegularResetEventRows(
+    getDueRegularResetReferenceEvents(
       new Date("2026-08-20T03:34:43.340Z"),
       FORCED_RESET_AT,
     ),
     [],
   );
   assert.deepEqual(
-    getDueRegularResetEventRows(
+    getDueRegularResetReferenceEvents(
       new Date("2026-08-20T03:34:43.341Z"),
       FORCED_RESET_AT,
-    ).map((row) => row.scheduled_at),
+    ).map((event) => event.date),
     ["2026-08-20T03:34:43.341Z"],
   );
 });
@@ -211,10 +221,10 @@ test("uses the latest broad forced reset as the new schedule anchor", () => {
 test("a later forced reset re-anchors the following regular occurrence", () => {
   const laterForcedAt = "2026-08-18T10:00:00.000Z";
   assert.deepEqual(
-    getDueRegularResetEventRows(
+    getDueRegularResetReferenceEvents(
       new Date("2026-08-25T10:00:00.000Z"),
       laterForcedAt,
-    ).map((row) => row.scheduled_at),
+    ).map((event) => event.date),
     ["2026-08-25T10:00:00.000Z"],
   );
 });
@@ -270,14 +280,61 @@ test("does not use a legacy regular banked distribution as a schedule anchor", (
   );
 });
 
-test("canonical regular_completed rows remain valid anchors, including a Banked Reset delivery", () => {
+test("personal regular_completed rows never become shared weekly schedule anchors", () => {
   assert.equal(
     getLatestAnchorFromEvents([
       regularEvent(INITIAL_ANCHOR_AT, {
         details: { resetMethod: "任意リセット権配布" },
       }),
     ], new Date("2026-08-15T00:00:00.000Z")),
-    INITIAL_ANCHOR_AT,
+    null,
+  );
+});
+
+test("the shared weekly reference follows the last global forced reset, not personal or BANKED events", () => {
+  const globalAnchorAt = "2026-10-28T06:35:40.653Z";
+  const personalRecovery = toRegularResetHistoryEvent(
+    createObservedRegularResetEventRow(
+      "2026-11-08T00:54:47.000Z",
+      "2026-11-08T00:54:50.259Z",
+    ),
+  );
+  const bankedGrants = [
+    resetEvent("2026-11-01T08:00:00.000Z", {
+      recordKind: "banked_distribution",
+      details: { cycleType: "ランダムリセット", resetMethod: "任意リセット権配布" },
+    }),
+    resetEvent("2026-11-02T08:00:00.000Z", {
+      recordKind: "banked_distribution",
+      details: { cycleType: "ランダムリセット", resetMethod: "任意リセット権配布" },
+    }),
+  ];
+  const events = [resetEvent(globalAnchorAt), ...bankedGrants, personalRecovery];
+
+  assert.equal(
+    getLatestAnchorFromEvents(events, new Date("2026-11-08T02:00:00.000Z")),
+    globalAnchorAt,
+  );
+
+  const references = getDueRegularResetReferenceEvents(
+    new Date("2026-11-08T02:00:00.000Z"),
+    globalAnchorAt,
+  );
+  assert.deepEqual(references.map((event) => event.date), [
+    "2026-11-04T06:35:40.653Z",
+  ]);
+  assert.equal(references[0].recordKind, "reference");
+  assert.equal(references[0].status, "scheduled");
+  assert.equal(references[0].closed_at, null);
+  assert.equal(references[0].completed_at, null);
+
+  const laterGlobalAnchorAt = "2026-11-09T06:35:40.653Z";
+  assert.deepEqual(
+    getDueRegularResetReferenceEvents(
+      new Date("2026-11-17T00:00:00.000Z"),
+      laterGlobalAnchorAt,
+    ).map((event) => event.date),
+    ["2026-11-16T06:35:40.653Z"],
   );
 });
 
@@ -293,10 +350,10 @@ test("uses the canonical completed timestamp rather than an older completion hin
 
 test("does not regenerate the old fixed 2026-08-22 occurrence after a 2026-08-13 anchor", () => {
   assert.deepEqual(
-    getDueRegularResetEventRows(
+    getDueRegularResetReferenceEvents(
       new Date("2026-08-22T03:32:00.000Z"),
       FORCED_RESET_AT,
-    ).map((row) => row.scheduled_at),
+    ).map((event) => event.date),
     ["2026-08-20T03:34:43.341Z"],
   );
 });

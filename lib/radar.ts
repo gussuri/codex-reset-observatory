@@ -32,13 +32,12 @@ import {
 import {
   buildCanonicalResetHistoryContext,
   isNoticeBackedRecoveryEvent,
-  rematerializeCanonicalResetHistoryContext,
   type CanonicalHistoryBuildMetrics,
   type CanonicalResetHistoryContext,
 } from "./radar/tiboHistory";
 import {
   getLatestRegularScheduleAnchorAt as getLatestRegularScheduleAnchorFromEvents,
-  getDueRegularResetEventRows,
+  getDueRegularResetReferenceEvents,
 } from "./radar/regularResetSchedule";
 import { isBroadResetScope, isEligibleRandomResetEvent } from "./radar/resetEligibility";
 import {
@@ -94,7 +93,6 @@ import {
   getElapsedDayBoost,
   getDaysSinceLastGlobalReset,
   getCompletedResetTimestamp,
-  getLastGlobalResetAt,
   getDisplayProbabilityReason,
   getLocalProbabilityReason,
   type DisplayElapsedDiagnostics,
@@ -335,58 +333,34 @@ export function createRadarCalculationContext(
   metrics?: CanonicalHistoryBuildMetrics,
 ): RadarCalculationContext {
   const raw = unwrapRadarData(data);
-  const buildContext = (source: RadarData | null) =>
-    buildCanonicalResetHistoryContext(source, {
-      defaultStaticHistory: LOCAL_RESET_HISTORY,
-      displayStaticHistory: [...LOCAL_RESET_HISTORY, ...getAutoResolvedHistoryItems()],
-      dynamicStaticHistory: [],
-      metrics,
-    });
-  const initialHistoryContext = buildContext(raw);
-  const initialSource = withAutoCompletedRegularResetEvents(raw, now, initialHistoryContext);
-  if (initialSource === raw) {
-    return {
-      source: initialSource,
-      canonicalHistoryContext: initialHistoryContext,
-    };
-  }
+  const canonicalHistoryContext = buildCanonicalResetHistoryContext(raw, {
+    defaultStaticHistory: LOCAL_RESET_HISTORY,
+    displayStaticHistory: [...LOCAL_RESET_HISTORY, ...getAutoResolvedHistoryItems()],
+    dynamicStaticHistory: [],
+    metrics,
+  });
 
-  return {
-    source: initialSource,
-    canonicalHistoryContext: rematerializeCanonicalResetHistoryContext(
-      initialHistoryContext,
-      initialSource?.regular_reset_events ?? [],
-    ),
-  };
-}
+  if (!raw) return { source: raw, canonicalHistoryContext };
 
-function withAutoCompletedRegularResetEvents(
-  data: RadarData | null,
-  now: Date,
-  canonicalHistoryContext?: CanonicalResetHistoryContext,
-): RadarData | null {
-  if (!data) return null;
-
-  // A scheduled regular occurrence becomes a read-side completion projection
-  // once its reference time arrives. The raw data and persisted DB row remain
-  // unchanged until an observed recovery is available.
-  const anchorHistory = canonicalHistoryContext?.displayHistory ?? getCombinedResetHistory(data);
-  const latestAnchorAt = getLatestRegularScheduleAnchorFromEvents(anchorHistory, now);
-  if (!latestAnchorAt) return data;
-
-  const existingScheduleKeys = new Set(
-    (data.regular_reset_events ?? []).map((event) => event.schedule_key),
+  const latestAnchorAt = getLatestRegularScheduleAnchorFromEvents(
+    canonicalHistoryContext.displayHistory,
+    now,
   );
-  const projectedRows = getDueRegularResetEventRows(now, latestAnchorAt)
-    .filter((row) => !existingScheduleKeys.has(row.schedule_key));
-  if (projectedRows.length === 0) return data;
+  if (!latestAnchorAt) return { source: raw, canonicalHistoryContext };
 
+  const projectedReferences = getDueRegularResetReferenceEvents(now, latestAnchorAt);
+  if (projectedReferences.length === 0) return { source: raw, canonicalHistoryContext };
+
+  const existingIds = new Set(canonicalHistoryContext.displayHistory.map((item) => item.id));
   return {
-    ...data,
-    regular_reset_events: [
-      ...(data.regular_reset_events ?? []),
-      ...projectedRows,
-    ],
+    source: raw,
+    canonicalHistoryContext: {
+      ...canonicalHistoryContext,
+      displayHistory: [
+        ...canonicalHistoryContext.displayHistory,
+        ...projectedReferences.filter((item) => !existingIds.has(item.id)),
+      ],
+    },
   };
 }
 
@@ -439,12 +413,7 @@ export function getRadarViewModel(
     canonicalHistoryContext,
     calculationNow,
   );
-  const effectiveLatestResetAt = getLastGlobalResetAt(source, calculationNow, canonicalHistoryContext)?.toISOString() ??
-    observedHistory.find((item) => item.resetAt)?.resetAt ??
-    null;
-
   const regularResetForecast = getRegularResetForecast(
-    effectiveLatestResetAt,
     locale,
     source,
     calculationNow,
@@ -585,26 +554,23 @@ export function getLatestRegularScheduleAnchorAt(
 }
 
 function getRegularResetForecast(
-  latestResetAt: string | null | undefined,
   locale: Locale = "ja",
   data?: RadarData | null,
   now: Date = new Date(),
   canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  // 1. 履歴情報から最も最新の「強制リセット」または「定期リセット」を自動検出
+  // Anchor the shared schedule only to a completed canonical global forced reset.
   const autoLatestResetAt = getLatestRegularScheduleAnchorAt(data, now, canonicalHistoryContext);
 
   const unknownLabel = locale === "en" ? "Unknown" : locale === "zh" ? "未知" : "不明";
   const remainingUnknown = locale === "en" ? "Unknown remaining" : locale === "zh" ? "剩余时间未知" : "残り不明";
 
-  // 「最後に完了した定期リセット日」= 自動検出された最新の基準リセット時刻
+  // A weekly reference is not proof that a global or personal quota recovered.
   const lastCompletedAt = autoLatestResetAt;
   const current = now;
 
-  // 基準イベントの次の1回だけを予測する。予定時刻に到達した場合は、
-  // read-sideの定期リセット完了projectionが次の基準になる。
   const nextRegularReset = autoLatestResetAt
-    ? getNextRegularResetDate(new Date(autoLatestResetAt))
+    ? getNextRegularResetDate(new Date(autoLatestResetAt), current)
     : null;
 
   if (!nextRegularReset) {
@@ -612,7 +578,7 @@ function getRegularResetForecast(
       date: unknownLabel,
       time: null,
       remaining: remainingUnknown,
-      sourceResetAt: latestResetAt,
+      sourceResetAt: null,
       expectedAt: null,
       lastCompletedAt: null,
       remainingDays: null,
@@ -681,8 +647,10 @@ function rollRegularResetForward(
   };
 }
 
-function getNextRegularResetDate(reset: Date) {
-  return new Date(reset.getTime() + 7 * DAY_MS);
+function getNextRegularResetDate(reset: Date, now: Date) {
+  const elapsed = now.getTime() - reset.getTime();
+  const occurrenceIndex = Math.max(1, Math.floor(elapsed / (7 * DAY_MS)) + 1);
+  return new Date(reset.getTime() + occurrenceIndex * 7 * DAY_MS);
 }
 
 function getDisplayResetNotice(
@@ -882,7 +850,22 @@ const REGULAR_RESET_NOTE =
   "前回のリセット後にCodex / Workを初めて使用した時点から、1週間後に定期リセットが行われます。任意リセットを使用した場合も、任意リセット後の初使用から1週間後となるため、この表示時刻とはずれる場合があります。";
 const BANKED_RESET_METHOD = "任意リセット権配布";
 function isRegularHistoryItem(item: WindowLike) {
-  return item.recordKind === "regular_completed" || item.details?.cycleType === "定期リセット";
+  if (isWeeklyRegularReference(item)) return false;
+  if (item.recordKind === "regular_completed") return true;
+  if (item.recordKind === "reference") {
+    return Boolean(
+      item.details?.cycleType === "定期リセット" &&
+        (item.closed_at || item.completed_at) &&
+        !isPendingResetNotice(item),
+    );
+  }
+  return item.details?.cycleType === "定期リセット";
+}
+
+function isWeeklyRegularReference(item: WindowLike) {
+  return item.recordKind === "reference" &&
+    item.id?.startsWith("weekly-regular-reference-") === true &&
+    item.details?.cycleType === "定期リセット";
 }
 
 function getRegularResetMethod(item: WindowLike) {
@@ -1075,7 +1058,9 @@ function getHistoryDetails(
       eventMetadata?.event_reason_type === "ご祝儀リセット"
       ? eventMetadata.event_reason_type
       : null;
-    const scope = normalizeResetScope(item.details.scope ?? item.scope);
+    const scope = isWeeklyRegularReference(item)
+      ? item.details.scope ?? item.scope
+      : normalizeResetScope(item.details.scope ?? item.scope);
     const metadataScope = normalizeResetScope(eventMetadata?.event_scope);
     const noticeType = historyCorrection?.displayNoticeType ?? item.details.noticeType;
     const noticePresentation = historyCorrection?.hideAnnouncementTiming
@@ -1088,7 +1073,9 @@ function getHistoryDetails(
         ? translateDynamic(historyCorrection.reasonType, locale)
         : translateDynamic(metadataReason ?? reason ?? "", locale),
       resetMethod: translateDynamic(item.details.resetMethod, locale),
-      scope: historyCorrection?.displayScope
+      scope: isWeeklyRegularReference(item)
+        ? scope ? translateDynamic(scope, locale) : ""
+        : historyCorrection?.displayScope
         ? translateDynamic(historyCorrection.displayScope, locale)
         : metadataScope
         ? translateDynamic(metadataScope, locale)
@@ -1491,6 +1478,7 @@ function getRecentHistory(
   const result = items
     .map((item, rawIndex) => {
       const isRegular = isRegularHistoryItem(item);
+      const isWeeklyReference = isWeeklyRegularReference(item);
       const isPendingNotice = isPendingResetNotice(item);
       const canonicalResetAt = isPendingNotice
         ? null
@@ -1537,12 +1525,14 @@ function getRecentHistory(
       return {
         key,
         recordKind,
-        title: isRegular
+        title: isRegular || isWeeklyReference
           ? translateDynamic("定期リセット", locale)
           : getHistoryDisplayTitle(data, item, locale),
         resetType: resetTypes[0],
         resetTypes,
-        status: isRegular
+        status: isWeeklyReference
+          ? translateDynamic("実施予定", locale)
+          : isRegular
           ? translateDynamic("リセット実施", locale)
           : translateEventStatus(item.kind ?? item.status, locale),
         details,
@@ -1551,7 +1541,9 @@ function getRecentHistory(
         resetAt,
         executionTimePrecision: isRegular ? null : executionPresentation.executionTimePrecision,
         signalLabel: hasPriorNotice ? translateUI("historyAnnouncementTime", locale) : "",
-        resetLabel: isPendingNotice ? translateDynamic("実施予定", locale) : translateDynamic("実施", locale),
+        resetLabel: isPendingNotice || isWeeklyReference
+          ? translateDynamic("実施予定", locale)
+          : translateDynamic("実施", locale),
         scope: details.scope ?? "",
         windowLabel: isPendingNotice ? translateDynamic("予告内容", locale) : undefined,
         windowLength: item.window_human
@@ -1559,7 +1551,9 @@ function getRecentHistory(
           : formatWindowLength(item.window_minutes, locale),
         source: isRegular ? null : source,
         sourceKind: isRegular ? "none" : sourceKind,
-        summary: isRegular
+        summary: isWeeklyReference
+          ? resolveLocalizedText(item.summary, locale)
+          : isRegular
           ? resolveLocalizedText(regularSummary ?? REGULAR_RESET_SUMMARY, locale)
           : getLocalizedEventMetadataText(
               getSafeEventMetadataRecord(data, item),

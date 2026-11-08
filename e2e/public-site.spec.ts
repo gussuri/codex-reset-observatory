@@ -100,6 +100,47 @@ test("Japanese home renders the dashboard without browser errors", async ({ page
   await expectNoBrowserErrors(errors);
 });
 
+test("shared weekly reference is labelled as a reference on mobile and desktop", async ({ page, request }) => {
+  const response = await request.get("/api/current?locale=ja");
+  expect(response.status()).toBe(200);
+  const body = await response.json() as {
+    schemaVersion: string;
+    viewModel: {
+      recentHistory: Array<{
+        key: string;
+        recordKind?: string;
+        status: string;
+        resetAt?: string | null;
+        summary?: string | null;
+      }>;
+    };
+  };
+  expect(body.schemaVersion).toBe("public-v1");
+  const projected = body.viewModel.recentHistory.find(
+    (item) => item.key.startsWith("weekly-regular-reference-"),
+  );
+  expect(projected).toMatchObject({
+    recordKind: "reference",
+    status: "実施予定",
+    resetAt: null,
+  });
+  expect(projected?.summary).toContain("利用枠回復を確認した記録ではありません");
+
+  const errors = await prepareLocalPage(page);
+  const note = "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。";
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await expect(
+      page.getByText(note, { exact: true }).filter({ visible: true }).first(),
+    ).toBeVisible();
+  }
+  await expectNoBrowserErrors(errors);
+});
+
 test("English home renders localized identity and dashboard labels", async ({ page }) => {
   const errors = await prepareLocalPage(page);
   const response = await page.goto("/en");

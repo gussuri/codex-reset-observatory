@@ -673,9 +673,14 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "剩余时间",
   },
   regularResetReferenceNote: {
-    ja: "実際のリセット日時は、ユーザーごとの利用状況により異なる場合があります。",
-    en: "The actual reset time may vary by user depending on usage.",
-    zh: "实际重置时间可能因用户的使用情况而异。",
+    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
+    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
+    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
+  },
+  weeklyRegularResetReferenceNote: {
+    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
+    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
+    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
   },
   regularResetTimingNote: {
     ja: "定期リセットのタイミングはユーザーによって異なる場合があります。",

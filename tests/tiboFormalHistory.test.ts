@@ -1773,7 +1773,7 @@ test("formal reset updates latest reset time and regular forecast anchor", () =>
   );
 });
 
-test("regular forecast accepts broad forced or regular records, including reference banked resets", () => {
+test("regular forecast ignores personal references and banked records when selecting the global anchor", () => {
   const calculationNow = new Date("2026-08-08T00:00:00.000Z");
 
   withLocalHistory(
@@ -1816,8 +1816,8 @@ test("regular forecast accepts broad forced or regular records, including refere
         calculationNow,
       ).regularResetForecast;
 
-      assert.equal(forecast.lastCompletedAt, "2026-08-02T00:00:00.000Z");
-      assert.equal(forecast.expectedAt, "2026-08-09T00:00:00.000Z");
+      assert.equal(forecast.lastCompletedAt, "2026-08-01T00:00:00.000Z");
+      assert.equal(forecast.expectedAt, "2026-08-15T00:00:00.000Z");
     },
   );
 });

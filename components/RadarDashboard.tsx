@@ -1274,7 +1274,12 @@ export function RadarDashboard({
                     />
                     {item.details?.cycleType === translateDynamic("定期リセット", locale) ? (
                       <p className="mt-2 text-xs leading-5 text-slate-500 sm:hidden">
-                        {translateUI("regularResetTimingNote", locale)}
+                        {translateUI(
+                          item.key.startsWith("weekly-regular-reference-")
+                            ? "weeklyRegularResetReferenceNote"
+                            : "regularResetTimingNote",
+                          locale,
+                        )}
                       </p>
                     ) : null}
                   </div>

@@ -19,10 +19,7 @@ import {
   isPublicRandomResetExecutionEstimate,
   type ResetExecutionEstimate,
 } from "./resetExecution";
-import {
-  toRegularResetHistoryEvent,
-  type RegularResetEventRow,
-} from "./regularResetSchedule";
+import type { RegularResetEventRow } from "./regularResetSchedule";
 import { isBroadResetScope } from "./resetEligibility";
 import {
   isExcludedResetEventKey,
@@ -341,19 +338,16 @@ export function rematerializeCanonicalResetHistoryContext(
       context.canonicalParts.defaultParts,
       context.defaultStaticHistory,
       context.rejectedTiboResets,
-      regularResetRows,
     ),
     displayHistory: mergeCanonicalResetHistoryParts(
       context.canonicalParts.displayParts,
       context.displayStaticHistory,
       context.rejectedTiboResets,
-      regularResetRows,
     ),
     dynamicHistory: mergeCanonicalResetHistoryParts(
       context.canonicalParts.dynamicParts,
       context.dynamicStaticHistory,
       context.rejectedTiboResets,
-      regularResetRows,
     ),
   };
 }
@@ -1870,50 +1864,6 @@ function matchesRejected(item: WindowEventLike, rejectedSignals: ReadonlyArray<R
   });
 }
 
-function mergePersistedRegularEvents(
-  staticHistory: ReadonlyArray<WindowEventLike>,
-  regularRows: ReadonlyArray<RegularResetEventRow>,
-) {
-  const result = [...staticHistory];
-
-  for (const row of regularRows) {
-    const persisted = toRegularResetHistoryEvent(row);
-    const persistedTime = getTimestamp(getCompletedAt(persisted));
-    const duplicateIndex = result.findIndex((item) => {
-      if (item.details?.cycleType !== "定期リセット") return false;
-      const itemTime = getTimestamp(getCompletedAt(item));
-      return itemTime !== null && persistedTime !== null && itemTime === persistedTime;
-    });
-
-    if (row.status === "voided") {
-      if (duplicateIndex !== -1) result.splice(duplicateIndex, 1);
-      continue;
-    }
-
-    if (duplicateIndex === -1) {
-      result.push(persisted);
-      continue;
-    }
-
-    const merged = mergeDuplicateHistory(persisted, result[duplicateIndex]);
-    result[duplicateIndex] = {
-      ...merged,
-      ...persisted,
-      id: persisted.id,
-      recordKind: "regular_completed",
-      title: result[duplicateIndex].title ?? persisted.title,
-      summary: result[duplicateIndex].summary ?? persisted.summary,
-      source_url: result[duplicateIndex].source_url ?? persisted.source_url,
-      details: {
-        ...merged.details!,
-        note: result[duplicateIndex].details?.note ?? merged.details?.note,
-      },
-    };
-  }
-
-  return result;
-}
-
 export type CodexRecoveryObservationInput = Partial<
   Pick<
     CodexRecoveryObservation,
@@ -2830,14 +2780,10 @@ function mergeCanonicalResetHistoryParts(
   parts: CanonicalResetHistoryParts,
   staticHistory: ReadonlyArray<WindowEventLike>,
   rejectedTiboResets: ReadonlyArray<RejectedTiboResetSignal>,
-  regularResetRows: ReadonlyArray<RegularResetEventRow>,
 ) {
-  const regularMergedHistory = mergePersistedRegularEvents(
-    [...staticHistory],
-    [...regularResetRows],
-  )
-    .map((item) => enrichHistoryEventSourceIds(item, parts.sourceTweetIdsByEventKey));
-  const filteredStaticHistory = regularMergedHistory.filter((item) => !matchesRejected(item, rejectedTiboResets));
+  const filteredStaticHistory = staticHistory
+    .map((item) => enrichHistoryEventSourceIds(item, parts.sourceTweetIdsByEventKey))
+    .filter((item) => !matchesRejected(item, rejectedTiboResets));
   const combined: Array<WindowEventLike> = [...parts.dynamicItems];
   const matchedDynamicIndexes = new Set<number>();
   const absorbedDynamicIndexes = new Set<number>();
@@ -2940,19 +2886,16 @@ export function buildCanonicalResetHistoryContext(
       defaultParts,
       options.defaultStaticHistory,
       rejectedTiboResets,
-      regularResetRows,
     ),
     displayHistory: mergeCanonicalResetHistoryParts(
       displayParts,
       displayStaticHistory,
       rejectedTiboResets,
-      regularResetRows,
     ),
     dynamicHistory: mergeCanonicalResetHistoryParts(
       dynamicParts,
       dynamicStaticHistory,
       rejectedTiboResets,
-      regularResetRows,
     ),
   };
 }
@@ -2961,7 +2904,7 @@ export function combineResetHistory(
   staticHistory: Array<WindowEventLike>,
   formalTiboResets: Array<FormalTiboResetSignal>,
   rejectedTiboResets: Array<RejectedTiboResetSignal> = [],
-  regularResetRows: Array<RegularResetEventRow> = [],
+  _regularResetRows: Array<RegularResetEventRow> = [],
   noticeSignals: Array<TiboNoticeSignal | FormalTiboResetSignal> = [],
   recoveryObservations: Array<CodexRecoveryObservationInput> = [],
   estimates: Array<ResetExecutionEstimate> = [],
@@ -2981,6 +2924,5 @@ export function combineResetHistory(
     parts,
     staticHistory,
     rejectedTiboResets,
-    regularResetRows,
   );
 }

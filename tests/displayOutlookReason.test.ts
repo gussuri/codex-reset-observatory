@@ -16,7 +16,7 @@ import {
 import { getProbabilityTone } from "../components/ProbabilityMetrics";
 import { ELAPSED_RELATIVE_HAZARD_THRESHOLDS } from "../data/predictionWeights";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
-import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
+import { createObservedRegularResetEventRow } from "../lib/radar/regularResetSchedule";
 import type { RegularResetEventRow } from "../lib/radar/regularResetSchedule";
 import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedProbability";
 import { getLastRandomRecoveryResetAt, getLastRecoveryResetAt } from "../lib/radar/recoveryBoundary";
@@ -451,10 +451,7 @@ test("returns an unavailable explanation when radar data is missing", () => {
 
 test("a completed regular boundary consumes an earlier teaser without becoming a random event", () => {
   const regularAt = "2026-08-08T03:32:00.000Z";
-  const regularReset = getDueRegularResetEventRows(
-    new Date(regularAt),
-    "2026-08-01T03:32:00.000Z",
-  )[0];
+  const regularReset = createObservedRegularResetEventRow(regularAt, regularAt);
   const now = new Date("2026-08-08T04:00:00.000Z");
 
   assert.equal(
@@ -577,10 +574,7 @@ test("does not expose raw regime wording in the normal explanation", () => {
 
 test("regular recovery boundaries do not increase the random event count", () => {
   const regularAt = "2026-08-08T03:32:00.000Z";
-  const regularReset = getDueRegularResetEventRows(
-    new Date(regularAt),
-    "2026-08-01T03:32:00.000Z",
-  )[0];
+  const regularReset = createObservedRegularResetEventRow(regularAt, regularAt);
   const now = new Date("2026-08-08T04:00:00.000Z");
   const withoutRegular = calculateRegimeElapsedProbability(
     getLocalRadarData({ calculationNow: now }),
