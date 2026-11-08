@@ -36,7 +36,7 @@ source facts
 
 | Field | Canonical meaning | 現在の正規化・根拠 | 公開表示と不変条件 |
 | --- | --- | --- | --- |
-| `recordKind` | event record の種類 | 型で `confirmed_global`、`banked_distribution`、`reference`、`regular_completed` を持つ。既知値は保持し、`getHistoryRecordKind()` の未知値 fallback は `reference`。 | `recordKind` は cycle/reason の別名ではない。BANKED、reference、regular occurrence の扱いを保つ。 |
+| `recordKind` | event record の種類 | 型で `confirmed_global`、`banked_distribution`、`reference`、`regular_completed` を持つ。既知値は保持し、`getHistoryRecordKind()` の未知値 fallback は `reference`。`regular_completed` は Usage Monitor の個人回復観測である。 | `recordKind` は cycle/reason の別名ではない。個人の `regular_completed` は内部回復境界用であり、公開共通履歴・週次アンカーへ昇格させない。 |
 | `cycleType` | リセットの周期・イベント種別 | canonical 値は `ランダムリセット`、`定期リセット`、`個人別リセット`。regular context、personal/banked context、または明示値から `inferResetCycleType()` が決める。 | cycle は reason ではない。random であることだけから祝賀理由を作らない。 |
 | `reasonType` | なぜ行われたか | canonical 値は `ご祝儀リセット`、`詫びリセット`、`定期更新`。非定期 reset event に明示的な詫び理由がない場合、`ご祝儀リセット` は運用上の既定カテゴリ。 | 既定カテゴリだけから祝賀・milestone・原因を公開文面へ加えない。reset event context 自体がない場合は reason を未設定にできる。 |
 | `resetMethod` | どの仕組みで利用枠を変更したか | 既存値は `強制リセット`、`任意リセット権配布`、`利用上限更新`、`リセット実施`。 | forced reset と BANKED credit distribution を混同しない。 |
@@ -64,6 +64,13 @@ notice-to-execution は notice と execution の差を人間向けに表す deri
 `convertTiboResetSignalToHistoryEvent()` は、Tibo の completion text や related notice に reset applicability の明示 evidence がない場合、product label を scope として作らず、scope を空にします。`Codex / ChatGPT Work` は canonical scopeではありません。旧partial labelは `normalizeResetScope()` で `一部ユーザー` としてread-side互換処理できますが、新しいcanonical/static/persisted rowは旧labelを出力しません。
 
 定期リセットはこの random/Tibo 用の scope taxonomy とは別です。通常の weekly regular event は、対象が任意リセット未使用アカウントであるという schedule semantics を持つため、canonical scope を `任意リセット未使用アカウント` として保持します。`normalizeRegularResetScope()` はこの値（および既知の旧表現）と `全有料プラン` だけを regular scope として受け付け、`一部ユーザー` や product label へ圧縮しません。例外的に全有料プランへ適用する regular event は `全有料プラン` を保持します。regular の scope を random/Tibo の `一部ユーザー` として保存・生成してはいけません。
+
+### Regular recovery と共有週次 reference
+
+- `regular_reset_events` は Usage Monitor が観測したアカウントごとの利用枠回復を保持します。`scheduled_at` は期待時刻、`completed_at` はそのアカウントで観測した回復時刻です。これらの `regular_completed` 行は内部の回復境界に使い、公開 canonical history/default/display history や共有週次アンカーには含めません。古い個人行も read-side で公開履歴やアンカーへ戻しません。
+- 公開の共有週次系列は、完了済み・canonical な広域 `confirmed_global` の `強制リセット` だけを基準にします。次の時刻は基準から固定7日ごとに繰り返し計算します。個人のregular回復、BANKED配布・個人消費、Monitorの起動・再起動/rebase、quota deadline、前の予定時刻はアンカーにしません。
+- 到来した週次時刻は実施確認ではなく参照です。生成行は `recordKind = reference`、`status = scheduled`、`date = expectedAt` とし、`closed_at` / `completed_at` を持たせません。public view model の `resetAt` も `null` のままにし、UIだけが `date` を「参考日時」として表示します。予定時刻に達したこと自体を global または個人の回復完了として扱いません。
+- `data/resetHistory.ts` などにある既存 static/manual history は個人 Monitor 行との時刻一致で置換・削除しません。生成済み weekly reference と静的な `reference` 履歴は別の出所として扱います。
 
 ## 3. `reasonType` の normalization
 
@@ -244,11 +251,13 @@ BANKED は global forced reset と別の delivery method です。現在の [`li
 - **Canonical fields**: `recordKind = confirmed_global`、`cycleType = ランダムリセット`、`reasonType = ご祝儀リセット`、`resetMethod = 強制リセット`、`scope = 全有料プラン`。cycle は random のままで、reason は celebration。
 - **Public presentation**: JA/EN/ZH で reason が `ご祝儀リセット` / `Celebration reset` / `庆祝重置` に localize される。all-paid scope は内部に残るが対象 row は隠れる。
 
-### 4. regular reset reference
+### 4. static regular reset reference
 
 - **Source facts**: [`data/resetHistory.ts`](../data/resetHistory.ts) の `local-codex-regular-reset-2026-08-08` は weekly timing、source URL なし、`任意リセット未使用アカウント` を示す。
 - **Canonical fields**: `recordKind = reference`、`cycleType = 定期リセット`、`reasonType = 定期更新`、`resetMethod = 強制リセット`、scope は `任意リセット未使用アカウント`。source/noteの「任意リセット未使用」説明と schedule target は同じ concrete scope を補強する。
-- **Public presentation**: 定期リセットとして表示し、weekly schedule の note と `任意リセット未使用アカウント` を表示する。regular reference は broad random-reset probability event として扱わない。
+- **Public presentation**: 定期リセットとして表示し、weekly schedule の note と `任意リセット未使用アカウント` を表示する。この既存 static/manual row はそのまま保持し、broad random-reset probability event または生成週次系列のアンカーとして扱わない。
+
+生成される共有週次 reference は別の read-side record です。最後の完了済み canonical global forced reset に7日を足して系列を作り、到来分を `recordKind = reference`、`date = expectedAt`、`resetAt = null` として表示します。Monitor が保存した個人 `regular_completed` 観測、BANKED distribution、起動時刻、個人 quota deadline は公開週次履歴・アンカーに使わず、個人観測だけが既存の内部 recovery-boundary 処理に残ります。
 
 ### 5. account-wide completion without reset evidence
 

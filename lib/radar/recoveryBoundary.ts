@@ -11,6 +11,7 @@ import {
   isEligibleRandomResetEventWithPolicy,
   type RandomResetEligibilityPolicy,
 } from "./resetEligibility";
+import { toRegularResetHistoryEvent } from "./regularResetSchedule";
 import type { ResetExecutionWindow } from "./tiboTemporal";
 
 const RECOVERY_BOUNDARY_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
@@ -123,33 +124,38 @@ function getCombinedHistory(
   staticHistory: Array<WindowEventLike>,
   canonicalHistoryContext?: CanonicalResetHistoryContext,
 ) {
-  if (canonicalHistoryContext) {
-    const canonicalHistory = getCanonicalResetHistoryForStaticHistory(
-      canonicalHistoryContext,
+  let canonicalHistory = canonicalHistoryContext
+    ? getCanonicalResetHistoryForStaticHistory(canonicalHistoryContext, staticHistory)
+    : undefined;
+
+  if (!canonicalHistory) {
+    const {
+      noticeSignals,
+      bankedSignals,
+      recoveryObservations,
+      estimates,
+      identityContext,
+    } = getNoticeBackedHistoryInputs(data);
+
+    canonicalHistory = combineResetHistory(
       staticHistory,
+      data?.formal_tibo_resets ?? [],
+      data?.rejected_tibo_resets ?? [],
+      [],
+      noticeSignals,
+      recoveryObservations,
+      estimates,
+      bankedSignals,
+      identityContext,
     );
-    if (canonicalHistory) return canonicalHistory;
   }
 
-  const {
-    noticeSignals,
-    bankedSignals,
-    recoveryObservations,
-    estimates,
-    identityContext,
-  } = getNoticeBackedHistoryInputs(data);
-
-  return combineResetHistory(
-    staticHistory,
-    data?.formal_tibo_resets ?? [],
-    data?.rejected_tibo_resets ?? [],
-    data?.regular_reset_events ?? [],
-    noticeSignals,
-    recoveryObservations,
-    estimates,
-    bankedSignals,
-    identityContext,
-  );
+  // Monitor observations stay private to recovery-boundary calculations.
+  // They do not enter canonical/public history or the shared schedule anchor.
+  return [
+    ...canonicalHistory,
+    ...(data?.regular_reset_events ?? []).map(toRegularResetHistoryEvent),
+  ];
 }
 
 function isEligibleRandomBoundary(

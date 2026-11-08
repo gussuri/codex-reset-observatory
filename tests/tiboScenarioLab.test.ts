@@ -21,7 +21,7 @@ import {
   combineResetHistory,
   type FormalTiboResetSignal,
 } from "../lib/radar/tiboHistory";
-import { getDueRegularResetEventRows } from "../lib/radar/regularResetSchedule";
+import { createObservedRegularResetEventRow } from "../lib/radar/regularResetSchedule";
 import { getLocalRadarData, getRandomResetHeatmapEventTimes } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
@@ -344,10 +344,9 @@ test("rejected signals stay out of the public teaser state", () => {
 
 test("regular reset rows do not enter random-reset heatmap events", () => {
   const now = new Date("2026-08-14T00:00:00.000Z");
-  const regularRows = getDueRegularResetEventRows(
-    now,
-    "2026-08-01T03:32:00.000Z",
-  );
+  const regularRows = [
+    createObservedRegularResetEventRow("2026-08-08T03:32:00.000Z", "2026-08-08T03:32:00.000Z"),
+  ];
   const withoutRegular = getLocalRadarData({ calculationNow: now });
   const withRegular = getLocalRadarData({ calculationNow: now, regularResetEvents: regularRows });
   assert.deepEqual(

@@ -22,7 +22,6 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { translateDynamic, translateUI } from "../lib/radar/i18n";
 import {
   createObservedRegularResetEventRow,
-  getDueRegularResetEventRows,
 } from "../lib/radar/regularResetSchedule";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
@@ -108,7 +107,7 @@ test("public radar DTO uses an allowlist and excludes internal audit fields", ()
   assert.equal(staleSnapshot.dataHealth.generatedAt, "2026-08-03T00:00:00.000Z");
 });
 
-test("public snapshot exposes a random-only last reset timestamp", () => {
+test("public snapshot keeps the random reset timestamp and weekly schedule on the global anchor", () => {
   const calculationNow = new Date("2026-08-10T12:00:00.000Z");
   const internal = getLocalRadarData({
     calculationNow,
@@ -124,9 +123,15 @@ test("public snapshot exposes a random-only last reset timestamp", () => {
   const publicSnapshot = snapshot as typeof snapshot & { lastRandomResetAt: string | null };
   const expectedViewModel = getRadarViewModel(internal, "ja", true, undefined, calculationNow);
 
-  assert.equal(publicSnapshot.lastRandomResetAt, "2026-08-01T03:32:00.000Z");
-  assert.equal(snapshot.viewModel.regularResetForecast.sourceResetAt, "2026-08-08T03:00:00.000Z");
-  assert.notEqual(publicSnapshot.lastRandomResetAt, snapshot.viewModel.regularResetForecast.sourceResetAt);
+  assert.equal(
+    Date.parse(publicSnapshot.lastRandomResetAt ?? ""),
+    Date.parse("2026-08-01T03:32:00.000Z"),
+  );
+  assert.equal(
+    Date.parse(snapshot.viewModel.regularResetForecast.sourceResetAt ?? ""),
+    Date.parse(publicSnapshot.lastRandomResetAt ?? ""),
+  );
+  assert.equal(snapshot.viewModel.regularResetForecast.expectedAt, "2026-08-15T03:32:00.000Z");
   assert.deepEqual(
     {
       probability12h: snapshot.viewModel.probability12h,
@@ -716,6 +721,31 @@ test("history execution display omits approximate markers while internal precisi
   );
 });
 
+test("only generated weekly references use their expected date for display", () => {
+  const expectedAt = "2026-11-04T06:35:40.653Z";
+  const weeklyReference = {
+    key: "weekly-regular-reference-weekly-reset-2026-11-04",
+    recordKind: "reference" as const,
+    date: expectedAt,
+    resetAt: null,
+  };
+  const staticReference = {
+    key: "legacy-static-reference-2026-11-04",
+    recordKind: "reference" as const,
+    date: expectedAt,
+    resetAt: null,
+  };
+
+  assert.deepEqual(getHistoryDateTimeProps(weeklyReference), {
+    value: expectedAt,
+    approximate: false,
+  });
+  assert.deepEqual(getHistoryDateTimeProps(staticReference), {
+    value: null,
+    approximate: false,
+  });
+});
+
 test("formats a scheduled Japanese datetime with a compact weekday", () => {
   assert.equal(
     formatDateTimeInZone(
@@ -865,12 +895,11 @@ test("history page combines confirmed, banked, and regular reference records chr
       item.recordKind === "reference",
   );
   assert.ok(visibleItems.length >= 3);
-  const firstTitle = translateDynamic(visibleItems[0].title, "en");
-  const secondTitle = translateDynamic(visibleItems[1].title, "en");
   for (const item of visibleItems) {
     assert.match(html, new RegExp(escapeRegExp(escapeHtml(translateDynamic(item.title, "en")))));
   }
-  assert.ok(html.indexOf(escapeHtml(firstTitle)) < html.indexOf(escapeHtml(secondTitle)));
+  const visibleTimes = visibleItems.map((item) => Date.parse(item.resetAt ?? item.date ?? ""));
+  assert.deepEqual(visibleTimes, [...visibleTimes].sort((left, right) => right - left));
   assert.doesNotMatch(html, /aria-busy="true"/);
   assert.match(html, /<time[^>]*dateTime=/);
   assert.match(html, /JST/);
@@ -986,10 +1015,10 @@ test("normalizes regular reset presentation and hides notice/source rows", () =>
   const snapshot = toPublicRadarSnapshot(
     getLocalRadarData({
       calculationNow,
-      regularResetEvents: getDueRegularResetEventRows(
-        calculationNow,
-        "2026-08-01T03:32:00.000Z",
-      ),
+      regularResetEvents: [createObservedRegularResetEventRow(
+        "2026-08-08T03:32:00.000Z",
+        "2026-08-08T03:32:00.000Z",
+      )],
     }),
     "ja",
     {
@@ -998,10 +1027,13 @@ test("normalizes regular reset presentation and hides notice/source rows", () =>
     },
   );
   const regular = snapshot.viewModel.recentHistory.find(
-    (item) => item.recordKind === "regular_completed",
+    (item) => item.recordKind === "reference" && item.key.startsWith("weekly-regular-reference-"),
   );
   assert.ok(regular);
   assert.equal(regular.title, "定期リセット");
+  assert.equal(regular.status, "参考日時");
+  assert.equal(regular.resetLabel, "参考日時");
+  assert.equal(regular.resetAt, null);
   assert.equal(regular.details?.cycleType, "定期リセット");
   assert.equal(regular.details?.reasonType, "定期更新");
   assert.equal(regular.details?.resetMethod, "強制リセット");
@@ -1010,11 +1042,11 @@ test("normalizes regular reset presentation and hides notice/source rows", () =>
   assert.equal(regular.details?.noticeType, undefined);
   assert.equal(
     regular.summary,
-    "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。",
+    "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
   );
   assert.equal(
     regular.details?.note,
-    "前回のリセット後にCodex / Workを初めて使用した時点から、1週間後に定期リセットが行われます。任意リセットを使用した場合も、任意リセット後の初使用から1週間後となるため、この表示時刻とはずれる場合があります。",
+    "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
   );
   assert.equal(regular.signalAt, null);
   assert.equal(regular.signalLabel, "");
@@ -1034,6 +1066,56 @@ test("normalizes regular reset presentation and hides notice/source rows", () =>
   assert.doesNotMatch(html, /出典未記録/);
 });
 
+test("weekly reference date is rendered on the home and history surfaces in all locales", () => {
+  const locales = ["ja", "en", "zh"] as const;
+  const localeFormats = {
+    ja: { label: "参考日時", formatLocale: "ja-JP" },
+    en: { label: "Reference time", formatLocale: "en-US" },
+    zh: { label: "参考时间", formatLocale: "zh-CN" },
+  } as const;
+  const calculationNow = new Date("2026-11-08T02:00:00.000Z");
+
+  for (const locale of locales) {
+    const snapshot = toPublicRadarSnapshot(
+      getLocalRadarData({ calculationNow }),
+      locale,
+      { calculationNow, limitHistory: false },
+    );
+    const reference = snapshot.viewModel.recentHistory.find(
+      (item) => item.key.startsWith("weekly-regular-reference-"),
+    );
+    assert.ok(reference);
+    assert.ok(reference.date);
+    assert.equal(reference.recordKind, "reference");
+    assert.equal(reference.resetAt, null);
+    assert.equal(reference.status, localeFormats[locale].label);
+    assert.equal(reference.resetLabel, localeFormats[locale].label);
+
+    const isoDate = new Date(reference.date).toISOString();
+    const expectedTime = formatDateTimeInZone(
+      new Date(reference.date),
+      "Asia/Tokyo",
+      localeFormats[locale].formatLocale,
+    );
+    const expectedTimeMarkup = new RegExp(
+      `<time dateTime="${escapeRegExp(isoDate)}"[^>]*>${escapeRegExp(expectedTime)}<\\/time>`,
+    );
+    const views = [
+      renderToStaticMarkup(React.createElement(RadarDashboard, { initialData: snapshot, locale })),
+      renderToStaticMarkup(React.createElement(HistoryView, { data: snapshot, locale })),
+    ];
+
+    for (const html of views) {
+      assert.match(html, expectedTimeMarkup, `${locale} displays the exact reference instant`);
+      assert.match(html, new RegExp(escapeRegExp(localeFormats[locale].label)));
+      assert.doesNotMatch(
+        html,
+        new RegExp(`<time dateTime="${escapeRegExp(isoDate)}"[^>]*>(?:Unknown|不明|未知|—|-)</time>`),
+      );
+    }
+  }
+});
+
 test("regular history keeps a known Banked Reset delivery method", () => {
   const snapshot = toPublicRadarSnapshot(getLocalRadarData({}), "ja", {
     calculationNow: new Date("2026-08-08T05:00:00.000Z"),
@@ -1051,30 +1133,30 @@ test("regular history keeps a known Banked Reset delivery method", () => {
 
 test("regular reset supplement is localized without changing the history summary", () => {
   const expectedNotes = {
-    ja: "前回のリセット後にCodex / Workを初めて使用した時点から、1週間後に定期リセットが行われます。任意リセットを使用した場合も、任意リセット後の初使用から1週間後となるため、この表示時刻とはずれる場合があります。",
-    en: "A regular reset occurs one week after you first use Codex or Work following the previous reset. If you use a Banked Reset, the next weekly timing is likewise counted from your first use after that reset, so it may differ from the time shown here.",
-    zh: "定期重置会在您上次重置后首次使用 Codex 或 Work 的一周后进行。使用手动重置后也一样，会从该重置后的首次使用时间起算一周，因此实际时间可能与此处显示的时间不同。",
+    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
+    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
+    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
   } as const;
   const expectedSummaries = {
-    ja: "通常の1週間サイクルのタイミングで、Codexの利用上限リセットが実施されました。",
-    en: "Codex usage limits were reset on the usual weekly-cycle timing.",
-    zh: "在常规的 1 周循环时间点，执行了 Codex 使用限制重置。",
+    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
+    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
+    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
   } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
     const calculationNow = new Date("2026-08-08T05:00:00.000Z");
     const snapshot = toPublicRadarSnapshot(getLocalRadarData({
       calculationNow,
-      regularResetEvents: getDueRegularResetEventRows(
-        calculationNow,
-        "2026-08-01T03:32:00.000Z",
-      ),
+      regularResetEvents: [createObservedRegularResetEventRow(
+        "2026-08-08T03:32:00.000Z",
+        "2026-08-08T03:32:00.000Z",
+      )],
     }), locale, {
       calculationNow,
       limitHistory: false,
     });
     const regular = snapshot.viewModel.recentHistory.find(
-      (item) => item.recordKind === "regular_completed",
+      (item) => item.recordKind === "reference" && item.key.startsWith("weekly-regular-reference-"),
     );
 
     assert.ok(regular);
@@ -1090,9 +1172,9 @@ test("top dashboard omits latest reset and weekly reference cards", () => {
     zh: "每周重置参考日期",
   } as const;
   const weeklyNotes = {
-    ja: "過去の全体リセット時刻から7日後を計算した参考値です。各アカウントの実際の表示日時や利用枠とは異なる場合があります。",
-    en: "This is a shared reference calculated as seven days after the latest confirmed global reset. Your account’s actual usage window may differ.",
-    zh: "这是根据最近一次已确认的全局重置时间向后计算七天得到的公共参考值。您账号的实际使用周期可能不同。",
+    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
+    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
+    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
   } as const;
   const calculationNow = new Date("2026-08-04T03:32:00.000Z");
 
@@ -1132,9 +1214,9 @@ test("shows the next regular reset reference only within 72 hours", () => {
     zh: "下次定期重置参考日期",
   } as const;
   const notes = {
-    ja: "実際のリセット日時は、ユーザーごとの利用状況により異なる場合があります。",
-    en: "The actual reset time may vary by user depending on usage.",
-    zh: "实际重置时间可能因用户的使用情况而异。",
+    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
+    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
+    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
   } as const;
   for (const locale of ["ja", "en", "zh"] as const) {
     const data = toPublicRadarSnapshot(

@@ -53,6 +53,24 @@ function regularHistoryEventAt(scheduledAt: string, completedAt = scheduledAt): 
   };
 }
 
+function globalForcedHistoryEventAt(at: string): WindowEventLike {
+  return {
+    id: `global-forced-${at}`,
+    recordKind: "confirmed_global",
+    status: "closed",
+    closed_at: at,
+    completed_at: at,
+    scope: "全有料プラン",
+    details: {
+      cycleType: "ランダムリセット",
+      reasonType: "詫びリセット",
+      resetMethod: "強制リセット",
+      scope: "全有料プラン",
+      noticeToExecution: "0分",
+    },
+  };
+}
+
 function withLocalHistory<T>(history: WindowEventLike[], callback: () => T): T {
   const original = LOCAL_RESET_HISTORY.splice(0, LOCAL_RESET_HISTORY.length, ...history);
   try {
@@ -103,10 +121,10 @@ test("regular and random resets remain separate across history and recovery boun
     monitorRecoveryObservationsFor([random]),
   );
 
-  assert.equal(combined.length, 2);
+  assert.equal(combined.length, 1);
   assert.deepEqual(
     new Set(combined.map((item) => item.details?.cycleType)),
-    new Set(["定期リセット", "ランダムリセット"]),
+    new Set(["ランダムリセット"]),
   );
 
   const randomHistory = combined.find((item) => item.details?.cycleType === "ランダムリセット");
@@ -183,9 +201,8 @@ test("time-only rejected Tibo proximity never removes a canonical regular bounda
     const data = radarData([regularEvent()], [], [rejected]);
     const combined = combineResetHistory([], [], [rejected], [regularEvent()]);
 
-    assert.equal(combined.length, 1, label);
-    assert.equal(combined[0].details?.cycleType, "定期リセット", label);
-    assert.equal(getLatestRegularScheduleAnchorAt(data, NOW), REGULAR_AT, label);
+    assert.equal(combined.length, 0, label);
+    assert.notEqual(getLatestRegularScheduleAnchorAt(data, NOW), REGULAR_AT, label);
     assert.equal(getLastResetBoundaryAt(data, NOW)?.toISOString(), REGULAR_AT, label);
   }
 });
@@ -216,40 +233,86 @@ test("time-only rejected Tibo proximity still removes a matching random candidat
   assert.deepEqual(combineResetHistory([random], [], [rejected], []), []);
 });
 
-test("regular forecast auto-completes the due occurrence without a monitor observation", () => {
-  const anchorAt = "2026-08-13T03:34:43.341Z";
-  const expectedAt = "2026-08-20T03:34:43.341Z";
-  const beforeNow = new Date("2026-08-20T03:34:43.340Z");
-  const beforeForecast = withLocalHistory([regularHistoryEventAt(anchorAt)], () => {
-    const data = getLocalRadarData({ calculationNow: beforeNow });
-    return getRadarViewModel(data, "ja", false, undefined, beforeNow).regularResetForecast;
-  });
-  assert.equal(beforeForecast.expectedAt, expectedAt);
-  assert.equal(beforeForecast.isNoticeWindow, true);
-  assert.equal(beforeForecast.remaining.startsWith("-") || beforeForecast.remaining.includes("-"), false);
-  assert.ok((beforeForecast.remainingDays ?? 0) >= 0);
+test("personal recovery stays an internal boundary while public weekly references remain globally anchored", () => {
+  const anchorAt = "2026-10-28T06:35:40.653Z";
+  const referenceAt = "2026-11-04T06:35:40.653Z";
+  const personalScheduledAt = "2026-11-08T00:54:47.000Z";
+  const personalCompletedAt = "2026-11-08T00:54:50.259Z";
+  const now = new Date("2026-11-08T02:00:00.000Z");
 
-  const dueNow = new Date("2026-08-20T03:35:00.000Z");
-  const dueData = getLocalRadarData({ calculationNow: dueNow });
-  const dueViewModel = withLocalHistory([regularHistoryEventAt(anchorAt)], () => {
-    return getRadarViewModel(dueData, "ja", false, undefined, dueNow);
-  });
-  const projectedRegular = dueViewModel.recentHistory.find(
-    (item) => item.recordKind === "regular_completed" && item.resetAt === expectedAt,
-  );
-  assert.ok(projectedRegular);
-  assert.equal(dueViewModel.regularResetForecast.sourceResetAt, expectedAt);
-  assert.equal(dueViewModel.regularResetForecast.expectedAt, "2026-08-27T03:34:43.341Z");
-  assert.equal(dueViewModel.regularResetForecast.isNoticeWindow, false);
-  assert.equal(dueData.regular_reset_events?.length ?? 0, 0);
-
-  const completionNow = new Date("2026-08-20T03:40:00.000Z");
-  const completedForecast = withLocalHistory([regularHistoryEventAt(anchorAt)], () => {
+  const result = withLocalHistory([globalForcedHistoryEventAt(anchorAt)], () => {
     const data = getLocalRadarData({
-      calculationNow: completionNow,
-      regularResetEvents: [regularEventAt(expectedAt, "2026-08-20T03:36:00.000Z")],
+      calculationNow: now,
+      regularResetEvents: [regularEventAt(personalScheduledAt, personalCompletedAt)],
     });
-    return getRadarViewModel(data, "ja", false, undefined, completionNow).regularResetForecast;
+    return {
+      data,
+      viewModel: getRadarViewModel(data, "ja", false, undefined, now),
+      recoveryBoundaryAt: getLastResetBoundaryAt(data, now)?.toISOString(),
+      scheduleAnchorAt: getLatestRegularScheduleAnchorAt(data, now),
+    };
   });
-  assert.equal(completedForecast.expectedAt, "2026-08-27T03:36:00.000Z");
+
+  const projectedReference = result.viewModel.recentHistory.find(
+    (item) => item.recordKind === "reference" && item.date === referenceAt,
+  );
+  assert.ok(projectedReference);
+  assert.equal(projectedReference.resetAt, null);
+  assert.equal(projectedReference.status, "参考日時");
+  assert.equal(projectedReference.resetLabel, "参考日時");
+  assert.equal(result.viewModel.regularResetForecast.sourceResetAt, anchorAt);
+  assert.equal(result.viewModel.regularResetForecast.lastCompletedAt, anchorAt);
+  assert.equal(result.viewModel.regularResetForecast.expectedAt, "2026-11-11T06:35:40.653Z");
+  assert.equal(result.scheduleAnchorAt, anchorAt);
+  assert.equal(result.recoveryBoundaryAt, personalCompletedAt);
+  assert.equal(
+    result.viewModel.recentHistory.some((item) => item.key.startsWith("regular-reset-weekly-regular-reset:2026-11-08")),
+    false,
+  );
+});
+
+test("a delayed monitor observation does not move the anchored weekly reference", () => {
+  const anchorAt = "2026-10-28T06:35:40.653Z";
+  const scheduledAt = "2026-11-04T06:35:40.653Z";
+  const observedAt = "2026-11-04T06:40:00.000Z";
+  const now = new Date("2026-11-08T02:00:00.000Z");
+
+  const result = withLocalHistory([globalForcedHistoryEventAt(anchorAt)], () => {
+    const data = getLocalRadarData({
+      calculationNow: now,
+      regularResetEvents: [regularEventAt(scheduledAt, observedAt)],
+    });
+    return {
+      data,
+      viewModel: getRadarViewModel(data, "ja", false, undefined, now),
+      scheduleAnchorAt: getLatestRegularScheduleAnchorAt(data, now),
+    };
+  });
+
+  assert.equal(result.scheduleAnchorAt, anchorAt);
+  assert.equal(result.viewModel.regularResetForecast.expectedAt, "2026-11-11T06:35:40.653Z");
+  assert.equal(result.viewModel.regularResetForecast.sourceResetAt, anchorAt);
+  assert.ok(result.viewModel.recentHistory.some(
+    (item) => item.recordKind === "reference" && item.date === scheduledAt,
+  ));
+  assert.equal(result.viewModel.recentHistory.some(
+    (item) => item.key.startsWith("regular-reset-weekly-regular-reset:2026-11-04"),
+  ), false);
+});
+
+test("a voided personal regular row does not remove a legacy static manual history item", () => {
+  const anchorAt = "2026-10-28T06:35:40.653Z";
+  const manualAt = "2026-11-04T06:35:40.653Z";
+  const now = new Date("2026-11-08T02:00:00.000Z");
+  const voidedRow = { ...regularEventAt(manualAt), status: "voided" as const };
+
+  const viewModel = withLocalHistory(
+    [globalForcedHistoryEventAt(anchorAt), regularHistoryEventAt(manualAt)],
+    () => {
+      const data = getLocalRadarData({ calculationNow: now, regularResetEvents: [voidedRow] });
+      return getRadarViewModel(data, "ja", false, undefined, now);
+    },
+  );
+
+  assert.ok(viewModel.recentHistory.some((item) => item.key === `regular-history-${manualAt}`));
 });

@@ -12,10 +12,7 @@ export type RegularResetScheduleDefinition = {
   window_end_offset_minutes: number;
 };
 
-/**
- * The weekly schedule describes the recurring shape only. Its anchor must be
- * supplied by the latest qualifying recovery event at runtime.
- */
+/** The public weekly reference is anchored to the latest canonical global reset. */
 export const DEFAULT_REGULAR_RESET_SCHEDULE: RegularResetScheduleDefinition = {
   schedule_id: "weekly-regular-reset",
   cycle_days: 7,
@@ -81,43 +78,15 @@ function isQualifyingScheduleAnchor(item: WindowEventLike) {
   const status = item.status?.toLowerCase();
   if (status === "rejected" || status === "voided") return false;
 
-  const cycleType = item.details?.cycleType;
-  if (item.recordKind === "regular_completed") {
-    // This record kind is reserved for a canonical scheduled regular wave.
-    // Its delivery method may be Banked Reset, but the record itself proves
-    // that the weekly boundary was completed; a banked_distribution record
-    // only proves that reset credit was distributed.
-    return true;
-  }
-
-  // Older local records did not use regular_completed yet. Preserve those
-  // records only when their regular cycle and broad scope are explicit. A
-  // legacy banked_distribution is deliberately excluded: it may be only a
-  // manual reset-credit distribution, not an actual weekly boundary.
-  if (
-    cycleType === "定期リセット" &&
-    (item.recordKind === "confirmed_global" || item.recordKind === "reference") &&
-    isBroadResetScope(item)
-  ) {
-    return true;
-  }
-
-  if (
-    item.recordKind !== "confirmed_global" &&
-    item.recordKind !== "banked_distribution"
-  ) {
-    return false;
-  }
-
   return (
-    cycleType === "ランダムリセット" &&
+    item.recordKind === "confirmed_global" &&
     item.details?.resetMethod === "強制リセット" &&
     isBroadResetScope(item)
   );
 }
 
 /**
- * Finds the latest known completed regular or broad forced-reset boundary.
+ * Finds the latest completed canonical global forced reset.
  * The caller supplies already-normalized history so this helper remains pure
  * and cannot accidentally read future or raw notice timestamps.
  */
@@ -174,22 +143,10 @@ function createRegularResetEventRow(
   };
 }
 
-function createScheduledRow(
-  definition: RegularResetScheduleDefinition,
-  anchorAt: Date,
-  occurrenceIndex: number,
-): RegularResetEventRow {
-  const representativeAt = addDays(
-    anchorAt,
-    occurrenceIndex * definition.cycle_days,
-  );
-  return createRegularResetEventRow(definition, representativeAt, representativeAt.toISOString());
-}
-
 /**
  * Creates a canonical regular event only after the Usage Monitor has observed
- * the recovery. scheduled_at remains the expected boundary; completed_at is
- * the measured quota recovery time.
+ * the recovery. This row is a private monitor observation: scheduled_at is the
+ * expected boundary and completed_at is the measured per-user recovery time.
  */
 export function createObservedRegularResetEventRow(
   scheduledAt: string,
@@ -204,17 +161,63 @@ export function createObservedRegularResetEventRow(
   return createRegularResetEventRow(definition, representativeAt, completedDate.toISOString());
 }
 
+function createRegularResetReferenceEvent(
+  definition: RegularResetScheduleDefinition,
+  representativeAt: Date,
+): WindowEventLike {
+  const scheduledAt = representativeAt.toISOString();
+  const windowStartAt = addMinutes(
+    representativeAt,
+    definition.window_start_offset_minutes,
+  );
+  const windowEndAt = addMinutes(
+    representativeAt,
+    definition.window_end_offset_minutes,
+  );
+  const scope = definition.scope;
+  const note = {
+    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
+    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
+    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
+  };
+
+  return {
+    id: `weekly-regular-reference-${definition.schedule_id}-${scheduledAt.replace(/[^a-zA-Z0-9_-]+/g, "-")}`,
+    recordKind: "reference",
+    title: "定期リセット",
+    kind: "window_opened",
+    status: "scheduled",
+    date: scheduledAt,
+    opened_at: windowStartAt.toISOString(),
+    closed_at: null,
+    completed_at: null,
+    window_minutes: Math.max(0, Math.round((windowEndAt.getTime() - windowStartAt.getTime()) / 60000)),
+    window_human: "参考予定",
+    scope,
+    summary: note,
+    source_url: null,
+    details: {
+      cycleType: definition.cycle_type,
+      reasonType: "定期更新",
+      resetMethod: definition.reset_method,
+      scope,
+      noticeToExecution: "参考日時",
+      noticeType: "なし",
+      note,
+    },
+  };
+}
+
 /**
- * Returns only weekly occurrences after the supplied anchor whose
- * representative time has arrived. Callers may use these deterministic rows
- * as a read-side completion projection; persisted history still comes from an
- * observed row when Usage Monitor confirms the recovery.
+ * Returns scheduled weekly references whose representative time has arrived.
+ * They carry no completed timestamp and never claim that a global or personal
+ * quota recovery was observed.
  */
-export function getDueRegularResetEventRows(
+export function getDueRegularResetReferenceEvents(
   now: Date,
   latestAnchorAt: string | null | undefined,
   definition: RegularResetScheduleDefinition = DEFAULT_REGULAR_RESET_SCHEDULE,
-): RegularResetEventRow[] {
+): WindowEventLike[] {
   const nowMs = now.getTime();
   const anchor = parseFiniteDate(latestAnchorAt);
 
@@ -228,20 +231,20 @@ export function getDueRegularResetEventRows(
     return [];
   }
 
-  const rows: RegularResetEventRow[] = [];
+  const references: WindowEventLike[] = [];
   let occurrenceIndex = 1;
 
-  while (rows.length < MAX_SCHEDULED_OCCURRENCES) {
-    const row = createScheduledRow(definition, anchor, occurrenceIndex);
-    if (new Date(row.representative_at).getTime() > nowMs) {
+  while (references.length < MAX_SCHEDULED_OCCURRENCES) {
+    const representativeAt = addDays(anchor, occurrenceIndex * definition.cycle_days);
+    if (representativeAt.getTime() > nowMs) {
       break;
     }
 
-    rows.push(row);
+    references.push(createRegularResetReferenceEvent(definition, representativeAt));
     occurrenceIndex += 1;
   }
 
-  return rows;
+  return references;
 }
 
 export function toRegularResetHistoryEvent(

@@ -1957,7 +1957,7 @@ test("temporary Tibo teaser presentation override expires back to the ordinary r
   assert.equal(snapshot.latestTiboActivity, null);
 });
 
-test("temporary Tibo teaser presentation override is disabled once a newer reset occurs after campaign start", () => {
+test("a projected weekly reference does not count as a reset for the temporary Tibo teaser override", () => {
   const calculationNow = new Date("2026-10-10T12:00:00.000Z");
   const data = getLocalRadarData({
     calculationNow,
@@ -1977,7 +1977,7 @@ test("temporary Tibo teaser presentation override is disabled once a newer reset
   });
 
   const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
-  assert.equal(snapshot.resetTeaserStatus, "none");
+  assert.equal(snapshot.resetTeaserStatus, "strong");
 });
 
 test("temporary Tibo teaser presentation override retains localized text without double translation when source matches", () => {
@@ -2520,7 +2520,8 @@ test("shows the concrete regular target scope and hides full-paid regular scope 
     );
     const regular = viewModel.recentHistory.find(
       (item) =>
-        item.recordKind === "regular_completed" &&
+        item.recordKind === "reference" &&
+        item.key.startsWith("weekly-regular-reference-") &&
         item.details?.scope === labels[locale].value,
     );
     assert.ok(regular, `${locale} regular history item should be present`);
