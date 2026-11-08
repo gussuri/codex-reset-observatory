@@ -131,6 +131,12 @@ function hasPriorSignal(signalAt: string | null | undefined, resetAt: string | n
   return Number.isFinite(signalTime) && Number.isFinite(resetTime) && signalTime < resetTime;
 }
 
+function isWeeklyRegularReferenceHistoryItem(
+  item: Pick<PublicRadarSnapshot["viewModel"]["recentHistory"][number], "key" | "recordKind">,
+) {
+  return item.recordKind === "reference" && item.key.startsWith("weekly-regular-reference-");
+}
+
 function isTiboNoticeSource(sourceUrl: string | null | undefined) {
   if (!sourceUrl) return false;
 
@@ -1298,11 +1304,14 @@ export function RadarDashboard({
                       {item.resetAt || item.resetLabel ? (
                         <div className="sm:contents">
                           <span className="text-slate-600">
-                            {translateDynamic(item.resetLabel, locale)}{locale === "en" ? ": " : "："}
+                            {translateDynamic(
+                              isWeeklyRegularReferenceHistoryItem(item) ? "参考日時" : item.resetLabel,
+                              locale,
+                            )}{locale === "en" ? ": " : "："}
                           </span>
                           <span className="tabular-nums font-bold text-slate-900 sm:font-normal sm:text-slate-700">
                             <LocalizedDateTime
-                              value={item.resetAt}
+                              value={isWeeklyRegularReferenceHistoryItem(item) ? item.date : item.resetAt}
                               locale={locale}
                               approximate={false}
                               className="font-bold text-slate-900 sm:font-normal sm:text-slate-700"

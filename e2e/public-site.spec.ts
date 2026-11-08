@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { formatDateTimeInZone } from "../components/LocalizedDateTime";
 
 type BrowserErrors = {
   pageErrors: string[];
@@ -100,44 +101,110 @@ test("Japanese home renders the dashboard without browser errors", async ({ page
   await expectNoBrowserErrors(errors);
 });
 
-test("shared weekly reference is labelled as a reference on mobile and desktop", async ({ page, request }) => {
-  const response = await request.get("/api/current?locale=ja");
-  expect(response.status()).toBe(200);
-  const body = await response.json() as {
-    schemaVersion: string;
-    viewModel: {
-      recentHistory: Array<{
-        key: string;
-        recordKind?: string;
-        status: string;
-        resetAt?: string | null;
-        summary?: string | null;
-      }>;
-    };
-  };
-  expect(body.schemaVersion).toBe("public-v1");
-  const projected = body.viewModel.recentHistory.find(
-    (item) => item.key.startsWith("weekly-regular-reference-"),
-  );
-  expect(projected).toMatchObject({
-    recordKind: "reference",
-    status: "実施予定",
-    resetAt: null,
-  });
-  expect(projected?.summary).toContain("利用枠回復を確認した記録ではありません");
-
+test("weekly references show their expected date and time on localized home and history pages", async ({ page, request }, testInfo) => {
+  const locales = [
+    {
+      locale: "ja",
+      formatLocale: "ja-JP",
+      referenceLabel: "参考日時",
+      note: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
+      home: "/",
+      history: "/history",
+    },
+    {
+      locale: "en",
+      formatLocale: "en-US",
+      referenceLabel: "Reference time",
+      note: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
+      home: "/en",
+      history: "/en/history",
+    },
+    {
+      locale: "zh",
+      formatLocale: "zh-CN",
+      referenceLabel: "参考时间",
+      note: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
+      home: "/zh",
+      history: "/zh/history",
+    },
+  ] as const;
   const errors = await prepareLocalPage(page);
-  const note = "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。";
+
   for (const viewport of [
     { width: 390, height: 844 },
     { width: 1440, height: 900 },
   ]) {
     await page.setViewportSize(viewport);
-    await page.goto("/");
-    await expect(
-      page.getByText(note, { exact: true }).filter({ visible: true }).first(),
-    ).toBeVisible();
+
+    for (const localized of locales) {
+      const response = await request.get(`/api/current?locale=${localized.locale}`);
+      expect(response.status()).toBe(200);
+      const body = await response.json() as {
+        schemaVersion: string;
+        viewModel: {
+          recentHistory: Array<{
+            key: string;
+            recordKind?: string;
+            status: string;
+            date?: string | null;
+            resetAt?: string | null;
+            resetLabel: string;
+            summary?: string | null;
+          }>;
+        };
+      };
+      expect(body.schemaVersion).toBe("public-v1");
+      const projected = body.viewModel.recentHistory.find(
+        (item) => item.key.startsWith("weekly-regular-reference-"),
+      );
+      expect(projected).toMatchObject({
+        recordKind: "reference",
+        status: localized.referenceLabel,
+        resetLabel: localized.referenceLabel,
+        resetAt: null,
+      });
+      expect(projected?.date).toBeTruthy();
+      expect(projected?.summary).toContain(localized.note);
+      const referenceDate = new Date(projected!.date!).toISOString();
+
+      for (const [pageKind, path] of [
+        ["home", localized.home],
+        ["history", localized.history],
+      ] as const) {
+        await page.goto(path);
+        const time = page
+          .locator(`time[datetime="${referenceDate}"]`)
+          .filter({ visible: true })
+          .first();
+        await expect(time).toBeVisible();
+        const viewerTimeZone = await page.evaluate(() =>
+          Intl.DateTimeFormat().resolvedOptions().timeZone,
+        );
+        const expectedTime = formatDateTimeInZone(
+          new Date(referenceDate),
+          viewerTimeZone,
+          localized.formatLocale,
+        );
+        await expect(time).toHaveText(expectedTime);
+        const dateRowText = await time.evaluate((element) => {
+          let parent = element.parentElement;
+          while (parent && parent.tagName !== "P" && parent.tagName !== "DIV") {
+            parent = parent.parentElement;
+          }
+          return parent?.textContent ?? "";
+        });
+        expect(dateRowText).toContain(localized.referenceLabel);
+        expect(dateRowText).not.toMatch(/(?:Unknown|不明|未知|—|-)\s*$/i);
+
+        await time.scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: testInfo.outputPath(`weekly-reference-${localized.locale}-${pageKind}-${viewport.width}.png`),
+          animations: "disabled",
+        });
+      }
+    }
   }
+
   await expectNoBrowserErrors(errors);
 });
 

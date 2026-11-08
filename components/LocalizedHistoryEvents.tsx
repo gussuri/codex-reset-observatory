@@ -11,9 +11,17 @@ import { getAnalyticsSourceType, trackSourceLinkClick } from "@/lib/analyticsEve
 
 type HistoryItem = PublicRadarSnapshot["viewModel"]["recentHistory"][number];
 
-export function getHistoryDateTimeProps(item: Pick<HistoryItem, "resetAt">) {
+function isWeeklyRegularReference(item: Partial<Pick<HistoryItem, "key" | "recordKind">>) {
+  return item.recordKind === "reference" && item.key?.startsWith("weekly-regular-reference-") === true;
+}
+
+export function getHistoryDateTimeProps(
+  item: Pick<HistoryItem, "resetAt"> & Partial<Pick<HistoryItem, "key" | "recordKind" | "date">>,
+) {
   return {
-    value: item.resetAt,
+    value: isWeeklyRegularReference(item)
+      ? item.date
+      : item.resetAt,
     approximate: false,
   } as const;
 }
@@ -132,6 +140,11 @@ function getHistoryDisplayTitle(item: HistoryItem, locale: Locale) {
 }
 
 function HistoryItemRow({ item, locale }: { item: HistoryItem; locale: Locale }) {
+  const dateTimeProps = getHistoryDateTimeProps(item);
+  const resetLabel = isWeeklyRegularReference(item)
+    ? translateDynamic("参考日時", locale)
+    : item.resetLabel;
+
   return (
     <article
       className="grid gap-4 py-5 first:pt-0 last:pb-0 md:grid-cols-[1fr_auto]"
@@ -150,9 +163,9 @@ function HistoryItemRow({ item, locale }: { item: HistoryItem; locale: Locale })
             {item.signalLabel}{locale === "en" ? ": " : "："}<LocalizedDateTime value={item.signalAt} locale={locale} />
           </p>
         ) : null}
-        {item.resetAt ? (
+        {dateTimeProps.value ? (
           <p>
-            {item.resetLabel}{locale === "en" ? ": " : "："}<LocalizedDateTime {...getHistoryDateTimeProps(item)} locale={locale} />
+            {resetLabel}{locale === "en" ? ": " : "："}<LocalizedDateTime {...dateTimeProps} locale={locale} />
           </p>
         ) : null}
         <HistorySource item={item} locale={locale} />

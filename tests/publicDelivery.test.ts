@@ -721,6 +721,31 @@ test("history execution display omits approximate markers while internal precisi
   );
 });
 
+test("only generated weekly references use their expected date for display", () => {
+  const expectedAt = "2026-11-04T06:35:40.653Z";
+  const weeklyReference = {
+    key: "weekly-regular-reference-weekly-reset-2026-11-04",
+    recordKind: "reference" as const,
+    date: expectedAt,
+    resetAt: null,
+  };
+  const staticReference = {
+    key: "legacy-static-reference-2026-11-04",
+    recordKind: "reference" as const,
+    date: expectedAt,
+    resetAt: null,
+  };
+
+  assert.deepEqual(getHistoryDateTimeProps(weeklyReference), {
+    value: expectedAt,
+    approximate: false,
+  });
+  assert.deepEqual(getHistoryDateTimeProps(staticReference), {
+    value: null,
+    approximate: false,
+  });
+});
+
 test("formats a scheduled Japanese datetime with a compact weekday", () => {
   assert.equal(
     formatDateTimeInZone(
@@ -1006,7 +1031,8 @@ test("normalizes regular reset presentation and hides notice/source rows", () =>
   );
   assert.ok(regular);
   assert.equal(regular.title, "定期リセット");
-  assert.equal(regular.status, "実施予定");
+  assert.equal(regular.status, "参考日時");
+  assert.equal(regular.resetLabel, "参考日時");
   assert.equal(regular.resetAt, null);
   assert.equal(regular.details?.cycleType, "定期リセット");
   assert.equal(regular.details?.reasonType, "定期更新");
@@ -1038,6 +1064,56 @@ test("normalizes regular reset presentation and hides notice/source rows", () =>
   );
   assert.doesNotMatch(html, /予告/);
   assert.doesNotMatch(html, /出典未記録/);
+});
+
+test("weekly reference date is rendered on the home and history surfaces in all locales", () => {
+  const locales = ["ja", "en", "zh"] as const;
+  const localeFormats = {
+    ja: { label: "参考日時", formatLocale: "ja-JP" },
+    en: { label: "Reference time", formatLocale: "en-US" },
+    zh: { label: "参考时间", formatLocale: "zh-CN" },
+  } as const;
+  const calculationNow = new Date("2026-11-08T02:00:00.000Z");
+
+  for (const locale of locales) {
+    const snapshot = toPublicRadarSnapshot(
+      getLocalRadarData({ calculationNow }),
+      locale,
+      { calculationNow, limitHistory: false },
+    );
+    const reference = snapshot.viewModel.recentHistory.find(
+      (item) => item.key.startsWith("weekly-regular-reference-"),
+    );
+    assert.ok(reference);
+    assert.ok(reference.date);
+    assert.equal(reference.recordKind, "reference");
+    assert.equal(reference.resetAt, null);
+    assert.equal(reference.status, localeFormats[locale].label);
+    assert.equal(reference.resetLabel, localeFormats[locale].label);
+
+    const isoDate = new Date(reference.date).toISOString();
+    const expectedTime = formatDateTimeInZone(
+      new Date(reference.date),
+      "Asia/Tokyo",
+      localeFormats[locale].formatLocale,
+    );
+    const expectedTimeMarkup = new RegExp(
+      `<time dateTime="${escapeRegExp(isoDate)}"[^>]*>${escapeRegExp(expectedTime)}<\\/time>`,
+    );
+    const views = [
+      renderToStaticMarkup(React.createElement(RadarDashboard, { initialData: snapshot, locale })),
+      renderToStaticMarkup(React.createElement(HistoryView, { data: snapshot, locale })),
+    ];
+
+    for (const html of views) {
+      assert.match(html, expectedTimeMarkup, `${locale} displays the exact reference instant`);
+      assert.match(html, new RegExp(escapeRegExp(localeFormats[locale].label)));
+      assert.doesNotMatch(
+        html,
+        new RegExp(`<time dateTime="${escapeRegExp(isoDate)}"[^>]*>(?:Unknown|不明|未知|—|-)</time>`),
+      );
+    }
+  }
 });
 
 test("regular history keeps a known Banked Reset delivery method", () => {

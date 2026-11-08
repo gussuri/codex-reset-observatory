@@ -258,7 +258,8 @@ test("personal recovery stays an internal boundary while public weekly reference
   );
   assert.ok(projectedReference);
   assert.equal(projectedReference.resetAt, null);
-  assert.equal(projectedReference.resetLabel, "実施予定");
+  assert.equal(projectedReference.status, "参考日時");
+  assert.equal(projectedReference.resetLabel, "参考日時");
   assert.equal(result.viewModel.regularResetForecast.sourceResetAt, anchorAt);
   assert.equal(result.viewModel.regularResetForecast.lastCompletedAt, anchorAt);
   assert.equal(result.viewModel.regularResetForecast.expectedAt, "2026-11-11T06:35:40.653Z");

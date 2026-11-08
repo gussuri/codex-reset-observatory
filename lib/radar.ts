@@ -1531,7 +1531,7 @@ function getRecentHistory(
         resetType: resetTypes[0],
         resetTypes,
         status: isWeeklyReference
-          ? translateDynamic("実施予定", locale)
+          ? translateDynamic("参考日時", locale)
           : isRegular
           ? translateDynamic("リセット実施", locale)
           : translateEventStatus(item.kind ?? item.status, locale),
@@ -1541,7 +1541,9 @@ function getRecentHistory(
         resetAt,
         executionTimePrecision: isRegular ? null : executionPresentation.executionTimePrecision,
         signalLabel: hasPriorNotice ? translateUI("historyAnnouncementTime", locale) : "",
-        resetLabel: isPendingNotice || isWeeklyReference
+        resetLabel: isWeeklyReference
+          ? translateDynamic("参考日時", locale)
+          : isPendingNotice
           ? translateDynamic("実施予定", locale)
           : translateDynamic("実施", locale),
         scope: details.scope ?? "",
