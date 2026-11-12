@@ -83,7 +83,7 @@ import { TIBO_NOTICE_GRACE_MS } from "@/lib/radar/tiboTemporal";
 import { isVerifiedTiboFutureReplyNotice } from "@/lib/radar/tiboFutureReplyNotice";
 
 export const API_CACHE_CONTROL =
-  "public, max-age=0, s-maxage=300, stale-while-revalidate=120";
+  "public, max-age=60, s-maxage=600, stale-while-revalidate=300";
 export const RADAR_CORE_CACHE_TTL_SECONDS = 15 * 60;
 export const TIBO_HISTORY_CACHE_TTL_SECONDS = 15 * 60;
 export const RESET_DISPLAY_NAME_CACHE_TTL_SECONDS = 60 * 60;

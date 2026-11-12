@@ -228,6 +228,17 @@ export function getLocalRadarData({
 export type RadarCalculationContext = {
   source: RadarData | null;
   canonicalHistoryContext: CanonicalResetHistoryContext;
+  cachedViewModelComputations?: {
+    calculationNowTime: number;
+    signalEvaluationOverride?: LocalSignalEvaluation;
+    publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null;
+    publishedProbabilityRuntime?: PublishedProbabilityRuntime;
+    signalEvaluation: LocalSignalEvaluation;
+    activeOfficialNotice: ReturnType<typeof getActiveOfficialNotice>;
+    probabilityOfficialNotice: ReturnType<typeof getActiveOfficialNotice>;
+    probabilityCalculation: PublishedProbabilityCalculation;
+    randomElapsedDiagnostics: DisplayElapsedDiagnostics | null;
+  };
 };
 
 function getRandomElapsedDisplayDiagnostics(
@@ -377,29 +388,50 @@ export function getRadarViewModel(
   const resolvedCalculationContext = calculationContext ?? createRadarCalculationContext(data, calculationNow);
   const source = resolvedCalculationContext.source;
   const canonicalHistoryContext = resolvedCalculationContext.canonicalHistoryContext;
-  const signalEvaluation =
-    signalEvaluationOverride ?? getLocalSignalEvaluation(source, calculationNow, LOCAL_OBSERVATION_SIGNALS, canonicalHistoryContext);
-  const activeOfficialNotice = getActiveOfficialNotice(
-    source,
-    signalEvaluation.latestResetAt,
-    calculationNow,
-    LOCAL_OBSERVATION_SIGNALS,
-    null,
-    false,
-    false,
-    canonicalHistoryContext,
+
+  const cached = resolvedCalculationContext.cachedViewModelComputations;
+  const isCacheHit = Boolean(
+    cached &&
+    cached.calculationNowTime === calculationNow.getTime() &&
+    cached.signalEvaluationOverride === signalEvaluationOverride &&
+    cached.publishedAdaptiveRegimeSurvivalAdoptionAt === publishedAdaptiveRegimeSurvivalAdoptionAt &&
+    cached.publishedProbabilityRuntime === publishedProbabilityRuntime,
   );
-  const probabilityOfficialNotice = getActiveOfficialNotice(
-    source,
-    signalEvaluation.latestResetAt,
-    calculationNow,
-    LOCAL_OBSERVATION_SIGNALS,
-    null,
-    false,
-    false,
-    canonicalHistoryContext,
-    true,
-  );
+
+  let signalEvaluation: LocalSignalEvaluation;
+  let activeOfficialNotice: ReturnType<typeof getActiveOfficialNotice>;
+  let probabilityOfficialNotice: ReturnType<typeof getActiveOfficialNotice>;
+
+  if (isCacheHit && cached) {
+    signalEvaluation = cached.signalEvaluation;
+    activeOfficialNotice = cached.activeOfficialNotice;
+    probabilityOfficialNotice = cached.probabilityOfficialNotice;
+  } else {
+    signalEvaluation =
+      signalEvaluationOverride ?? getLocalSignalEvaluation(source, calculationNow, LOCAL_OBSERVATION_SIGNALS, canonicalHistoryContext);
+    activeOfficialNotice = getActiveOfficialNotice(
+      source,
+      signalEvaluation.latestResetAt,
+      calculationNow,
+      LOCAL_OBSERVATION_SIGNALS,
+      null,
+      false,
+      false,
+      canonicalHistoryContext,
+    );
+    probabilityOfficialNotice = getActiveOfficialNotice(
+      source,
+      signalEvaluation.latestResetAt,
+      calculationNow,
+      LOCAL_OBSERVATION_SIGNALS,
+      null,
+      false,
+      false,
+      canonicalHistoryContext,
+      true,
+    );
+  }
+
   const observedLatestWindow = getLatestWindow(source);
   const observedHistory = getRecentHistory(
     source,
@@ -419,20 +451,42 @@ export function getRadarViewModel(
     calculationNow,
     canonicalHistoryContext,
   );
-  const probabilityCalculation = calculatePublishedProbability(source, {
-    now: calculationNow,
-    signalEvaluation,
-    activeOfficialNotice: probabilityOfficialNotice,
-    regularResetExpectedAt: regularResetForecast.expectedAt,
-    canonicalHistoryContext,
-    publishedAdaptiveRegimeSurvivalAdoptionAt,
-  }, publishedProbabilityRuntime);
-  const randomElapsedDiagnostics = getRandomElapsedDisplayDiagnostics(
-    source,
-    calculationNow,
-    canonicalHistoryContext,
-    probabilityCalculation,
-  );
+
+  let probabilityCalculation: PublishedProbabilityCalculation;
+  let randomElapsedDiagnostics: DisplayElapsedDiagnostics | null;
+
+  if (isCacheHit && cached) {
+    probabilityCalculation = cached.probabilityCalculation;
+    randomElapsedDiagnostics = cached.randomElapsedDiagnostics;
+  } else {
+    probabilityCalculation = calculatePublishedProbability(source, {
+      now: calculationNow,
+      signalEvaluation,
+      activeOfficialNotice: probabilityOfficialNotice,
+      regularResetExpectedAt: regularResetForecast.expectedAt,
+      canonicalHistoryContext,
+      publishedAdaptiveRegimeSurvivalAdoptionAt,
+    }, { skipShadowAuditsWhenAdopted: true, ...publishedProbabilityRuntime });
+    randomElapsedDiagnostics = getRandomElapsedDisplayDiagnostics(
+      source,
+      calculationNow,
+      canonicalHistoryContext,
+      probabilityCalculation,
+    );
+
+    resolvedCalculationContext.cachedViewModelComputations = {
+      calculationNowTime: calculationNow.getTime(),
+      signalEvaluationOverride,
+      publishedAdaptiveRegimeSurvivalAdoptionAt,
+      publishedProbabilityRuntime,
+      signalEvaluation,
+      activeOfficialNotice,
+      probabilityOfficialNotice,
+      probabilityCalculation,
+      randomElapsedDiagnostics,
+    };
+  }
+
   const displayProbabilityCalculation = randomElapsedDiagnostics
     ? { ...probabilityCalculation, randomElapsedDiagnostics }
     : probabilityCalculation;

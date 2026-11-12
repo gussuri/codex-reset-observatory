@@ -90,6 +90,7 @@ export type PublishedProbabilityRuntime = {
   logFallback?: boolean;
   survivalConditionedCalculator?: typeof calculateSurvivalConditionedProbability;
   adaptiveRegimeSurvivalCalculator?: typeof calculateAdaptiveRegimeSurvivalProbability;
+  skipShadowAuditsWhenAdopted?: boolean;
 };
 export type PublishedProbabilityFallbackReason =
   | "next_generation_b_exception"
@@ -946,17 +947,123 @@ export function calculatePublishedProbability(
     resolvedPublishedModelAdoptionAt,
   );
 
+  const survivalConditionedAdoptionTime = parseAdoptionTime(
+    resolvedPublishedSurvivalConditionedAdoptionAt,
+  );
+  const survivalConditionedActive = survivalConditionedAdoptionTime !== null
+    && publicModelOptions.now.getTime() >= survivalConditionedAdoptionTime;
+  const adaptiveRegimeSurvivalAdoptionTime = parseAdoptionTime(
+    resolvedPublishedAdaptiveRegimeSurvivalAdoptionAt,
+  );
+  const survivalConditionedRestorationAdoptionTime = parseAdoptionTime(
+    resolvedPublishedSurvivalConditionedRestorationAt,
+  );
+  const restorationBoundaryIsValid = survivalConditionedAdoptionTime !== null
+    && adaptiveRegimeSurvivalAdoptionTime !== null
+    && survivalConditionedRestorationAdoptionTime !== null
+    && survivalConditionedRestorationAdoptionTime >= survivalConditionedAdoptionTime
+    && survivalConditionedRestorationAdoptionTime >= adaptiveRegimeSurvivalAdoptionTime;
+  const adaptiveRegimeSurvivalActive = adaptiveRegimeSurvivalAdoptionTime !== null
+    && publicModelOptions.now.getTime() >= adaptiveRegimeSurvivalAdoptionTime
+    && !(restorationBoundaryIsValid
+      && publicModelOptions.now.getTime() >= survivalConditionedRestorationAdoptionTime);
+
+  let survivalConditioned: SurvivalConditionedProbabilityResult | null = null;
+  let survivalConditionedFailureReason: Extract<
+    PublishedProbabilityFallbackReason,
+    "survival_conditioned_exception" | "survival_conditioned_invalid_prediction"
+  > | null = null;
+  let adaptiveRegimeSurvival: AdaptiveRegimeSurvivalProbabilityResult | null = null;
+  let adaptiveRegimeSurvivalFailureReason: Extract<
+    PublishedProbabilityFallbackReason,
+    "adaptive_regime_survival_exception" | "adaptive_regime_survival_invalid_prediction"
+  > | null = null;
+
+  if (runtime.skipShadowAuditsWhenAdopted === true) {
+    if (survivalConditionedActive || adaptiveRegimeSurvivalActive) {
+      try {
+        const calculateSurvival = runtime.survivalConditionedCalculator
+          ?? calculateSurvivalConditionedProbability;
+        survivalConditioned = calculateSurvival(
+          data,
+          publicModelOptions,
+        );
+        if (!isValidSurvivalConditionedPrediction(survivalConditioned)) {
+          survivalConditionedFailureReason = "survival_conditioned_invalid_prediction";
+          survivalConditioned = {
+            ...survivalConditioned,
+            survival: {
+              ...survivalConditioned.survival,
+              fallbackUsed: true,
+              fallbackReason: survivalConditionedFailureReason,
+            },
+          };
+        }
+      } catch {
+        survivalConditionedFailureReason = "survival_conditioned_exception";
+      }
+
+      if (adaptiveRegimeSurvivalActive) {
+        try {
+          if (!survivalConditioned) {
+            adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_invalid_prediction";
+          } else {
+            const calculateAdaptive = runtime.adaptiveRegimeSurvivalCalculator
+              ?? calculateAdaptiveRegimeSurvivalProbability;
+            adaptiveRegimeSurvival = calculateAdaptive(survivalConditioned);
+            if (!isValidAdaptiveRegimeSurvivalPrediction(adaptiveRegimeSurvival)) {
+              adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_invalid_prediction";
+            }
+          }
+        } catch {
+          adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_exception";
+        }
+      }
+
+      const isAdaptiveAdopted = adaptiveRegimeSurvivalActive
+        && adaptiveRegimeSurvival !== null
+        && isValidAdaptiveRegimeSurvivalPrediction(adaptiveRegimeSurvival);
+      const isSurvivalAdopted = !adaptiveRegimeSurvivalActive
+        && survivalConditionedActive
+        && survivalConditioned !== null
+        && isValidSurvivalConditionedPrediction(survivalConditioned);
+
+      if (isAdaptiveAdopted || isSurvivalAdopted) {
+        const selection = selectPublishedProbability(
+          primary,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          {
+            allowSurvivalConditioned: survivalConditionedActive || adaptiveRegimeSurvivalActive,
+            survivalConditioned,
+            survivalConditionedFailureReason,
+            allowAdaptiveRegimeSurvival: adaptiveRegimeSurvivalActive,
+            adaptiveRegimeSurvival,
+            adaptiveRegimeSurvivalFailureReason,
+          },
+        );
+        const publicPeriod = getPublishedProbabilityPeriodAt(publicModelOptions.now, {
+          survivalConditionedAdoptionAt: resolvedPublishedSurvivalConditionedAdoptionAt,
+          adaptiveRegimeSurvivalAdoptionAt: resolvedPublishedAdaptiveRegimeSurvivalAdoptionAt,
+          survivalConditionedRestorationAt: resolvedPublishedSurvivalConditionedRestorationAt,
+        });
+        const selected = { ...selection, adaptiveRegimeSurvival, publicPeriod };
+        if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
+        return selected;
+      }
+    }
+  }
+
   let nextGenerationB: NextGenerationBResult | null = null;
   let rawShadow: ShadowProbabilityResult | null = null;
   let calibrated: CalibratedShadowProbabilityResult | null = null;
   let stableShadow: ShadowProbabilityResult | null = null;
   let rawContinuous: RandomBandwidthTruncationShadowPair["challenger"] | null = null;
   let broadBankedV2: BroadBankedRandomContinuousShadowResult | null = null;
-  let survivalConditioned: SurvivalConditionedProbabilityResult | null = null;
-  let survivalConditionedFailureReason: Extract<
-    PublishedProbabilityFallbackReason,
-    "survival_conditioned_exception" | "survival_conditioned_invalid_prediction"
-  > | null = null;
   let broadBankedV2FailureReason: Extract<
     PublishedProbabilityFallbackReason,
     "broad_banked_v2_exception" | "broad_banked_v2_invalid_prediction"
@@ -1024,27 +1131,7 @@ export function calculatePublishedProbability(
     }
   }
 
-  const survivalConditionedAdoptionTime = parseAdoptionTime(
-    resolvedPublishedSurvivalConditionedAdoptionAt,
-  );
-  const survivalConditionedActive = survivalConditionedAdoptionTime !== null
-    && publicModelOptions.now.getTime() >= survivalConditionedAdoptionTime;
-  const adaptiveRegimeSurvivalAdoptionTime = parseAdoptionTime(
-    resolvedPublishedAdaptiveRegimeSurvivalAdoptionAt,
-  );
-  const survivalConditionedRestorationAdoptionTime = parseAdoptionTime(
-    resolvedPublishedSurvivalConditionedRestorationAt,
-  );
-  const restorationBoundaryIsValid = survivalConditionedAdoptionTime !== null
-    && adaptiveRegimeSurvivalAdoptionTime !== null
-    && survivalConditionedRestorationAdoptionTime !== null
-    && survivalConditionedRestorationAdoptionTime >= survivalConditionedAdoptionTime
-    && survivalConditionedRestorationAdoptionTime >= adaptiveRegimeSurvivalAdoptionTime;
-  const adaptiveRegimeSurvivalActive = adaptiveRegimeSurvivalAdoptionTime !== null
-    && publicModelOptions.now.getTime() >= adaptiveRegimeSurvivalAdoptionTime
-    && !(restorationBoundaryIsValid
-      && publicModelOptions.now.getTime() >= survivalConditionedRestorationAdoptionTime);
-  if (survivalConditionedActive || adaptiveRegimeSurvivalActive) {
+  if ((survivalConditionedActive || adaptiveRegimeSurvivalActive) && survivalConditioned === null && survivalConditionedFailureReason === null) {
     try {
       const calculateSurvival = runtime.survivalConditionedCalculator
         ?? calculateSurvivalConditionedProbability;
@@ -1068,12 +1155,7 @@ export function calculatePublishedProbability(
     }
   }
 
-  let adaptiveRegimeSurvival: AdaptiveRegimeSurvivalProbabilityResult | null = null;
-  let adaptiveRegimeSurvivalFailureReason: Extract<
-    PublishedProbabilityFallbackReason,
-    "adaptive_regime_survival_exception" | "adaptive_regime_survival_invalid_prediction"
-  > | null = null;
-  if (adaptiveRegimeSurvivalActive) {
+  if (adaptiveRegimeSurvivalActive && adaptiveRegimeSurvival === null && adaptiveRegimeSurvivalFailureReason === null) {
     try {
       if (!survivalConditioned) {
         adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_invalid_prediction";

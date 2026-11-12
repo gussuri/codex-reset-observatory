@@ -1,4 +1,5 @@
 import { LOCAL_RESET_HISTORY } from "@/data/resetHistory";
+import { buildCanonicalResetHistoryContext } from "./tiboHistory";
 import {
   CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_LIMITATIONS,
   CALIBRATED_SHADOW_POINT_IN_TIME_PROJECTION_VERSION,
@@ -168,9 +169,15 @@ function getLastCalibrationAudit(
   for (const recordedAt of origins) {
     const origin = new Date(recordedAt);
     const pointInTimeData = getPointInTimeRadarData(data, origin);
+    const pointInTimeCanonicalHistoryContext = buildCanonicalResetHistoryContext(pointInTimeData, {
+      defaultStaticHistory: staticHistory,
+      displayStaticHistory: staticHistory,
+      dynamicStaticHistory: [],
+    });
     const raw = calculateShadowProbabilityForModel(pointInTimeData, {
       now: origin,
       staticHistory,
+      canonicalHistoryContext: pointInTimeCanonicalHistoryContext,
       regularResetExpectedAt: null,
       activeOfficialNotice: undefined,
       localObservationSignals: getPointInTimeLocalObservationSignals(origin, localObservationSignals),
