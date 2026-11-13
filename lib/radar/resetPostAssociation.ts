@@ -1,6 +1,7 @@
 import type { ActiveTiboSignal } from "./types";
 import {
   hasFutureBankedDistributionIntent,
+  isApiOrManualClassified,
   isBankedDistributionNotice,
   isBroadBankedDistributionNotice,
   isConditionalBankedDistributionNotice,
@@ -188,6 +189,16 @@ function hasUnresolvedFutureLoadingSchedule(signal: ActiveTiboSignal, text: stri
   return text.split(/[.!?。！？;]+/).some((clause) => futureSchedule.test(clause) && loading.test(clause));
 }
 
+const AFFECTED_AUDIENCE_PATTERN = /\baffected\s+(?:users?|accounts?|customers?|subscribers?)\b/i;
+
+function hasRestrictedScopeForApiOrManual(text: string) {
+  const explicitPlans = getExplicitCoveredPlanTypes(text);
+  const hasRestrictedPlans = explicitPlans !== null && !ALL_PAID_PLAN_TYPES_FOR_AUTOMATIC_PUBLICATION.every((plan) =>
+    explicitPlans.includes(plan),
+  );
+  return isConditionalBankedDistributionNotice(text) || hasRestrictedPlans || AFFECTED_AUDIENCE_PATTERN.test(text);
+}
+
 function getFirstExclusion(
   signal: ActiveTiboSignal,
   observedTime: number,
@@ -205,9 +216,15 @@ function getFirstExclusion(
   const expiryAt = parseTime(signal.expires_at);
   if (expiryAt !== null && observedTime >= expiryAt) return "expired_before_observation";
   if (hasNegatedDistributionClaim(text)) return "claim_negated_or_cancelled";
-  if (!isBankedDistributionNotice(text)) return "no_banked_distribution_claim";
-  if (!hasAllPaidPublicScope(text)) {
-    return "scope_unverified_or_conditional";
+  if (isApiOrManualClassified(signal.classification_source)) {
+    if (hasRestrictedScopeForApiOrManual(text)) {
+      return "scope_unverified_or_conditional";
+    }
+  } else {
+    if (!isBankedDistributionNotice(text)) return "no_banked_distribution_claim";
+    if (!hasAllPaidPublicScope(text)) {
+      return "scope_unverified_or_conditional";
+    }
   }
   if (hasUnresolvedFutureLoadingSchedule(signal, text)) return "scheduled_claim_unresolved";
   if (expiryAt === null && terminationAt === null) return "unbounded_notice_lifecycle";
@@ -236,11 +253,12 @@ export function normalizeBankedPostClaim(
     : null;
   const resolvedSchedule = parseTime(scheduleStartAt) !== null && parseTime(scheduleEndAt) !== null;
   const futureClaim = hasFutureBankedDistributionIntent(text);
+  const apiOrManual = isApiOrManualClassified(signal.classification_source);
   const phase: NormalizedBankedPostClaim["phase"] = resolvedSchedule
     ? "scheduled"
     : hasRecurringClaim(text)
       ? "recurring"
-      : hasExplicitLoadingClaim(text)
+      : hasExplicitLoadingClaim(text) || (apiOrManual && !futureClaim)
         ? "in_progress"
         : futureClaim
           ? "unresolved"
@@ -260,7 +278,11 @@ export function normalizeBankedPostClaim(
     exclusionReason = "unscheduled_claim_not_in_progress";
   }
 
-  const scope: NormalizedBankedPostClaim["scope"] = hasAllPaidPublicScope(text)
+  const scope: NormalizedBankedPostClaim["scope"] = (
+    apiOrManual
+      ? !hasRestrictedScopeForApiOrManual(text)
+      : hasAllPaidPublicScope(text)
+  )
     ? "all_paid"
     : "conditional";
 

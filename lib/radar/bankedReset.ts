@@ -14,6 +14,10 @@ export const BANKED_DISTRIBUTION_ESTIMATOR_VERSIONS = [
   LEGACY_BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
 ] as const;
 
+export function isApiOrManualClassified(classificationSource: string | null | undefined) {
+  return classificationSource === "gemini" || classificationSource === "manual";
+}
+
 export function isManualBroadBankedScopeCorrection(eventKey: string | null | undefined) {
   return hasHistoricalResetScopeCorrection(eventKey);
 }
@@ -68,7 +72,7 @@ export type BankedNoticeTiming = {
 };
 
 const BANKED_RESET_TERM_PATTERN = /\bbanked\s+resets?\b|\breset\s+credits?\b|任意リセット権|リセット権/i;
-const DISTRIBUTION_TERM_PATTERN = /\b(?:credit|grant|giv|gift|distribut|provide|deliver|issue|send)\w*\b|配布|付与|配る|プレゼント/i;
+const DISTRIBUTION_TERM_PATTERN = /\b(?:credit|grant|giv|gift|distribut|provide|deliver|issue|send|activat)\w*\b|配布|付与|配る|プレゼント/i;
 const BROAD_ACCOUNT_LOAD_DISTRIBUTION_PATTERN =
   /\b(?:(?:am|is|are|'m|'re)\s+)?loading\b[\s\S]{0,100}\b(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,100}\b(?:into\s+(?:all|every)\s+accounts?|in\s+everyone['’]s\s+(?:paid\s+)?accounts?)\b/i;
 const COMPENSATION_DISTRIBUTION_PATTERN =
@@ -108,7 +112,7 @@ function hasAdjacentConditionalCompensationDistribution(text: string) {
 const FUTURE_BANKED_ACTION_PATTERN =
   /\b(?:will|shall|(?:am|is|are)\s+going\s+to|gonna)\s+(?:do|run|perform|execute|issue|grant|give|distribut|provide|deliver|send)\w*\b[\s\S]{0,100}\b(?:banked\s+resets?|reset\s+credits?)\b/i;
 const FUTURE_BANKED_AVAILABILITY_PATTERN =
-  /\b(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,80}\b(?:will|shall|(?:is|are)\s+going\s+to|gonna)\s+(?:land|arrive|be\s+(?:there|available|ready)|be\s+(?:issued|delivered|distributed|granted|provided))\b/i;
+  /\b(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,80}\b(?:will|shall|should|(?:is|are)\s+going\s+to|gonna)\s+(?:land|arrive|be\s+(?:there|available|ready)|be\s+(?:issued|delivered|distributed|granted|provided))\b/i;
 
 function hasFutureAvailabilityTerm(text: string) {
   return text.split(NOTICE_CLAUSE_SEPARATOR).some((clause) => FUTURE_BANKED_AVAILABILITY_PATTERN.test(clause));
@@ -141,7 +145,7 @@ const BROAD_PLAN_SCOPE_PATTERN = new RegExp(
   "i",
 );
 const BROAD_SCOPE_PATTERNS = [
-  /\b(?:everyone|global)\b/i,
+  /\b(?:everyone(?:'s|’s|s)?|global)\b/i,
   /\b(?:all|every)\s+(?:codex\s+and\s+)?chatgpt\s+work\s+users?\b/i,
   /\b(?:all|every)\s+paid\s+users?\s+of\s+(?:chatgpt\s+work\s+and\s+codex|codex\s+and\s+chatgpt\s+work)\b/i,
   /\b(?:all|every)\s+paid\s+users?\b/i,

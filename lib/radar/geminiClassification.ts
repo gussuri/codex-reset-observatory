@@ -271,9 +271,14 @@ Classify each tweet into EXACTLY ONE of the following 4 categories:
    A day/event label describes the reset's occasion, not a change in limits. A short completion reply needs
    validated context tying it to the same global reset.
 
-2. "official_notice": An explicit announcement of an upcoming Codex usage-limit reset. The announcement
+2. "official_notice": An explicit announcement of an upcoming Codex usage-limit reset, OR an official announcement that a broad banked reset (reset credit) is activated, rolling out, or about to land in all paid users' / everyone's accounts. The announcement
    may lack a usable schedule; whether the reset is announced and whether its timing is known are separate.
    Examples: "We will reset limits tonight", "We'll reset usage limits for all paid users", "Reset scheduled in two hours", "Full reset coming tomorrow".
+   Banked reset distribution examples (always "official_notice", NOT "irrelevant"):
+   - "The banked reset has been activated and should land in everyone's accounts sometime soon!"
+   - "Loading banked resets into all accounts now."
+   - "Banked reset for all paid users is rolling out shortly."
+   Do NOT classify a broad banked reset distribution notice as "irrelevant" merely because it distributes banked reset credits rather than immediately resetting global usage limits. (By contrast, personal banked-reset usage, how-to explanations, or one-off replies granting a credit to a single user remain "irrelevant".)
    A short headline that names a Codex/ChatGPT Work usage-limit reset as the announced event can also be
    an official notice without a future verb. This is an announcement, not proof that the reset has completed.
    A same-day event label without a completion claim is an official notice. Without a usable schedule, use

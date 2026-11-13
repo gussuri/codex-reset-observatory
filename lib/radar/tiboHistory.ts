@@ -71,6 +71,7 @@ import {
   isBankedDistributionNotice,
   isBankedDistributionEstimatorVersion,
   isConditionalBankedDistributionNotice,
+  isApiOrManualClassified,
   isBroadBankedDistributionNotice,
   isManualBroadBankedScopeCorrection,
 } from "./bankedReset";
@@ -742,7 +743,7 @@ export function findRelatedBankedDistributionNotices(
     isHistoryNoticeSignalEligible(notice) &&
     notice.verification_status !== "rejected" &&
     (notice.confidence ?? 0) >= OFFICIAL_NOTICE_CONFIDENCE &&
-    isBroadBankedDistributionNotice(notice.text),
+    (isApiOrManualClassified(notice.classification_source) || isBroadBankedDistributionNotice(notice.text)),
   );
   const observedTime = getTimestamp(observedAt);
   if (observedTime === null) return [];
@@ -2446,7 +2447,9 @@ function buildBankedDistributionEvent(
     notice.signal_type !== "official_notice" ||
     notice.verification_status === "rejected" ||
     (notice.confidence ?? 0) < FORMAL_RESET_CONFIDENCE ||
-    (!isManualBroadBankedScopeCorrection(estimate.resetEventKey) && !isBroadBankedDistributionNotice(notice.text)) ||
+    (!isManualBroadBankedScopeCorrection(estimate.resetEventKey) &&
+      !isApiOrManualClassified(notice.classification_source) &&
+      !isBroadBankedDistributionNotice(notice.text)) ||
     displayTime === null ||
     noticeTime === null ||
     firstAnnouncementTime === null ||

@@ -19,6 +19,7 @@ import {
   isBankedObservationWithinNoticeWindow,
 } from "../lib/radar/bankedReset";
 import { isBankedResetAvailableCountGrant } from "../lib/codexUsageRecovery";
+import { normalizeBankedPostClaim } from "../lib/radar/resetPostAssociation";
 import { resolveUniqueBankedTeaserLinks } from "../lib/radar/bankedTeaserLink";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
 import { getActiveOfficialNotice, getLastGlobalResetAt, getRecent7DayResetCount } from "../lib/radar/probability";
@@ -2064,4 +2065,74 @@ test("the GPT-6 Sol and Luna broad BANKED notice wins over an older persistent A
   };
   const activeNoticeAfter = getActiveOfficialNotice(radarData, new Date(observedAt), afterExecutionNow);
   assert.equal(activeNoticeAfter, null);
+});
+
+test("API/manual classified BANKED official_notice bypasses regex gates in association and history", () => {
+  const novelText = "Surprise refresh credits are rolling out for subscribers shortly.";
+  assert.equal(isBroadBankedDistributionNotice(novelText), false);
+
+  const geminiNotice: TiboNoticeSignal = {
+    ...notice,
+    tweet_id: "gemini-novel-banked-1",
+    text: novelText,
+    tweet_url: "https://x.com/thsottiaux/status/gemini-novel-banked-1",
+    tweet_created_at: "2026-11-12T21:59:39.000Z",
+    expires_at: "2026-11-13T08:00:00.000Z",
+    signal_type: "official_notice",
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    confidence: 0.96,
+  };
+
+  const claim = normalizeBankedPostClaim(geminiNotice as unknown as ActiveTiboSignal, {
+    observedAt: "2026-11-12T22:13:22.616Z",
+  });
+  assert.equal(claim.eligible, true);
+  assert.equal(claim.exclusionReason, null);
+
+  const related = findRelatedBankedDistributionNotices(
+    [geminiNotice],
+    "gemini-novel-banked-1",
+    "2026-11-12T22:13:22.616Z",
+  );
+  assert.equal(related.length, 1);
+
+  const events = findBankedDistributionEvents(
+    [geminiNotice],
+    [
+      {
+        resetEventKey: "banked-reset-local-codex-app-server-observation-20261112T221322616Z",
+        displayExecutionAt: "2026-11-12T22:13:22.616+00:00",
+        executionTimeSource: "usage_observation",
+        executionTimePrecision: "approximate",
+        executionTimeConfidence: "high",
+        tiboAnnouncedAt: "2026-11-12T21:59:39.000Z",
+        tiboPrimaryTweetId: "gemini-novel-banked-1",
+        tiboSourceTweetIds: ["gemini-novel-banked-1"],
+        officialNoticeTweetId: "gemini-novel-banked-1",
+        officialNoticeAt: "2026-11-12T21:59:39.000Z",
+        estimatorVersion: BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
+      },
+    ],
+  );
+  assert.equal(events.length, 1);
+  assert.equal(events[0].recordKind, "banked_distribution");
+  assert.equal(events[0].scope, "全有料プラン");
+
+  const ruleFallbackClaim = normalizeBankedPostClaim(
+    {
+      ...geminiNotice,
+      classification_source: "rule_fallback",
+    } as unknown as ActiveTiboSignal,
+    { observedAt: "2026-11-12T22:13:22.616Z" },
+  );
+  assert.equal(ruleFallbackClaim.eligible, false);
+  assert.equal(ruleFallbackClaim.exclusionReason, "no_banked_distribution_claim");
+});
+
+test("rule-based fallback recognizes activated and should-land banked reset wording with everyones", () => {
+  const dotsText =
+    "We shipped some good updates to dots today and the banked reset has been activated and should land in everyones accounts sometime soon!";
+  assert.equal(isBankedDistributionNotice(dotsText), true);
+  assert.equal(isBroadBankedDistributionNotice(dotsText), true);
 });
