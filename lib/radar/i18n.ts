@@ -777,6 +777,16 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "As Day 2 of the two-day announcement following the mobile account switching release, a second distribution of a BANKED Reset was confirmed.",
     zh: "作为移动端账号切换功能上线后连续两天预告的第2天，已确认第2次发放 BANKED 重置权。",
   },
+  dotsBankedHistoryTitle: {
+    ja: "dotsアップデート記念BANKEDリセット",
+    en: "Dots Update BANKED Reset",
+    zh: "Dots 更新纪念 BANKED 重置",
+  },
+  dotsBankedHistoryNote: {
+    ja: "dots機能のアップデートにあわせてBANKEDリセット権（任意リセット）の有効化が告知され、配布が確認されました。",
+    en: "Alongside updates to dots, a BANKED Reset was activated and its distribution was confirmed.",
+    zh: "随着 dots 功能更新，官方宣布激活 BANKED 重置，并已确认发放。",
+  },
   historyNoticeToExecution: {
     ja: "告知から実施まで",
     en: "Time from notice to reset",

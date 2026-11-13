@@ -39,6 +39,10 @@ export const TIBO_FORECAST_SIGNAL_TERMINATIONS: Readonly<Record<string, Official
     endedAt: "2026-11-01T22:16:24.351Z",
     sourceTweetId: "2116405414921384099",
   },
+  "2120999993079451919": {
+    endedAt: "2026-11-12T22:13:22.616Z",
+    sourceTweetId: "2120999993079451919",
+  },
 };
 
 /** Backwards-compatible name for callers that only handle official notices. */

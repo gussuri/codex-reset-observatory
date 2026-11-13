@@ -6,6 +6,8 @@ export const GPT61_BANKED_HISTORY_TEASER_TWEET_ID = "2104838506363408740";
 export const DAY26_BANKED_HISTORY_EVENT_KEY = "banked-reset-local-codex-app-server-observation-20261031T204018257Z";
 export const DAY26_BANKED_SECOND_HISTORY_EVENT_KEY = "banked-reset-local-codex-app-server-observation-20261101T221624351Z";
 export const DAY26_BANKED_HISTORY_NOTICE_TWEET_ID = "2116405414921384099";
+export const DOTS_BANKED_HISTORY_EVENT_KEY = "banked-reset-local-codex-app-server-observation-20261112T221322616Z";
+export const DOTS_BANKED_HISTORY_NOTICE_TWEET_ID = "2120999993079451919";
 
 type HistoricalResetTitleTranslationKey =
   | "astraBankedHistoryTitle"
@@ -13,13 +15,15 @@ type HistoricalResetTitleTranslationKey =
   | "gpt61BankedHistoryTitle"
   | "day26BankedHistoryTitle"
   | "day26BankedHistoryFirstTitle"
-  | "day26BankedHistorySecondTitle";
+  | "day26BankedHistorySecondTitle"
+  | "dotsBankedHistoryTitle";
 
 type HistoricalResetNoteTranslationKey =
   | "astraBankedHistoryNote"
   | "gpt61BankedHistoryNote"
   | "day26BankedHistoryNote"
-  | "day26BankedHistorySecondNote";
+  | "day26BankedHistorySecondNote"
+  | "dotsBankedHistoryNote";
 
 type HistoricalResetCorrection = {
   correctionId: string;
@@ -128,6 +132,25 @@ export const HISTORICAL_RESET_CORRECTIONS: readonly HistoricalResetCorrection[] 
       ],
       reasonType: "ご祝儀リセット",
       noteTranslationKey: "day26BankedHistorySecondNote",
+      displayScope: "全有料プラン",
+      displayNoticeType: "公式予告あり",
+    },
+  },
+  {
+    correctionId: "dots-banked-history-observation",
+    scopeCorrectionEventKeys: [DOTS_BANKED_HISTORY_EVENT_KEY],
+    presentationEventKeys: [DOTS_BANKED_HISTORY_EVENT_KEY],
+    sourceTweetId: DOTS_BANKED_HISTORY_NOTICE_TWEET_ID,
+    presentation: {
+      defaultTitleTranslationKey: "dotsBankedHistoryTitle",
+      titleTranslationKeysByEventKey: [
+        {
+          eventKey: DOTS_BANKED_HISTORY_EVENT_KEY,
+          translationKey: "dotsBankedHistoryTitle",
+        },
+      ],
+      reasonType: "ご祝儀リセット",
+      noteTranslationKey: "dotsBankedHistoryNote",
       displayScope: "全有料プラン",
       displayNoticeType: "公式予告あり",
     },

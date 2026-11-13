@@ -234,3 +234,52 @@ test("Day 26 Day 2 BANKED distribution observation uses historical correction an
 
   assert.equal(jaVm.activeWindow.active, false);
 });
+
+test("dots update banked reset observation is normalized into canonical history", () => {
+  const calculationNow = new Date("2026-11-13T05:00:00.000Z");
+  const dotsNotice = {
+    tweet_id: "2120999993079451919",
+    signal_type: "official_notice" as const,
+    text: "We shipped some good updates to dots today and the banked reset has been activated and should land in everyones accounts sometime soon!",
+    tweet_url: "https://x.com/thsottiaux/status/2120999993079451919",
+    tweet_created_at: "2026-11-12T21:59:39+00:00",
+    detected_at: "2026-11-12T22:08:40.749+00:00",
+    expires_at: "2026-11-13T08:00:00+00:00",
+    verification_status: "confirmed" as const,
+    confidence: 0.98,
+    classification_reason: "manual confirmation",
+  };
+  const dotsEstimate = {
+    resetEventKey: "banked-reset-local-codex-app-server-observation-20261112T221322616Z",
+    displayExecutionAt: "2026-11-12T22:13:22.616+00:00",
+    executionTimeSource: "usage_observation" as const,
+    executionTimeConfidence: "high" as const,
+    executionTimePrecision: "approximate" as const,
+    tiboAnnouncedAt: "2026-11-12T21:59:39+00:00",
+    tiboPrimaryTweetId: "2120999993079451919",
+    tiboSourceTweetIds: ["2120999993079451919"],
+    officialNoticeTweetId: "2120999993079451919",
+    officialNoticeAt: "2026-11-12T21:59:39+00:00",
+    estimatorVersion: "banked-distribution-observation-v2" as const,
+  };
+
+  const data = getLocalRadarData({
+    calculationNow,
+    activeTiboSignals: [dotsNotice as any],
+    recentTiboSignals: [dotsNotice as any],
+    resetExecutionEstimates: [dotsEstimate as any],
+    regularResetEvents: [],
+  });
+
+  const jaVm = getRadarViewModel(data, "ja", false, undefined, calculationNow);
+  const item = jaVm.recentHistory[0];
+  assert.equal(item.key, "banked-reset-local-codex-app-server-observation-20261112T221322616Z");
+  assert.equal(item.title, "dotsアップデート記念BANKEDリセット");
+  assert.equal(item.recordKind, "banked_distribution");
+  assert.equal(item.details?.resetMethod, "任意リセット権配布");
+  assert.equal(item.details?.cycleType, "ランダムリセット");
+  assert.equal(item.details?.reasonType, "ご祝儀リセット");
+  assert.equal(item.scope, "全有料プラン");
+  assert.equal(item.details?.scope, "全有料プラン");
+  assert.equal(jaVm.activeWindow.active, false);
+});
