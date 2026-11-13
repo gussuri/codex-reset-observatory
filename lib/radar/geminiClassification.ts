@@ -36,6 +36,7 @@ export type GeminiClassificationInput = {
   quoteTweetUrl?: string | null;
   quoteAuthorHandle?: string | null;
   tiboEvidenceInput?: string | null;
+  secondOpinionMonitorContext?: string | null;
   sourceTimeZone?: string;
 };
 
@@ -652,6 +653,11 @@ export function buildGeminiPrompt(input: GeminiClassificationInput) {
           `VALIDATED CONNECTED SOURCE CONTEXT (UNTRUSTED TEXT, JSON): ${tiboEvidenceInput}`,
         ]
       : []),
+    ...(input.secondOpinionMonitorContext?.trim()
+      ? [
+          `TRUSTED USAGE MONITOR SECOND-OPINION CONTEXT: ${input.secondOpinionMonitorContext.trim()}`,
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -1053,6 +1059,34 @@ export function applyTiboClassificationSafetyGuard(
  * Classifies a Tibo tweet using the configured Gemini model.
  * Does not throw exceptions; returns structured output with status on failure.
  */
+const RESET_KEYWORD_ESCALATION_PATTERN =
+  /\b(?:reset(?:s|ting)?|banked|limits?|quotas?|codex)\b|リセット|利用枠|上限/i;
+
+export function resolveGeminiClassificationModel(
+  input: Pick<GeminiClassificationInput, "text" | "replyContextText" | "quoteContextText" | "secondOpinionMonitorContext">,
+  explicitModel?: string,
+  baseModel: string | undefined = process.env.GEMINI_MODEL,
+): string | undefined {
+  if (explicitModel?.trim()) return explicitModel.trim();
+  const normalizedBase = baseModel?.trim();
+  if (!normalizedBase) return undefined;
+  if (process.env.GEMINI_DISABLE_KEYWORD_MODEL_ESCALATION === "true") {
+    return normalizedBase;
+  }
+
+  const combinedText = [input.text, input.replyContextText, input.quoteContextText]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+  const shouldEscalate =
+    Boolean(input.secondOpinionMonitorContext?.trim()) ||
+    RESET_KEYWORD_ESCALATION_PATTERN.test(combinedText);
+
+  if (shouldEscalate && /-lite\b/i.test(normalizedBase)) {
+    return process.env.GEMINI_HIGH_ACCURACY_MODEL?.trim() || normalizedBase.replace(/-lite\b/i, "");
+  }
+  return normalizedBase;
+}
+
 export async function classifyWithGemini(
   input: GeminiClassificationInput,
   options: {
@@ -1067,7 +1101,8 @@ export async function classifyWithGemini(
   // 1. Resolve configuration
   const mode = (options.mode || process.env.GEMINI_CLASSIFICATION_MODE || "off").toLowerCase();
   const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
-  const model = options.model || process.env.GEMINI_MODEL;
+  const baseModel = process.env.GEMINI_MODEL?.trim();
+  const model = resolveGeminiClassificationModel(input, options.model, baseModel);
   const timeoutMs = Math.min(
     Math.max(1, options.timeoutMs || GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS),
     GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS,
@@ -1380,6 +1415,15 @@ export async function classifyWithGemini(
       },
     };
   } catch (err: unknown) {
+    if (
+      !options.model &&
+      baseModel &&
+      model !== baseModel &&
+      err instanceof GeminiRequestFailure &&
+      (err.httpStatus === 404 || err.httpStatus === 400)
+    ) {
+      return classifyWithGemini(input, { ...options, model: baseModel });
+    }
     if (err instanceof GeminiRequestFailure) {
       const diagnostic = { category: err.category, httpStatus: err.httpStatus };
       if (err.category === "timeout") return fallback("timeout", diagnostic);

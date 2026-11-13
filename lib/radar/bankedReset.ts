@@ -112,7 +112,7 @@ function hasAdjacentConditionalCompensationDistribution(text: string) {
 const FUTURE_BANKED_ACTION_PATTERN =
   /\b(?:will|shall|(?:am|is|are)\s+going\s+to|gonna)\s+(?:do|run|perform|execute|issue|grant|give|distribut|provide|deliver|send)\w*\b[\s\S]{0,100}\b(?:banked\s+resets?|reset\s+credits?)\b/i;
 const FUTURE_BANKED_AVAILABILITY_PATTERN =
-  /\b(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,80}\b(?:will|shall|should|(?:is|are)\s+going\s+to|gonna)\s+(?:land|arrive|be\s+(?:there|available|ready)|be\s+(?:issued|delivered|distributed|granted|provided))\b/i;
+  /\b(?:banked\s+resets?|reset\s+credits?)\b[\s\S]{0,80}\b(?:will|shall|(?:is|are)\s+going\s+to|gonna)\s+(?:land|arrive|be\s+(?:there|available|ready)|be\s+(?:issued|delivered|distributed|granted|provided))\b/i;
 
 function hasFutureAvailabilityTerm(text: string) {
   return text.split(NOTICE_CLAUSE_SEPARATOR).some((clause) => FUTURE_BANKED_AVAILABILITY_PATTERN.test(clause));

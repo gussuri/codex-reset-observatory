@@ -14,6 +14,11 @@ import {
 import type { BankedPostAssociationDecision } from "./radar/resetPostAssociation";
 import type { BankedDistributionEstimateInput } from "./codexUsageRecoveryStore";
 import { invalidateRadarCache } from "./radar/cacheInvalidation";
+import {
+  notifyPendingBankedAssociation,
+  runBankedSecondOpinionReview,
+  type BankedSecondOpinionResult,
+} from "./radar/bankedSecondOpinion";
 
 const RECONCILIATION_TIBO_SELECT = [
   "tweet_id", "signal_type", "text", "tweet_url", "tweet_created_at", "detected_at",
@@ -268,6 +273,18 @@ export function createBankedGrantAssociationReconciliationDependencies(
       };
     },
     invalidate: () => invalidateRadarCache("tibo-event"),
+    runSecondOpinion: (observation, signals) =>
+      runBankedSecondOpinionReview({
+        observation,
+        signals,
+        supabase: client,
+      }),
+    notifyPending: (observation, decision, candidateSignals) =>
+      notifyPendingBankedAssociation({
+        observation,
+        decision,
+        candidateSignals,
+      }),
   };
 }
 
@@ -322,6 +339,15 @@ export type BankedGrantAssociationReconciliationDependencies = {
     error?: unknown;
   }>;
   invalidate: () => void | Promise<void>;
+  runSecondOpinion?: (
+    observation: BankedGrantAssociationReconciliationObservation,
+    signals: readonly ActiveTiboSignal[],
+  ) => Promise<BankedSecondOpinionResult>;
+  notifyPending?: (
+    observation: BankedGrantAssociationReconciliationObservation,
+    decision: BankedPostAssociationDecision,
+    candidateSignals: readonly ActiveTiboSignal[],
+  ) => Promise<boolean>;
 };
 
 export type BankedGrantAssociationReconciliationResult = {
@@ -402,7 +428,7 @@ export async function runBankedGrantAssociationReconciliation(
             },
           }
         : undefined;
-      const resolved = resolveBankedAssociation(
+      let resolved = resolveBankedAssociation(
         observation,
         lookup.signals,
         {
@@ -412,6 +438,28 @@ export async function runBankedGrantAssociationReconciliation(
           context,
         },
       );
+      let effectiveSignals = lookup.signals;
+      if (
+        !identityFailed &&
+        !lookup.error &&
+        resolved.decision.status === "pending" &&
+        (resolved.decision.reason === "no_eligible_claim" ||
+          resolved.decision.reason === "no_current_lifecycle_match") &&
+        dependencies.runSecondOpinion
+      ) {
+        const secondOpinion = await dependencies.runSecondOpinion(observation, effectiveSignals);
+        if (secondOpinion.promotedTweetIds.length > 0) {
+          effectiveSignals = secondOpinion.signals;
+          resolved = resolveBankedAssociation(
+            observation,
+            effectiveSignals,
+            {
+              observedAt: observation.observed_at,
+              context,
+            },
+          );
+        }
+      }
       const decision = {
         ...resolved.decision,
         legacy_identity_status: observation.legacy_identity_status ?? "resolved",
@@ -439,6 +487,9 @@ export async function runBankedGrantAssociationReconciliation(
       }
       result[persisted.status] += 1;
       publicationChanged ||= persisted.publicationChanged;
+      if ((persisted.status === "pending" || persisted.status === "conflict") && dependencies.notifyPending) {
+        await dependencies.notifyPending(observation, decision, effectiveSignals);
+      }
     }
 
     if (result.failed > 0) {
