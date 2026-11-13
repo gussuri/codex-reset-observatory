@@ -83,11 +83,26 @@ export function createHistoryRangeChangeEvent(
   };
 }
 
+export function dispatchGa4AnalyticsEvent(
+  event: AnalyticsEvent,
+  gtag: ((...args: unknown[]) => void) | undefined,
+) {
+  try {
+    gtag?.("event", event.name, event.properties);
+  } catch {
+    // Analytics is best-effort and must never block the user action.
+  }
+}
+
 function emitAnalyticsEvent(event: AnalyticsEvent) {
   try {
     track(event.name, event.properties);
   } catch {
     // Analytics is best-effort and must never block the user action.
+  }
+
+  if (typeof window !== "undefined") {
+    dispatchGa4AnalyticsEvent(event, window.gtag);
   }
 }
 

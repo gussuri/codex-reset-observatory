@@ -6,6 +6,7 @@ import {
   createHistoryRangeChangeEvent,
   createLocaleSwitchEvent,
   createSourceLinkClickEvent,
+  dispatchGa4AnalyticsEvent,
   getAnalyticsSourceType,
 } from "../lib/analyticsEvents";
 
@@ -75,4 +76,19 @@ test("events are wired to user actions rather than render or polling", () => {
   assert.match(heatmapSource, /trackHistoryRangeChange/);
   assert.match(localeLinkSource, /onClick=\{\(\) => trackLocaleSwitch/);
   assert.doesNotMatch(heatmapSource, /trackHistoryRangeChange\([^)]*\)\s*;?\s*\/\/\s*render/i);
+});
+
+test("GA4 forwarding dispatches interaction events best-effort", () => {
+  const calls: unknown[][] = [];
+  const event = createLocaleSwitchEvent("ja", "en", "home");
+
+  dispatchGa4AnalyticsEvent(event, (...args: unknown[]) => calls.push(args));
+  assert.deepEqual(calls, [["event", "locale_switch", event.properties]]);
+
+  assert.doesNotThrow(() => dispatchGa4AnalyticsEvent(event, undefined));
+  assert.doesNotThrow(() =>
+    dispatchGa4AnalyticsEvent(event, () => {
+      throw new Error("blocked gtag");
+    }),
+  );
 });
