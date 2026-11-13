@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import https from "node:https";
 import test from "node:test";
 
 import { NextRequest } from "next/server";
@@ -4011,6 +4013,218 @@ test("partial error on notice lookup writes fallback observation and executes ca
     assert.ok(plan.observation, "Must write fallback observation when uncorroborated recovery occurs");
   } finally {
     globalThis.fetch = originalFetch;
+    restore();
+  }
+});
+
+test("unexpected recovery triggers forced-reset alert webhook when recorded as usage-reset-pending", async () => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const prevAlertUrl = process.env.RESET_PENDING_ALERT_WEBHOOK_URL;
+  process.env.RESET_PENDING_ALERT_WEBHOOK_URL = "https://example.test/forced-pending-alert";
+  const originalFetch = globalThis.fetch;
+  const requests: MockRequest[] = [];
+  const observedAt = "2026-08-26T01:15:00.000Z";
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-26T01:10:00.000Z",
+        received_at: "2026-08-26T01:10:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 100,
+        window_duration_mins: 10080,
+        resets_at: 1_788_000_000,
+        coverage_started_at: "2026-08-26T01:00:00.000Z",
+        banked_reset_available_count: 0,
+        last_banked_grant_at: null,
+        updated_at: "2026-08-26T01:10:01.000Z",
+      }), { status: 200 });
+    }
+    return new Response(JSON.stringify([]), { status: 200 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt,
+      usedPercent: 0,
+      resetsAt: 1_788_604_800,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      accepted: true,
+      recovery: "observed_unconfirmed",
+    });
+
+    const estimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(estimate?.reset_event_key, "usage-reset-pending");
+
+    const alertPost = requests.find((r) => r.method === "POST" && r.url === "https://example.test/forced-pending-alert");
+    assert.ok(alertPost, "Expected pending alert webhook to be sent for usage-reset-pending");
+    assert.match(String(alertPost?.body?.content ?? ""), /usage-reset-pending/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevAlertUrl === undefined) delete process.env.RESET_PENDING_ALERT_WEBHOOK_URL;
+    else process.env.RESET_PENDING_ALERT_WEBHOOK_URL = prevAlertUrl;
+    restore();
+  }
+});
+
+test("unexpected recovery runs second-opinion review on recent irrelevant post and promotes matching reset_executed", async (t) => {
+  const restore = withEnvironment({
+    CODEX_USAGE_MONITOR_SECRET: "monitor-secret",
+    SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "service-role-test-value",
+  });
+  const savedGemini = {
+    mode: process.env.GEMINI_CLASSIFICATION_MODE,
+    key: process.env.GEMINI_API_KEY,
+    model: process.env.GEMINI_MODEL,
+  };
+  process.env.GEMINI_CLASSIFICATION_MODE = "primary";
+  process.env.GEMINI_API_KEY = "test-gemini-key";
+  process.env.GEMINI_MODEL = "gemini-3.5-flash";
+
+  const originalFetch = globalThis.fetch;
+  const requests: MockRequest[] = [];
+  const observedAt = "2026-08-26T01:15:00.000Z";
+  const tweetId = "2119999000000000001";
+  const tweetCreatedAt = "2026-08-26T01:05:00.000Z";
+
+  t.mock.method(https, "request", ((_url: unknown, _options: unknown, cb: (res: EventEmitter & { statusCode: number }) => void) => {
+    const req = new EventEmitter() as EventEmitter & { write: (data: string) => void; end: () => void; destroy: () => void };
+    req.write = () => {};
+    req.destroy = () => {};
+    req.end = () => {
+      const res = new EventEmitter() as EventEmitter & { statusCode: number };
+      res.statusCode = 200;
+      cb(res);
+      queueMicrotask(() => {
+        res.emit("data", JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      signalType: "reset_executed",
+                      confidence: 0.97,
+                      temporalDirection: "completed_now",
+                      evidenceQuote: "everyone's weekly limits have been reset",
+                      reasonJa: "Second opinion with Usage Monitor recovery confirmed reset execution.",
+                      noticeTimingStatus: "completed",
+                    }),
+                  },
+                ],
+              },
+            },
+          ],
+        }));
+        res.emit("end");
+      });
+    };
+    return req as unknown as ReturnType<typeof https.request>;
+  }) as typeof https.request);
+
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+    const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
+    requests.push({ url, method, body });
+
+    if (method === "POST" && url.includes(ATOMIC_RPC_PATH)) {
+      return respondToAtomicRpc(body);
+    }
+    if (method === "POST" && url.includes("/rpc/claim_tibo_formal_adoption")) {
+      const claimKey = String(body?.p_reset_event_key ?? `tibo-reset-${tweetId}`);
+      return new Response(JSON.stringify({
+        status: "claimed_new",
+        record: { reset_event_key: claimKey },
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("codex_usage_monitor_state")) {
+      return new Response(JSON.stringify({
+        source_key: "local-codex-app-server",
+        observed_at: "2026-08-26T01:10:00.000Z",
+        received_at: "2026-08-26T01:10:01.000Z",
+        limit_id: "codex",
+        plan_type: "plus",
+        used_percent: 100,
+        window_duration_mins: 10080,
+        resets_at: 1_788_000_000,
+        coverage_started_at: "2026-08-26T01:00:00.000Z",
+        banked_reset_available_count: 0,
+        last_banked_grant_at: null,
+        updated_at: "2026-08-26T01:10:01.000Z",
+      }), { status: 200 });
+    }
+    if (method === "GET" && url.includes("tibo_signals")) {
+      if (url.includes("signal_type.eq.reset_executed")) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      return new Response(JSON.stringify([
+        {
+          tweet_id: tweetId,
+          text: "Good news: everyone's weekly limits have been reset for Codex right now.",
+          tweet_url: `https://x.com/thsottiaux/status/${tweetId}`,
+          tweet_created_at: tweetCreatedAt,
+          expires_at: "2026-08-26T12:00:00.000Z",
+          signal_type: "irrelevant",
+          confidence: 0.9,
+          verification_status: "auto_unverified",
+          classification_source: "gemini",
+          is_reply: false,
+          is_quote: false,
+        },
+      ]), { status: 200 });
+    }
+    if (method === "PATCH" && url.includes("tibo_signals")) {
+      return new Response(JSON.stringify([]), { status: 200 });
+    }
+    return new Response(JSON.stringify([]), { status: 200 });
+  };
+
+  try {
+    const response = await POST(buildRequest({
+      observedAt,
+      usedPercent: 0,
+      resetsAt: 1_788_604_800,
+    }));
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      accepted: true,
+      recovery: "confirmed",
+    });
+
+    const patchReq = requests.find((r) => r.method === "PATCH" && r.url.includes("tibo_signals"));
+    assert.ok(patchReq, "Expected second-opinion to promote tibo_signals row");
+    assert.equal(patchReq?.body?.signal_type, "reset_executed");
+
+    const estimate = getAtomicPlanPart(requests, "execution_estimate");
+    assert.equal(estimate?.reset_event_key, `tibo-reset-${tweetId}`);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (savedGemini.mode === undefined) delete process.env.GEMINI_CLASSIFICATION_MODE;
+    else process.env.GEMINI_CLASSIFICATION_MODE = savedGemini.mode;
+    if (savedGemini.key === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = savedGemini.key;
+    if (savedGemini.model === undefined) delete process.env.GEMINI_MODEL;
+    else process.env.GEMINI_MODEL = savedGemini.model;
     restore();
   }
 });

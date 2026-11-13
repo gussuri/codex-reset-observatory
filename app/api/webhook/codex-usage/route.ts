@@ -61,6 +61,10 @@ import { resolveBankedAssociation as resolveSharedBankedAssociation } from "@/li
 import type { BankedPostAssociationDecision } from "@/lib/radar/resetPostAssociation";
 import { getTrustedTiboEditIdentity, type TiboEditIdentityUpdate } from "@/lib/radar/tiboEditIdentity";
 import { isVerifiedTiboFutureReplyNoticeInExecutionWindow } from "@/lib/radar/tiboFutureReplyNotice";
+import {
+  notifyPendingForcedResetAssociation,
+  runForcedResetSecondOpinionReview,
+} from "@/lib/radar/bankedSecondOpinion";
 
 const NOTICE_COLUMNS = "tweet_id,text,tweet_url,tweet_created_at,expires_at,signal_type,confidence,verification_status,classification_source,is_reply,is_quote,quote_context_text,quote_tweet_url,quote_author_handle,reply_to_handles,reply_context_text,source_context_snapshot,source_context_revision_hashes,source_context_classified_revision_hashes,source_context_generation,ai_confidence,ai_signal_type,ai_classification_status,ai_temporal_expression,ai_temporal_kind,ai_temporal_direction,ai_notice_timing_status,ai_evidence_quote,ai_contextual_reset_assessment,ai_contextual_reset_tweet_id,ai_temporal_precision,ai_temporal_timezone,ai_temporal_confidence,temporal_expression,temporal_kind,temporal_precision,temporal_timezone,temporal_confidence,temporal_resolution_source,temporal_resolution_version,expected_start_at,expected_end_at,temporal_resolution_status,logical_post_id,edit_history_tweet_ids,edit_version,edit_metadata_source";
 const REGULAR_COLUMNS = "schedule_key,window_start_at,window_end_at,representative_at,scheduled_at,completed_at,cycle_type,reset_method,scope,record_kind,status,correction_reason,corrected_at";
@@ -161,6 +165,7 @@ type OfficialNoticeLookup = {
   noticeSignals: TiboNoticeSignal[];
   teaserSignal: ActiveTiboSignal | null;
   allSignals: ActiveTiboSignal[];
+  regularEvents?: RadarData["regular_reset_events"];
   futureReplyClaim: { eventKey: string; replyTweetId: string; replyProof: Record<string, unknown> } | null;
   priorForcedResetAt?: string | null;
   priorForcedResetWindow?: ResetExecutionWindow | null;
@@ -216,6 +221,49 @@ async function loadTrustedEditChainVersions(
   return {
     signals: Array.from(new Map(rows.map((signal) => [signal.tweet_id, signal] as const)).values()),
     error: null,
+  };
+}
+
+function evaluateNoticeSignalsForRecovery(
+  recoverySignals: ActiveTiboSignal[],
+  regularEvents: RadarData["regular_reset_events"],
+  priorForcedResetAt: string | null | undefined,
+  observedAt: Date,
+  executionWindow: ResetExecutionWindow | null,
+) {
+  const data: RadarData = {
+    active_tibo_signals: recoverySignals,
+    formal_tibo_resets: recoverySignals
+      .filter((signal) => signal.signal_type === "reset_executed")
+      .map((signal) => ({
+        ...signal,
+        text: signal.text ?? "",
+        tweet_url: signal.tweet_url ?? "",
+        confidence: signal.confidence ?? null,
+        verification_status: signal.verification_status ?? "auto_unverified",
+      })),
+    regular_reset_events: regularEvents,
+  };
+  // A BANKED distribution is an individual grant, not evidence that global
+  // quota was reset. Keep that notice out of the forced-recovery context.
+  const activeNotice = getActiveOfficialNotice(
+    data,
+    priorForcedResetAt ? new Date(priorForcedResetAt) : null,
+    observedAt,
+    undefined,
+    executionWindow,
+    true,
+    false,
+    undefined,
+    true,
+  );
+  const noticeSignals = collectOfficialTiboNoticeSignals(recoverySignals, []);
+  const teaserSignal = findRecentTiboTeaser(recoverySignals, observedAt, executionWindow);
+  return {
+    active: Boolean(activeNotice),
+    noticeSignal: activeNotice ?? null,
+    noticeSignals,
+    teaserSignal,
   };
 }
 
@@ -278,6 +326,7 @@ async function hasActiveOfficialNotice(
       noticeSignals: [],
       teaserSignal: null,
       allSignals: [],
+      regularEvents: [] as RadarData["regular_reset_events"],
       futureReplyClaim: null,
       error: tiboResult.error ?? persistentTiboResult.error ?? regularResult.error,
     };
@@ -320,6 +369,7 @@ async function hasActiveOfficialNotice(
       noticeSignals: [],
       teaserSignal: null,
       allSignals: [],
+      regularEvents: [] as RadarData["regular_reset_events"],
       futureReplyClaim: null,
       error: priorEstimatesResult.error ?? priorObservationsResult.error,
     };
@@ -357,23 +407,12 @@ async function hasActiveOfficialNotice(
       noticeSignals: [],
       teaserSignal: null,
       allSignals: [],
+      regularEvents: [] as RadarData["regular_reset_events"],
       futureReplyClaim: null,
       error: bankedAssociationSignals.error,
     };
   }
-  const data: RadarData = {
-    active_tibo_signals: recoverySignals,
-    formal_tibo_resets: recoverySignals
-      .filter((signal) => signal.signal_type === "reset_executed")
-      .map((signal) => ({
-        ...signal,
-        text: signal.text ?? "",
-        tweet_url: signal.tweet_url ?? "",
-        confidence: signal.confidence ?? null,
-        verification_status: signal.verification_status ?? "auto_unverified",
-      })),
-    regular_reset_events: regularResult.data as RadarData["regular_reset_events"],
-  };
+  const regularEvents = regularResult.data as RadarData["regular_reset_events"];
   const priorForcedResetWindow = executionWindow
     ? getLastForcedRecoveryResetWindow({
         reset_execution_estimates: priorEstimatesResult.rows,
@@ -395,21 +434,17 @@ async function hasActiveOfficialNotice(
       return [officialNoticeTweetId, ...(event.sourceTweetIds ?? [])];
     }),
   );
-  // A BANKED distribution is an individual grant, not evidence that global
-  // quota was reset. Keep that notice out of the forced-recovery context.
-  const activeNotice = getActiveOfficialNotice(
-    data,
-    priorForcedResetAt ? new Date(priorForcedResetAt) : null,
+  const noticeEvaluation = evaluateNoticeSignalsForRecovery(
+    recoverySignals,
+    regularEvents,
+    priorForcedResetAt,
     observedAt,
-    undefined,
     executionWindow,
-    true,
-    false,
-    undefined,
-    true,
   );
-  const noticeSignals = collectOfficialTiboNoticeSignals(recoverySignals, []);
-  const teaserSignal = findRecentTiboTeaser(recoverySignals, observedAt, executionWindow);
+  const { activeNotice, noticeSignal, noticeSignals, teaserSignal } = {
+    activeNotice: noticeEvaluation.noticeSignal,
+    ...noticeEvaluation,
+  };
   const selectedFutureReply = activeNotice
     ? recoverySignals.find((signal) => signal.tweet_id === activeNotice.id && signal.is_reply === true)
     : undefined;
@@ -425,6 +460,7 @@ async function hasActiveOfficialNotice(
     noticeSignals,
     teaserSignal,
     allSignals: bankedAssociationSignals.signals,
+    regularEvents,
     futureReplyClaim: selectedFutureReply?.ai_contextual_reset_tweet_id
       ? {
           eventKey: selectedFutureReply.ai_contextual_reset_tweet_id,
@@ -759,7 +795,7 @@ async function processCodexUsageSnapshot(
   // A recovery near the regular schedule is not Tibo evidence. This also
   // covers the `unknown` near-regular case where an official notice exists:
   // a notice must not turn a regular quota recovery into a Tibo confirmation.
-  const matchingTibo: MatchingTiboResult = !canCorroborateTiboReset(decision)
+  let matchingTibo: MatchingTiboResult = !canCorroborateTiboReset(decision)
     ? { tweetId: null, tweetCreatedAt: null, tweetUrl: null, text: null, needsPromotion: false, confidence: null, error: null }
     : await findRecentFormalTiboReset(
         client,
@@ -804,7 +840,7 @@ async function processCodexUsageSnapshot(
     return recoveryResponse(bankedResponseStatus());
   }
 
-  const observation = createRecoveryObservation(decision, matchingTibo, now);
+  let observation = createRecoveryObservation(decision, matchingTibo, now);
   if (decision.isPersonalReset === true) {
     const plan = buildCodexUsageAtomicWritePlan({
       expectedPreviousObservedAt: previousResult.state?.observedAt ?? null,
@@ -823,8 +859,72 @@ async function processCodexUsageSnapshot(
     return recoveryResponse(hasBankedObservation ? bankedResponseStatus() : "personal_reset");
   }
 
-  const noticeSignal = recoveryNotice.noticeSignal;
-  const teaserSignal = recoveryNotice.teaserSignal;
+  let noticeSignal = recoveryNotice.noticeSignal;
+  let noticeSignalsList = recoveryNotice.noticeSignals;
+  let teaserSignal = recoveryNotice.teaserSignal;
+  let secondOpinionCandidateSignals = recoveryNotice.allSignals;
+  let secondOpinionPromotedResetTweetId: string | null = null;
+
+  if (
+    canCorroborateTiboReset(decision) &&
+    decision.confidence === "strong" &&
+    !matchingTibo.tweetId &&
+    !shouldCreateNoticeBackedEstimate(noticeSignal, decision, observation)
+  ) {
+    const secondOpinion = await runForcedResetSecondOpinionReview({
+      observation: {
+        observedAt: snapshot.observedAt,
+        previousUsedPercent: decision.previous.usedPercent,
+        currentUsedPercent: decision.current.usedPercent,
+        cycleHint: decision.cycleHint,
+        confidence: decision.confidence,
+      },
+      signals: secondOpinionCandidateSignals,
+      supabase: client,
+    });
+    secondOpinionCandidateSignals = secondOpinion.signals;
+
+    const observedMs = Date.parse(snapshot.observedAt);
+    const matchedPromotedReset = secondOpinion.promotedResetSignals
+      .filter((signal) => {
+        const tweetTime = Date.parse(signal.tweet_created_at);
+        return Number.isFinite(tweetTime) &&
+          Number.isFinite(observedMs) &&
+          Math.abs(tweetTime - observedMs) <= USAGE_TIBO_MATCH_WINDOW_MS;
+      })
+      .sort((left, right) =>
+        Math.abs(Date.parse(left.tweet_created_at) - observedMs) -
+        Math.abs(Date.parse(right.tweet_created_at) - observedMs),
+      )[0];
+
+    if (matchedPromotedReset) {
+      secondOpinionPromotedResetTweetId = matchedPromotedReset.tweet_id;
+      matchingTibo = {
+        tweetId: matchedPromotedReset.tweet_id,
+        tweetCreatedAt: matchedPromotedReset.tweet_created_at,
+        tweetUrl: matchedPromotedReset.tweet_url ?? null,
+        text: matchedPromotedReset.text ?? null,
+        needsPromotion: false,
+        confidence: matchedPromotedReset.confidence ?? 0.95,
+        trustedEditIdentity: null,
+        error: null,
+      };
+      observation = createRecoveryObservation(decision, matchingTibo, now);
+    } else if (secondOpinion.promotedNoticeSignals.length > 0) {
+      const updatedRecoverySignals = secondOpinion.signals.filter((signal) => signal.is_reply !== true);
+      const refreshed = evaluateNoticeSignalsForRecovery(
+        updatedRecoverySignals,
+        recoveryNotice.regularEvents,
+        recoveryNotice.priorForcedResetAt,
+        new Date(snapshot.observedAt),
+        recoveryExecutionWindow,
+      );
+      noticeSignal = refreshed.noticeSignal;
+      noticeSignalsList = refreshed.noticeSignals;
+      teaserSignal = refreshed.teaserSignal;
+    }
+  }
+
   let teaserEstimateObserved = false;
   let estimateObserved = false;
   let executionEstimate = null;
@@ -867,8 +967,8 @@ async function processCodexUsageSnapshot(
     }
   } else if (shouldCreateNoticeBackedEstimate(noticeSignal, decision, observation)) {
     try {
-      const noticeSignals = recoveryNotice.noticeSignals.length > 0
-        ? recoveryNotice.noticeSignals
+      const noticeSignals = noticeSignalsList.length > 0
+        ? noticeSignalsList
         : [toTiboNoticeSignal(noticeSignal)];
       const relatedNoticeSignals = findRelatedTiboNoticeCluster(
         noticeSignals,
@@ -1001,9 +1101,22 @@ async function processCodexUsageSnapshot(
   });
   if (atomicResponse) return atomicResponse;
 
+  if (executionEstimate?.reset_event_key === "usage-reset-pending") {
+    await notifyPendingForcedResetAssociation({
+      observation: {
+        observedAt: snapshot.observedAt,
+        previousUsedPercent: decision.previous.usedPercent,
+        currentUsedPercent: decision.current.usedPercent,
+        cycleHint: decision.cycleHint,
+        confidence: decision.confidence,
+      },
+      candidateSignals: secondOpinionCandidateSignals,
+    });
+  }
+
   if (executionEstimate && persistedObservationId) {
     try {
-      if (matchingTibo.tweetId && matchingTibo.needsPromotion) {
+      if (matchingTibo.tweetId && (matchingTibo.needsPromotion || secondOpinionPromotedResetTweetId === matchingTibo.tweetId)) {
         const resetEventKey = executionEstimate.reset_event_key;
         const sourceTweetIds = executionEstimate.tibo_source_tweet_ids ?? [matchingTibo.tweetId];
         const primaryTweetId = executionEstimate.tibo_primary_tweet_id ?? matchingTibo.tweetId;

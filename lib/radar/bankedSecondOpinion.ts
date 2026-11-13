@@ -2,12 +2,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ActiveTiboSignal } from "./types";
 import type { BankedPostAssociationDecision } from "./resetPostAssociation";
 import { classifyWithGemini, type GeminiClassificationInput, type GeminiClassificationOutput } from "./geminiClassification";
+import { getTiboClassificationSafetyDecision, type ClassificationSignalType } from "./classification";
+import { getTiboContextSafetyDecision } from "./tiboContextSafety";
 
 const SECOND_OPINION_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 const SECOND_OPINION_MAX_CANDIDATES = 5;
 const SECOND_OPINION_MIN_CONFIDENCE = 0.95;
 const BANKED_KEYWORD_PRIORITY_PATTERN =
   /\b(?:banked|reset(?:s|ting)?|credits?|limits?|quotas?|dots|everyones?|accounts?|land(?:ed|ing)?|activat\w*)\b/i;
+const FORCED_RESET_KEYWORD_PRIORITY_PATTERN =
+  /\b(?:reset(?:s|ting|ted)?|limits?|quotas?|weekly|usage|button|pressed|rollout|back|codex|pro|plus)\b/i;
 
 export type BankedSecondOpinionObservation = {
   observation_key: string;
@@ -23,18 +27,33 @@ export type BankedSecondOpinionResult = {
   reviewedTweetIds: string[];
 };
 
+export type ForcedResetSecondOpinionObservation = {
+  observedAt: string;
+  previousUsedPercent: number;
+  currentUsedPercent: number;
+  cycleHint: string;
+  confidence: string;
+};
+
+export type ForcedResetSecondOpinionResult = {
+  signals: ActiveTiboSignal[];
+  promotedResetSignals: ActiveTiboSignal[];
+  promotedNoticeSignals: ActiveTiboSignal[];
+  reviewedTweetIds: string[];
+};
+
 export type BankedSecondOpinionClassifier = (
   input: GeminiClassificationInput,
   options?: { model?: string; mode?: string },
 ) => Promise<GeminiClassificationOutput>;
 
-/**
- * Selects recent non-manual, non-rejected Tibo posts within 48h prior to an observed
- * BANKED grant that were classified as irrelevant/teaser and could be re-evaluated.
- */
-export function selectBankedSecondOpinionCandidates(
+type SecondOpinionPromotableType = "official_notice" | "reset_executed";
+type SecondOpinionWebhookSender = (url: string, body: { content: string; text: string }) => Promise<void>;
+
+function selectSecondOpinionCandidates(
   signals: readonly ActiveTiboSignal[],
   observedAt: string,
+  keywordPriorityPattern: RegExp,
   maxCandidates = SECOND_OPINION_MAX_CANDIDATES,
 ): ActiveTiboSignal[] {
   const observedTime = Date.parse(observedAt);
@@ -51,43 +70,51 @@ export function selectBankedSecondOpinionCandidates(
       return Number.isFinite(createdAt) && createdAt >= windowStart && createdAt <= observedTime;
     })
     .sort((left, right) => {
-      const leftPriority = BANKED_KEYWORD_PRIORITY_PATTERN.test(left.text ?? "") ? 1 : 0;
-      const rightPriority = BANKED_KEYWORD_PRIORITY_PATTERN.test(right.text ?? "") ? 1 : 0;
+      const leftPriority = keywordPriorityPattern.test(left.text ?? "") ? 1 : 0;
+      const rightPriority = keywordPriorityPattern.test(right.text ?? "") ? 1 : 0;
       if (leftPriority !== rightPriority) return rightPriority - leftPriority;
       return Date.parse(right.tweet_created_at) - Date.parse(left.tweet_created_at);
     })
     .slice(0, maxCandidates);
 }
 
-/**
- * Re-evaluates recent Tibo candidates with Usage Monitor corroboration context when
- * automatic BANKED matching ended in no_eligible_claim.
- */
-export async function runBankedSecondOpinionReview(options: {
-  observation: BankedSecondOpinionObservation;
-  signals: readonly ActiveTiboSignal[];
-  supabase?: SupabaseClient | null;
-  classify?: BankedSecondOpinionClassifier;
-}): Promise<BankedSecondOpinionResult> {
-  const { observation, signals, supabase = null, classify = classifyWithGemini } = options;
-  const candidates = selectBankedSecondOpinionCandidates(signals, observation.observed_at);
-  if (candidates.length === 0) {
-    return { signals: [...signals], promotedTweetIds: [], reviewedTweetIds: [] };
-  }
-
-  const isCustomClassifier = options.classify !== undefined;
+function isSecondOpinionAiConfigured(isCustomClassifier: boolean): boolean {
+  if (isCustomClassifier) return true;
   const mode = (process.env.GEMINI_CLASSIFICATION_MODE || "off").toLowerCase();
-  if (!isCustomClassifier && (mode === "off" || !process.env.GEMINI_API_KEY?.trim() || !process.env.GEMINI_MODEL?.trim())) {
-    return { signals: [...signals], promotedTweetIds: [], reviewedTweetIds: [] };
+  return mode !== "off" &&
+    Boolean(process.env.GEMINI_API_KEY?.trim()) &&
+    Boolean(process.env.GEMINI_MODEL?.trim());
+}
+
+async function reviewAndPromoteSecondOpinionCandidates(options: {
+  signals: readonly ActiveTiboSignal[];
+  candidates: readonly ActiveTiboSignal[];
+  observedAt: string;
+  monitorContext: string;
+  allowedSignalTypes: ReadonlySet<SecondOpinionPromotableType>;
+  validateCandidatePromotion?: (candidate: ActiveTiboSignal, targetType: SecondOpinionPromotableType) => boolean;
+  supabase?: SupabaseClient | null;
+  classify: BankedSecondOpinionClassifier;
+}): Promise<{
+  signals: ActiveTiboSignal[];
+  promotedEntries: Array<{ signal: ActiveTiboSignal; signalType: SecondOpinionPromotableType }>;
+  reviewedTweetIds: string[];
+}> {
+  const {
+    signals,
+    candidates,
+    observedAt,
+    monitorContext,
+    allowedSignalTypes,
+    validateCandidatePromotion,
+    supabase = null,
+    classify,
+  } = options;
+  if (candidates.length === 0) {
+    return { signals: [...signals], promotedEntries: [], reviewedTweetIds: [] };
   }
 
-  const monitorContext = [
-    `Usage Monitor observed an actual BANKED reset credit increase (${observation.previous_available_count} -> ${observation.current_available_count}) at ${observation.observed_at}.`,
-    "Re-evaluate whether this post announces that broad banked reset distribution/activation for paid users or everyone's accounts.",
-    "Only return official_notice (>= 0.95 confidence) if the post itself announces a broad banked reset activation, rollout, or account delivery; keep unrelated chatter as irrelevant and pure speculation as teaser.",
-  ].join(" ");
-
-  const promotedById = new Map<string, ActiveTiboSignal>();
+  const promotedById = new Map<string, { signal: ActiveTiboSignal; signalType: SecondOpinionPromotableType }>();
   const reviewedTweetIds: string[] = [];
 
   for (const candidate of candidates) {
@@ -110,13 +137,18 @@ export async function runBankedSecondOpinionReview(options: {
 
     if (
       aiResult.status !== "success" ||
-      aiResult.signalType !== "official_notice" ||
-      (aiResult.confidence ?? 0) < SECOND_OPINION_MIN_CONFIDENCE
+      (aiResult.confidence ?? 0) < SECOND_OPINION_MIN_CONFIDENCE ||
+      !allowedSignalTypes.has(aiResult.signalType as SecondOpinionPromotableType)
     ) {
       continue;
     }
 
-    const observedMs = Date.parse(observation.observed_at);
+    const promotedType = aiResult.signalType as SecondOpinionPromotableType;
+    if (validateCandidatePromotion && !validateCandidatePromotion(candidate, promotedType)) {
+      continue;
+    }
+
+    const observedMs = Date.parse(observedAt);
     const currentExpiryMs = candidate.expires_at ? Date.parse(candidate.expires_at) : Number.NaN;
     const extendedExpiry =
       Number.isFinite(currentExpiryMs) && currentExpiryMs > observedMs
@@ -128,7 +160,7 @@ export async function runBankedSecondOpinionReview(options: {
       const { error } = await supabase
         .from("tibo_signals")
         .update({
-          signal_type: "official_notice",
+          signal_type: promotedType,
           confidence: aiResult.confidence,
           classification_source: "gemini",
           classification_reason: `[second-opinion] ${reason}`,
@@ -145,22 +177,177 @@ export async function runBankedSecondOpinionReview(options: {
     }
 
     promotedById.set(candidate.tweet_id, {
-      ...candidate,
-      signal_type: "official_notice",
-      confidence: aiResult.confidence ?? SECOND_OPINION_MIN_CONFIDENCE,
-      classification_source: "gemini",
-      expires_at: extendedExpiry,
+      signalType: promotedType,
+      signal: {
+        ...candidate,
+        signal_type: promotedType,
+        confidence: aiResult.confidence ?? SECOND_OPINION_MIN_CONFIDENCE,
+        classification_source: "gemini",
+        expires_at: extendedExpiry,
+      },
     });
   }
 
   if (promotedById.size === 0) {
-    return { signals: [...signals], promotedTweetIds: [], reviewedTweetIds };
+    return { signals: [...signals], promotedEntries: [], reviewedTweetIds };
   }
 
   return {
-    signals: signals.map((signal) => promotedById.get(signal.tweet_id) ?? signal),
-    promotedTweetIds: Array.from(promotedById.keys()),
+    signals: signals.map((signal) => promotedById.get(signal.tweet_id)?.signal ?? signal),
+    promotedEntries: Array.from(promotedById.values()),
     reviewedTweetIds,
+  };
+}
+
+function isForcedResetPromotionSafe(
+  candidate: ActiveTiboSignal,
+  targetType: SecondOpinionPromotableType,
+): boolean {
+  if (targetType !== "reset_executed") return true;
+  const text = String(candidate.text ?? "");
+  if (getTiboClassificationSafetyDecision(text, targetType as ClassificationSignalType).signalType !== "reset_executed") {
+    return false;
+  }
+  const contextSafety = getTiboContextSafetyDecision({
+    authorText: text,
+    selectedSignalType: "reset_executed",
+  });
+  return !contextSafety || contextSafety.signalType === "reset_executed";
+}
+
+async function dispatchAlertWebhook(
+  webhookUrl: string | undefined,
+  message: string,
+  sendWebhook?: SecondOpinionWebhookSender,
+): Promise<boolean> {
+  if (!webhookUrl) return false;
+  try {
+    if (sendWebhook) {
+      await sendWebhook(webhookUrl, { content: message, text: message });
+    } else {
+      await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: message, text: message }),
+        signal: AbortSignal.timeout(3000),
+      });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Selects recent non-manual, non-rejected Tibo posts within 48h prior to an observed
+ * BANKED grant that were classified as irrelevant/teaser and could be re-evaluated.
+ */
+export function selectBankedSecondOpinionCandidates(
+  signals: readonly ActiveTiboSignal[],
+  observedAt: string,
+  maxCandidates = SECOND_OPINION_MAX_CANDIDATES,
+): ActiveTiboSignal[] {
+  return selectSecondOpinionCandidates(signals, observedAt, BANKED_KEYWORD_PRIORITY_PATTERN, maxCandidates);
+}
+
+/**
+ * Selects recent non-manual, non-rejected Tibo posts within 48h prior to an unexpected
+ * forced quota recovery that were classified as irrelevant/teaser and could be re-evaluated.
+ */
+export function selectForcedResetSecondOpinionCandidates(
+  signals: readonly ActiveTiboSignal[],
+  observedAt: string,
+  maxCandidates = SECOND_OPINION_MAX_CANDIDATES,
+): ActiveTiboSignal[] {
+  return selectSecondOpinionCandidates(signals, observedAt, FORCED_RESET_KEYWORD_PRIORITY_PATTERN, maxCandidates);
+}
+
+/**
+ * Re-evaluates recent Tibo candidates with Usage Monitor corroboration context when
+ * automatic BANKED matching ended in no_eligible_claim.
+ */
+export async function runBankedSecondOpinionReview(options: {
+  observation: BankedSecondOpinionObservation;
+  signals: readonly ActiveTiboSignal[];
+  supabase?: SupabaseClient | null;
+  classify?: BankedSecondOpinionClassifier;
+}): Promise<BankedSecondOpinionResult> {
+  const { observation, signals, supabase = null, classify = classifyWithGemini } = options;
+  if (!isSecondOpinionAiConfigured(options.classify !== undefined)) {
+    return { signals: [...signals], promotedTweetIds: [], reviewedTweetIds: [] };
+  }
+
+  const candidates = selectBankedSecondOpinionCandidates(signals, observation.observed_at);
+  const monitorContext = [
+    `Usage Monitor observed an actual BANKED reset credit increase (${observation.previous_available_count} -> ${observation.current_available_count}) at ${observation.observed_at}.`,
+    "Re-evaluate whether this post announces that broad banked reset distribution/activation for paid users or everyone's accounts.",
+    "Only return official_notice (>= 0.95 confidence) if the post itself announces a broad banked reset activation, rollout, or account delivery; keep unrelated chatter as irrelevant and pure speculation as teaser.",
+  ].join(" ");
+
+  const outcome = await reviewAndPromoteSecondOpinionCandidates({
+    signals,
+    candidates,
+    observedAt: observation.observed_at,
+    monitorContext,
+    allowedSignalTypes: new Set<SecondOpinionPromotableType>(["official_notice"]),
+    supabase,
+    classify,
+  });
+
+  return {
+    signals: outcome.signals,
+    promotedTweetIds: outcome.promotedEntries.map((entry) => entry.signal.tweet_id),
+    reviewedTweetIds: outcome.reviewedTweetIds,
+  };
+}
+
+/**
+ * Re-evaluates recent Tibo candidates with Usage Monitor recovery context when an
+ * unexpected quota recovery occurred without a corroborated formal reset or notice.
+ */
+export async function runForcedResetSecondOpinionReview(options: {
+  observation: ForcedResetSecondOpinionObservation;
+  signals: readonly ActiveTiboSignal[];
+  supabase?: SupabaseClient | null;
+  classify?: BankedSecondOpinionClassifier;
+}): Promise<ForcedResetSecondOpinionResult> {
+  const { observation, signals, supabase = null, classify = classifyWithGemini } = options;
+  if (!isSecondOpinionAiConfigured(options.classify !== undefined)) {
+    return {
+      signals: [...signals],
+      promotedResetSignals: [],
+      promotedNoticeSignals: [],
+      reviewedTweetIds: [],
+    };
+  }
+
+  const candidates = selectForcedResetSecondOpinionCandidates(signals, observation.observedAt);
+  const monitorContext = [
+    `Usage Monitor observed an unexpected global Codex quota recovery (${observation.previousUsedPercent}% -> ${observation.currentUsedPercent}%, cycleHint=${observation.cycleHint}, confidence=${observation.confidence}) at ${observation.observedAt}.`,
+    "Re-evaluate whether this post announces a current global forced quota reset execution (reset_executed, >= 0.95 confidence) OR an official reset notice/rollout (official_notice, >= 0.95 confidence).",
+    "Only promote when the post itself announces a reset execution or official notice; keep pure teasers as teaser and unrelated chatter as irrelevant.",
+  ].join(" ");
+
+  const outcome = await reviewAndPromoteSecondOpinionCandidates({
+    signals,
+    candidates,
+    observedAt: observation.observedAt,
+    monitorContext,
+    allowedSignalTypes: new Set<SecondOpinionPromotableType>(["reset_executed", "official_notice"]),
+    validateCandidatePromotion: isForcedResetPromotionSafe,
+    supabase,
+    classify,
+  });
+
+  return {
+    signals: outcome.signals,
+    promotedResetSignals: outcome.promotedEntries
+      .filter((entry) => entry.signalType === "reset_executed")
+      .map((entry) => entry.signal),
+    promotedNoticeSignals: outcome.promotedEntries
+      .filter((entry) => entry.signalType === "official_notice")
+      .map((entry) => entry.signal),
+    reviewedTweetIds: outcome.reviewedTweetIds,
   };
 }
 
@@ -172,7 +359,7 @@ export async function notifyPendingBankedAssociation(options: {
   observation: BankedSecondOpinionObservation;
   decision: BankedPostAssociationDecision;
   candidateSignals: readonly ActiveTiboSignal[];
-  sendWebhook?: (url: string, body: { content: string; text: string }) => Promise<void>;
+  sendWebhook?: SecondOpinionWebhookSender;
 }): Promise<boolean> {
   const { observation, decision, candidateSignals } = options;
   if (decision.status === "accepted") return false;
@@ -192,7 +379,6 @@ export async function notifyPendingBankedAssociation(options: {
   const webhookUrl =
     process.env.BANKED_ASSOCIATION_ALERT_WEBHOOK_URL?.trim() ||
     process.env.RADAR_ALERT_WEBHOOK_URL?.trim();
-  if (!webhookUrl) return false;
 
   const message = [
     `[Codex Reset Observatory] BANKED grant observation is ${decision.status} (${decision.reason}).`,
@@ -201,19 +387,41 @@ export async function notifyPendingBankedAssociation(options: {
     recentCandidates.length > 0 ? `Recent Tibo candidates: ${recentCandidates.join(", ")}` : "Recent Tibo candidates: none",
   ].join("\n");
 
-  try {
-    if (options.sendWebhook) {
-      await options.sendWebhook(webhookUrl, { content: message, text: message });
-    } else {
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: message, text: message }),
-        signal: AbortSignal.timeout(3000),
-      });
-    }
-    return true;
-  } catch {
-    return false;
-  }
+  return dispatchAlertWebhook(webhookUrl, message, options.sendWebhook);
+}
+
+/**
+ * Emits a structured warning log and optional webhook alert when an unexpected
+ * quota recovery falls back to monitor-only pending state without a Tibo post match.
+ */
+export async function notifyPendingForcedResetAssociation(options: {
+  observation: ForcedResetSecondOpinionObservation;
+  candidateSignals: readonly ActiveTiboSignal[];
+  sendWebhook?: SecondOpinionWebhookSender;
+}): Promise<boolean> {
+  const { observation, candidateSignals } = options;
+  const recentCandidates = selectForcedResetSecondOpinionCandidates(candidateSignals, observation.observedAt, 3)
+    .map((signal) => `${signal.tweet_id} (${signal.signal_type})`);
+
+  console.warn("[Forced Reset Association Pending]", {
+    observedAt: observation.observedAt,
+    cycleHint: observation.cycleHint,
+    confidence: observation.confidence,
+    previousUsedPercent: observation.previousUsedPercent,
+    currentUsedPercent: observation.currentUsedPercent,
+    recentCandidates,
+  });
+
+  const webhookUrl =
+    process.env.RESET_PENDING_ALERT_WEBHOOK_URL?.trim() ||
+    process.env.BANKED_ASSOCIATION_ALERT_WEBHOOK_URL?.trim() ||
+    process.env.RADAR_ALERT_WEBHOOK_URL?.trim();
+
+  const message = [
+    `[Codex Reset Observatory] Unexpected quota recovery recorded as usage-reset-pending (no formal Tibo post matched).`,
+    `Observed at: ${observation.observedAt} (${observation.previousUsedPercent}% -> ${observation.currentUsedPercent}%, cycleHint=${observation.cycleHint})`,
+    recentCandidates.length > 0 ? `Recent Tibo candidates: ${recentCandidates.join(", ")}` : "Recent Tibo candidates: none",
+  ].join("\n");
+
+  return dispatchAlertWebhook(webhookUrl, message, options.sendWebhook);
 }

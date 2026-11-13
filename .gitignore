@@ -38,3 +38,11 @@ artifacts/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Local agent notes & historical review/draft docs (kept local, untracked)
+docs/reviews/
+docs/operations/antigravity-agentapi.md
+docs/superpowers/plans/2026-10-18-*.md
+docs/superpowers/plans/2026-10-19-*.md
+docs/superpowers/specs/2026-10-15-*.md
+docs/superpowers/specs/2026-10-19-*.md

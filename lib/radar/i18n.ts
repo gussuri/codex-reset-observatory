@@ -1302,6 +1302,11 @@ export const DYNAMIC_TRANSLATIONS = {
     en: "Weekly cycle",
     zh: "定期执行",
   },
+  "参考予定": {
+    ja: "参考予定",
+    en: "Reference schedule",
+    zh: "参考计划",
+  },
   "即時リセット": {
     ja: "即時リセット",
     en: "Immediate reset",

@@ -4,6 +4,7 @@ import { LOCAL_OBSERVATION_SIGNALS } from "../data/observationSignals";
 import { LOCAL_RESET_HISTORY } from "../data/resetHistory";
 import { resolveLocalizedText, translateDynamic, UI_TRANSLATIONS } from "../lib/radar/i18n";
 import { getRadarViewModel, getLocalRadarData } from "../lib/radar";
+import { getDueRegularResetReferenceEvents, toRegularResetHistoryEvent } from "../lib/radar/regularResetSchedule";
 
 const JAPANESE_CHAR_REGEX = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/;
 const JAPANESE_KANA_REGEX = /[\u3040-\u309F\u30A0-\u30FF]/;
@@ -412,6 +413,53 @@ test("i18n Automated Check: Full RadarViewModel history and active window contai
         `History item '${item.key}' Chinese scope contains Japanese kana: "${item.details.scope}"`
       );
     }
+  }
+});
+
+test("i18n Automated Check: Weekly regular and reference reset rows localize windowLength across en and zh", () => {
+  assert.strictEqual(translateDynamic("参考予定", "en"), "Reference schedule");
+  assert.strictEqual(translateDynamic("参考予定", "zh"), "参考计划");
+  assert.strictEqual(translateDynamic("定期実施", "en"), "Weekly cycle");
+  assert.strictEqual(translateDynamic("定期実施", "zh"), "定期执行");
+
+  const referenceEvents = getDueRegularResetReferenceEvents(
+    new Date("2026-11-13T12:00:00.000Z"),
+    "2026-10-30T00:00:00.000Z",
+  );
+  assert.ok(referenceEvents.length >= 1, "Expected due weekly reference events");
+  const regularEvent = toRegularResetHistoryEvent({
+    schedule_key: "regular-test-1",
+    window_start_at: "2026-11-06T00:00:00.000Z",
+    window_end_at: "2026-11-06T01:00:00.000Z",
+    representative_at: "2026-11-06T00:00:00.000Z",
+    scheduled_at: "2026-11-06T00:00:00.000Z",
+    completed_at: "2026-11-06T00:05:00.000Z",
+    cycle_type: "定期リセット",
+    reset_method: "自動定期",
+    scope: "全ユーザー",
+    record_kind: "regular_completed",
+    status: "completed",
+  });
+
+  const radarData = {
+    recent_windows: [...referenceEvents, regularEvent],
+  };
+
+  const enVm = getRadarViewModel(radarData, "en");
+  const zhVm = getRadarViewModel(radarData, "zh");
+  for (const item of enVm.recentHistory) {
+    assert.strictEqual(
+      JAPANESE_CHAR_REGEX.test(item.windowLength),
+      false,
+      `History item '${item.key}' English windowLength contains Japanese: "${item.windowLength}"`,
+    );
+  }
+  for (const item of zhVm.recentHistory) {
+    assert.strictEqual(
+      JAPANESE_KANA_REGEX.test(item.windowLength),
+      false,
+      `History item '${item.key}' Chinese windowLength contains Japanese kana: "${item.windowLength}"`,
+    );
   }
 });
 
