@@ -1074,17 +1074,224 @@ export function resolveGeminiClassificationModel(
     return normalizedBase;
   }
 
+  if (input.secondOpinionMonitorContext?.trim()) {
+    const secondOpinionModel = process.env.GEMINI_SECOND_OPINION_MODEL?.trim();
+    if (secondOpinionModel) return secondOpinionModel;
+    if (/-flash(?:-lite)?\b/i.test(normalizedBase)) {
+      return normalizedBase.replace(/-flash(?:-lite)?\b/i, "-pro");
+    }
+    return process.env.GEMINI_HIGH_ACCURACY_MODEL?.trim() || normalizedBase;
+  }
+
   const combinedText = [input.text, input.replyContextText, input.quoteContextText]
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join(" ");
-  const shouldEscalate =
-    Boolean(input.secondOpinionMonitorContext?.trim()) ||
-    RESET_KEYWORD_ESCALATION_PATTERN.test(combinedText);
-
-  if (shouldEscalate && /-lite\b/i.test(normalizedBase)) {
+  if (RESET_KEYWORD_ESCALATION_PATTERN.test(combinedText) && /-lite\b/i.test(normalizedBase)) {
     return process.env.GEMINI_HIGH_ACCURACY_MODEL?.trim() || normalizedBase.replace(/-lite\b/i, "");
   }
   return normalizedBase;
+}
+
+function buildValidatedClassificationOutput(
+  textContent: string,
+  input: GeminiClassificationInput,
+  model: string,
+  nowIso: string,
+  fallback: (status: GeminiClassificationStatus, diagnostic?: GeminiFailureDiagnostic) => GeminiClassificationOutput,
+): GeminiClassificationOutput {
+  let parsed: any;
+  try {
+    parsed = JSON.parse(textContent);
+  } catch {
+    return fallback("invalid_json", { category: "response_parse", httpStatus: null });
+  }
+
+  const allowedSignalTypes = ["official_notice", "reset_executed", "teaser", "irrelevant"];
+  const allowedTemporal = ["future", "completed_now", "historical", "unclear"];
+
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    !allowedSignalTypes.includes(parsed.signalType) ||
+    typeof parsed.confidence !== "number" ||
+    parsed.confidence < 0 ||
+    parsed.confidence > 1 ||
+    !allowedTemporal.includes(parsed.temporalDirection)
+  ) {
+    return fallback("invalid_schema", { category: "response_schema", httpStatus: null });
+  }
+  if (parsed.signalType === "official_notice" && parsed.temporalDirection === "unclear" && parsed.noticeTimingStatus !== "unknown") {
+    return fallback("invalid_schema", { category: "response_schema", httpStatus: null });
+  }
+
+  let validQuote: string | null = null;
+  if (parsed.evidenceQuote !== null && parsed.evidenceQuote !== undefined) {
+    if (typeof parsed.evidenceQuote !== "string" || parsed.evidenceQuote.length > 300) {
+      return fallback("invalid_evidence", { category: "evidence_validation", httpStatus: null });
+    }
+    const normQuote = parsed.evidenceQuote.trim().toLowerCase();
+    const normText = input.text.toLowerCase();
+
+    if (normQuote.length > 0 && !normText.includes(normQuote)) {
+      return fallback("invalid_evidence", { category: "evidence_validation", httpStatus: null });
+    }
+    validQuote = parsed.evidenceQuote.trim();
+  }
+  if (parsed.signalType === "official_notice" && parsed.temporalDirection === "unclear" && !validQuote) {
+    return fallback("invalid_evidence", { category: "evidence_validation", httpStatus: null });
+  }
+
+  const contextualResetAssessments: TiboContextualResetAssessment[] = [
+    "same_global_reset",
+    "same_banked_distribution",
+    "same_personal_reset",
+    "different_event",
+    "negated",
+    "uncertain",
+    "not_applicable",
+    "unknown",
+  ];
+  const contextualResetAssessment: TiboContextualResetAssessment = contextualResetAssessments.includes(
+    parsed.contextualResetAssessment as TiboContextualResetAssessment,
+  )
+    ? (parsed.contextualResetAssessment as TiboContextualResetAssessment)
+    : "unknown";
+  const contextualResetTweetId = contextualResetAssessment === "same_global_reset" &&
+      typeof parsed.contextualResetTweetId === "string" &&
+      /^\d{1,30}$/.test(parsed.contextualResetTweetId)
+    ? parsed.contextualResetTweetId
+    : null;
+  const noticeTimingStatus: TiboNoticeTimingStatus | null = parsed.noticeTimingStatus === "known" ||
+      parsed.noticeTimingStatus === "unknown"
+    ? parsed.noticeTimingStatus
+    : null;
+  const resetMeaning = parseResetMeaning(parsed.resetMeaning);
+  const unresolvedOfficialNoticeTiming = parsed.signalType === "official_notice" &&
+    parsed.temporalDirection === "unclear" && noticeTimingStatus === "unknown";
+
+  const reasonJa = typeof parsed.reasonJa === "string" ? parsed.reasonJa.slice(0, 500) : null;
+  const resetTypeJa = normalizeGeminiResetType(parsed.resetTypeJa);
+  const teaserStrengthAssessment = parseTeaserStrengthAssessment(parsed, input.text);
+  const codexOperationalAssessment = parseCodexOperationalAssessment(parsed, input.text);
+  const rawTemporalSemantics = unresolvedOfficialNoticeTiming
+    ? null
+    : parseGeminiTemporalSemantics(parsed, input.text);
+  const futureSignal = parseFutureSignalAssessment(
+    parsed.futureSignal,
+    input.text,
+    validQuote,
+  );
+
+  const rawResult: GeminiClassificationOutput = {
+    signalType: parsed.signalType,
+    confidence: parsed.confidence,
+    temporalDirection: parsed.temporalDirection,
+    evidenceQuote: validQuote,
+    reasonJa,
+    resetTypeJa,
+    contextualResetAssessment,
+    contextualResetTweetId,
+    noticeTimingStatus,
+    resetMeaning,
+    noticeToExecution: !unresolvedOfficialNoticeTiming && typeof parsed.noticeToExecution === "string"
+      ? parsed.noticeToExecution.slice(0, 100)
+      : null,
+    ...teaserStrengthAssessment,
+    futureSignal,
+    temporalExpression: rawTemporalSemantics?.temporalExpression ?? null,
+    temporalKind: rawTemporalSemantics?.temporalKind ?? null,
+    temporalPrecision: rawTemporalSemantics?.temporalPrecision ?? null,
+    weekday: rawTemporalSemantics?.weekday ?? null,
+    relativeDayOffset: rawTemporalSemantics?.relativeDayOffset ?? null,
+    relativeAmount: rawTemporalSemantics?.relativeAmount ?? null,
+    relativeUnit: rawTemporalSemantics?.relativeUnit ?? null,
+    explicitDateParts: rawTemporalSemantics?.explicitDateParts ?? null,
+    explicitTimeParts: rawTemporalSemantics?.explicitTimeParts ?? null,
+    daypart: rawTemporalSemantics?.daypart ?? null,
+    rangeKind: rawTemporalSemantics?.rangeKind ?? null,
+    explicitTimezone: rawTemporalSemantics?.explicitTimezone ?? null,
+    temporalConfidence: rawTemporalSemantics?.temporalConfidence ?? null,
+    codexOperationalStatus: codexOperationalAssessment.codex_operational_status,
+    codexOperationalConfidence: codexOperationalAssessment.codex_operational_confidence,
+    codexOperationalEvidenceQuote: codexOperationalAssessment.codex_operational_evidence_quote,
+    codexOperationalReasonJa: codexOperationalAssessment.codex_operational_reason_ja,
+    model,
+    status: "success",
+    classifiedAt: nowIso,
+  };
+  const guardedResult = applyTiboClassificationSafetyGuard(
+    input.text,
+    rawResult,
+    { futureSignalProvided: parsed.futureSignal !== undefined && parsed.futureSignal !== null },
+  );
+  return {
+    ...guardedResult,
+    rawAudit: {
+      signalType: rawResult.signalType,
+      temporalDirection: rawResult.temporalDirection,
+      reasonJa: rawResult.reasonJa,
+    },
+  };
+}
+
+async function tryOpenAICompatibleFallback(
+  input: GeminiClassificationInput,
+  options: {
+    apiKey?: string;
+    model?: string;
+    baseUrl?: string;
+    timeoutMs: number;
+    fetchImpl?: typeof fetch;
+  },
+  nowIso: string,
+  fallback: (status: GeminiClassificationStatus, diagnostic?: GeminiFailureDiagnostic) => GeminiClassificationOutput,
+): Promise<GeminiClassificationOutput | null> {
+  const apiKey =
+    options.apiKey?.trim() ||
+    process.env.OPENAI_FALLBACK_API_KEY?.trim() ||
+    process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) return null;
+
+  const model =
+    options.model?.trim() ||
+    process.env.OPENAI_FALLBACK_MODEL?.trim() ||
+    "gpt-4o-mini";
+  const baseUrl = (
+    options.baseUrl?.trim() ||
+    process.env.OPENAI_FALLBACK_BASE_URL?.trim() ||
+    "https://api.openai.com/v1"
+  ).replace(/\/+$/, "");
+  const fetchFn = options.fetchImpl ?? fetch;
+
+  try {
+    const res = await fetchFn(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: TIBO_GEMINI_SYSTEM_PROMPT },
+          { role: "user", content: buildGeminiPrompt(input) },
+        ],
+      }),
+      signal: AbortSignal.timeout(options.timeoutMs),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      choices?: Array<{ message?: { content?: string | null } }>;
+    };
+    const textContent = data?.choices?.[0]?.message?.content;
+    if (typeof textContent !== "string" || !textContent.trim()) return null;
+    const validated = buildValidatedClassificationOutput(textContent, input, model, nowIso, fallback);
+    return validated.status === "success" ? validated : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function classifyWithGemini(
@@ -1094,6 +1301,10 @@ export async function classifyWithGemini(
     model?: string;
     mode?: string;
     timeoutMs?: number;
+    openAiFallbackApiKey?: string;
+    openAiFallbackModel?: string;
+    openAiFallbackBaseUrl?: string;
+    openAiFetch?: typeof fetch;
   } = {}
 ): Promise<GeminiClassificationOutput> {
   const nowIso = new Date().toISOString();
@@ -1270,150 +1481,30 @@ export async function classifyWithGemini(
       }
     });
 
-    // 5. Parse JSON
-    let parsed: any;
+    // 5. Parse & Validate JSON
+    let textContent: string | undefined;
     try {
       const apiResult = JSON.parse(rawResponseBody);
-      const textContent = apiResult?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!textContent) {
-        return fallback("invalid_json", { category: "response_parse", httpStatus: null });
-      }
-      parsed = JSON.parse(textContent);
+      textContent = apiResult?.candidates?.[0]?.content?.parts?.[0]?.text;
     } catch {
-      return fallback("invalid_json", { category: "response_parse", httpStatus: null });
+      textContent = undefined;
     }
-
-    // 6. Schema Validation
-    const allowedSignalTypes = ["official_notice", "reset_executed", "teaser", "irrelevant"];
-    const allowedTemporal = ["future", "completed_now", "historical", "unclear"];
-
-    if (
-      !parsed ||
-      typeof parsed !== "object" ||
-      !allowedSignalTypes.includes(parsed.signalType) ||
-      typeof parsed.confidence !== "number" ||
-      parsed.confidence < 0 ||
-      parsed.confidence > 1 ||
-      !allowedTemporal.includes(parsed.temporalDirection)
-    ) {
-      return fallback("invalid_schema", { category: "response_schema", httpStatus: null });
+    if (!textContent) {
+      const openAiFallback = await tryOpenAICompatibleFallback(
+        input,
+        {
+          apiKey: options.openAiFallbackApiKey,
+          model: options.openAiFallbackModel,
+          baseUrl: options.openAiFallbackBaseUrl,
+          timeoutMs,
+          fetchImpl: options.openAiFetch,
+        },
+        nowIso,
+        fallback,
+      );
+      return openAiFallback ?? fallback("invalid_json", { category: "response_parse", httpStatus: null });
     }
-    if (parsed.signalType === "official_notice" && parsed.temporalDirection === "unclear"
-      && parsed.noticeTimingStatus !== "unknown") {
-      return fallback("invalid_schema", { category: "response_schema", httpStatus: null });
-    }
-
-    // 7. Evidence Quote Validation (Must be actual substring of original tweet text if not null)
-    let validQuote: string | null = null;
-    if (parsed.evidenceQuote !== null && parsed.evidenceQuote !== undefined) {
-      if (typeof parsed.evidenceQuote !== "string" || parsed.evidenceQuote.length > 300) {
-        return fallback("invalid_evidence", { category: "evidence_validation", httpStatus: null });
-      }
-      const normQuote = parsed.evidenceQuote.trim().toLowerCase();
-      const normText = input.text.toLowerCase();
-
-      if (normQuote.length > 0 && !normText.includes(normQuote)) {
-        return fallback("invalid_evidence", { category: "evidence_validation", httpStatus: null });
-      }
-      validQuote = parsed.evidenceQuote.trim();
-    }
-    if (parsed.signalType === "official_notice" && parsed.temporalDirection === "unclear" && !validQuote) {
-      return fallback("invalid_evidence", { category: "evidence_validation", httpStatus: null });
-    }
-
-    const contextualResetAssessments: TiboContextualResetAssessment[] = [
-      "same_global_reset",
-      "same_banked_distribution",
-      "same_personal_reset",
-      "different_event",
-      "negated",
-      "uncertain",
-      "not_applicable",
-      "unknown",
-    ];
-    const contextualResetAssessment = contextualResetAssessments.includes(parsed.contextualResetAssessment)
-      ? parsed.contextualResetAssessment as TiboContextualResetAssessment
-      : "unknown";
-    const contextualResetTweetId = contextualResetAssessment === "same_global_reset" &&
-      typeof parsed.contextualResetTweetId === "string" &&
-      /^\d{1,30}$/.test(parsed.contextualResetTweetId)
-      ? parsed.contextualResetTweetId
-      : null;
-    const noticeTimingStatus: TiboNoticeTimingStatus | null = parsed.noticeTimingStatus === "known" ||
-        parsed.noticeTimingStatus === "unknown"
-      ? parsed.noticeTimingStatus
-      : null;
-    const resetMeaning = parseResetMeaning(parsed.resetMeaning);
-    const unresolvedOfficialNoticeTiming = parsed.signalType === "official_notice" &&
-      parsed.temporalDirection === "unclear" && noticeTimingStatus === "unknown";
-
-    // Sanitize reason text length
-    const reasonJa = typeof parsed.reasonJa === "string" ? parsed.reasonJa.slice(0, 500) : null;
-    const resetTypeJa = normalizeGeminiResetType(parsed.resetTypeJa);
-    const teaserStrengthAssessment = parseTeaserStrengthAssessment(parsed, input.text);
-    const codexOperationalAssessment = parseCodexOperationalAssessment(parsed, input.text);
-    // Keep Gemini's validated fields as raw audit values. Effective temporal
-    // semantics are resolved separately by the webhook route so deterministic
-    // fallback data never gets written into ai_* columns.
-    const rawTemporalSemantics = unresolvedOfficialNoticeTiming
-      ? null
-      : parseGeminiTemporalSemantics(parsed, input.text);
-    const futureSignal = parseFutureSignalAssessment(
-      parsed.futureSignal,
-      input.text,
-      validQuote,
-    );
-
-    const rawResult: GeminiClassificationOutput = {
-      signalType: parsed.signalType,
-      confidence: parsed.confidence,
-      temporalDirection: parsed.temporalDirection,
-      evidenceQuote: validQuote,
-      reasonJa,
-      resetTypeJa,
-      contextualResetAssessment,
-      contextualResetTweetId,
-      noticeTimingStatus,
-      resetMeaning,
-      noticeToExecution: !unresolvedOfficialNoticeTiming && typeof parsed.noticeToExecution === "string"
-        ? parsed.noticeToExecution.slice(0, 100)
-        : null,
-      ...teaserStrengthAssessment,
-      futureSignal,
-      temporalExpression: rawTemporalSemantics?.temporalExpression ?? null,
-      temporalKind: rawTemporalSemantics?.temporalKind ?? null,
-      temporalPrecision: rawTemporalSemantics?.temporalPrecision ?? null,
-      weekday: rawTemporalSemantics?.weekday ?? null,
-      relativeDayOffset: rawTemporalSemantics?.relativeDayOffset ?? null,
-      relativeAmount: rawTemporalSemantics?.relativeAmount ?? null,
-      relativeUnit: rawTemporalSemantics?.relativeUnit ?? null,
-      explicitDateParts: rawTemporalSemantics?.explicitDateParts ?? null,
-      explicitTimeParts: rawTemporalSemantics?.explicitTimeParts ?? null,
-      daypart: rawTemporalSemantics?.daypart ?? null,
-      rangeKind: rawTemporalSemantics?.rangeKind ?? null,
-      explicitTimezone: rawTemporalSemantics?.explicitTimezone ?? null,
-      temporalConfidence: rawTemporalSemantics?.temporalConfidence ?? null,
-      codexOperationalStatus: codexOperationalAssessment.codex_operational_status,
-      codexOperationalConfidence: codexOperationalAssessment.codex_operational_confidence,
-      codexOperationalEvidenceQuote: codexOperationalAssessment.codex_operational_evidence_quote,
-      codexOperationalReasonJa: codexOperationalAssessment.codex_operational_reason_ja,
-      model,
-      status: "success",
-      classifiedAt: nowIso,
-    };
-    const guardedResult = applyTiboClassificationSafetyGuard(
-      input.text,
-      rawResult,
-      { futureSignalProvided: parsed.futureSignal !== undefined && parsed.futureSignal !== null },
-    );
-    return {
-      ...guardedResult,
-      rawAudit: {
-        signalType: rawResult.signalType,
-        temporalDirection: rawResult.temporalDirection,
-        reasonJa: rawResult.reasonJa,
-      },
-    };
+    return buildValidatedClassificationOutput(textContent, input, model, nowIso, fallback);
   } catch (err: unknown) {
     if (
       !options.model &&
@@ -1424,6 +1515,20 @@ export async function classifyWithGemini(
     ) {
       return classifyWithGemini(input, { ...options, model: baseModel });
     }
+    const openAiFallback = await tryOpenAICompatibleFallback(
+      input,
+      {
+        apiKey: options.openAiFallbackApiKey,
+        model: options.openAiFallbackModel,
+        baseUrl: options.openAiFallbackBaseUrl,
+        timeoutMs,
+        fetchImpl: options.openAiFetch,
+      },
+      nowIso,
+      fallback,
+    );
+    if (openAiFallback) return openAiFallback;
+
     if (err instanceof GeminiRequestFailure) {
       const diagnostic = { category: err.category, httpStatus: err.httpStatus };
       if (err.category === "timeout") return fallback("timeout", diagnostic);

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveGeminiClassificationModel } from "../lib/radar/geminiClassification";
+import { classifyWithGemini, resolveGeminiClassificationModel } from "../lib/radar/geminiClassification";
 import {
   notifyPendingBankedAssociation,
   runBankedSecondOpinionReview,
@@ -42,7 +42,7 @@ test("resolveGeminiClassificationModel escalates flash-lite for reset keywords a
       undefined,
       "gemini-3.5-flash-lite",
     ),
-    "gemini-3.5-flash",
+    "gemini-3.5-pro",
   );
   assert.equal(
     resolveGeminiClassificationModel({ text: "The banked reset has been activated." }, "custom-model", "gemini-3.5-flash-lite"),
@@ -200,4 +200,45 @@ test("notifyPendingBankedAssociation posts webhook when configured", async () =>
     if (prev === undefined) delete process.env.BANKED_ASSOCIATION_ALERT_WEBHOOK_URL;
     else process.env.BANKED_ASSOCIATION_ALERT_WEBHOOK_URL = prev;
   }
+});
+
+test("classifyWithGemini falls back to OpenAI-compatible API when Gemini fails", async () => {
+  const result = await classifyWithGemini(
+    {
+      text: "The banked reset has been activated and should land in everyones accounts sometime soon!",
+      tweetCreatedAt: "2026-11-12T21:59:39.000Z",
+    },
+    {
+      mode: "primary",
+      apiKey: "invalid-test-key",
+      model: "gemini-3.5-flash",
+      openAiFallbackApiKey: "test-openai-key",
+      openAiFallbackModel: "gpt-4o-mini",
+      openAiFetch: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    signalType: "official_notice",
+                    confidence: 0.96,
+                    temporalDirection: "future",
+                    evidenceQuote: "the banked reset has been activated",
+                    reasonJa: "OpenAI fallback detected BANKED activation notice.",
+                    noticeTimingStatus: "unknown",
+                  }),
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+    },
+  );
+
+  assert.equal(result.status, "success");
+  assert.equal(result.model, "gpt-4o-mini");
+  assert.equal(result.signalType, "official_notice");
+  assert.equal(result.confidence, 0.96);
 });
