@@ -2,6 +2,8 @@ import type { Locale } from "./radar/types";
 
 export const GITHUB_SPONSORS_URL = "https://github.com/sponsors/gussuri";
 export const SPONSOR_CLICK_EVENT_NAME = "sponsor_click" as const;
+export const PRODUCTION_ANALYTICS_HOSTNAME = "codex.gussuriworks.com";
+export const GA_OPT_OUT_STORAGE_KEY = "codex_ga_opt_out";
 
 export type SponsorPlacement = "panel" | "footer" | "about";
 export type SponsorPageType = "home" | "history" | "faq" | "about";
@@ -30,6 +32,41 @@ export function isValidGa4MeasurementId(
   measurementId: string | undefined,
 ): measurementId is string {
   return measurementId !== undefined && GA4_MEASUREMENT_ID_PATTERN.test(measurementId);
+}
+
+export function isAnalyticsHostAllowed(
+  hostname: string | undefined,
+  vercelEnv?: string | undefined,
+): boolean {
+  const normalizedEnv = vercelEnv?.trim().toLowerCase();
+  if (normalizedEnv === "preview") {
+    return false;
+  }
+
+  const normalizedHost = (hostname ?? "").trim().toLowerCase().replace(/\.$/, "");
+  if (!normalizedHost) {
+    return false;
+  }
+
+  if (normalizedHost === "vercel.app" || normalizedHost.endsWith(".vercel.app")) {
+    return false;
+  }
+
+  if (normalizedEnv === "production") {
+    return normalizedHost === PRODUCTION_ANALYTICS_HOSTNAME;
+  }
+
+  return true;
+}
+
+export function isAnalyticsOptedOut(
+  storage?: Pick<Storage, "getItem"> | null,
+): boolean {
+  try {
+    return storage?.getItem(GA_OPT_OUT_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 export function buildGa4InitializationScript(

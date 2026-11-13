@@ -29,7 +29,7 @@ const securityHeaders = (analyticsEnabled) => [
       `img-src 'self' data: blob:${analyticsEnabled ? " https://www.googletagmanager.com https://*.google-analytics.com" : ""}`,
       "style-src 'self' 'unsafe-inline'",
       `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}${analyticsEnabled ? " https://www.googletagmanager.com" : ""}`,
-      `connect-src 'self'${isDevelopment ? " ws: wss:" : ""}${analyticsEnabled ? " https://www.googletagmanager.com https://*.google-analytics.com https://analytics.google.com" : ""}`,
+      `connect-src 'self'${isDevelopment ? " ws: wss:" : ""}${analyticsEnabled ? " https://www.googletagmanager.com https://*.google-analytics.com https://analytics.google.com https://www.google.com" : ""}`,
     ].join("; "),
   },
 ];
@@ -38,11 +38,13 @@ const nextConfig = {
   poweredByHeader: false,
   env: {
     NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+    NEXT_PUBLIC_VERCEL_ENV:
+      process.env.NEXT_PUBLIC_VERCEL_ENV ?? process.env.VERCEL_ENV ?? "",
   },
   async headers() {
-    const analyticsEnabled = /^G-[A-Z0-9]{10}$/.test(
-      process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? "",
-    );
+    const analyticsEnabled =
+      process.env.VERCEL_ENV !== "preview" &&
+      /^G-[A-Z0-9]{10}$/.test(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? "");
 
     return [
       {

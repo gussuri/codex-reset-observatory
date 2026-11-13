@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  GA_OPT_OUT_STORAGE_KEY,
+  PRODUCTION_ANALYTICS_HOSTNAME,
   buildGa4InitializationScript,
   createSponsorClickEvent,
   dispatchSponsorClickEvent,
+  isAnalyticsHostAllowed,
+  isAnalyticsOptedOut,
   isValidGa4MeasurementId,
 } from "../lib/sponsorAnalytics";
 
@@ -61,4 +65,32 @@ test("invalid and legacy IDs never generate GA4 script markup", () => {
     assert.equal(isValidGa4MeasurementId(id), false);
     assert.equal(buildGa4InitializationScript(id), null);
   }
+});
+
+test("GA4 host guard blocks Vercel preview URLs and restricts production env to canonical domain", () => {
+  assert.equal(isAnalyticsHostAllowed(PRODUCTION_ANALYTICS_HOSTNAME, "production"), true);
+  assert.equal(isAnalyticsHostAllowed("codex-reset-observatory-abc123-gussuris-projects.vercel.app", "production"), false);
+  assert.equal(isAnalyticsHostAllowed("codex-reset-observatory.vercel.app", undefined), false);
+  assert.equal(isAnalyticsHostAllowed(PRODUCTION_ANALYTICS_HOSTNAME, "preview"), false);
+  assert.equal(isAnalyticsHostAllowed("127.0.0.1", "preview"), false);
+  assert.equal(isAnalyticsHostAllowed("127.0.0.1", undefined), true);
+  assert.equal(isAnalyticsHostAllowed("", undefined), false);
+});
+
+test("GA4 opt-out helper honors localStorage flag and fails open safely", () => {
+  assert.equal(isAnalyticsOptedOut(undefined), false);
+  assert.equal(isAnalyticsOptedOut({ getItem: () => null }), false);
+  assert.equal(isAnalyticsOptedOut({ getItem: () => "0" }), false);
+  assert.equal(
+    isAnalyticsOptedOut({ getItem: (key) => (key === GA_OPT_OUT_STORAGE_KEY ? "1" : null) }),
+    true,
+  );
+  assert.equal(
+    isAnalyticsOptedOut({
+      getItem: () => {
+        throw new Error("storage blocked");
+      },
+    }),
+    false,
+  );
 });

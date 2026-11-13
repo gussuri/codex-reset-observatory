@@ -47,6 +47,7 @@ test("webhook secret remains persistent and trusted-context-only", () => {
 
 test("GA4 CSP sources are limited to valid enabled analytics IDs", async () => {
   const originalMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+  const originalVercelEnv = process.env.VERCEL_ENV;
   const readCsp = async () => {
     const routes = await nextConfig.headers();
     const responseHeaders = routes[0]?.headers ?? [];
@@ -56,8 +57,12 @@ test("GA4 CSP sources are limited to valid enabled analytics IDs", async () => {
   };
 
   try {
+    delete process.env.VERCEL_ENV;
     delete process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
-    assert.doesNotMatch(await readCsp(), /googletagmanager|google-analytics|analytics\.google\.com/i);
+    assert.doesNotMatch(
+      await readCsp(),
+      /googletagmanager|google-analytics|analytics\.google\.com|www\.google\.com/i,
+    );
 
     process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID = "G-TEST123456";
     const enabledPolicy = await readCsp();
@@ -65,15 +70,31 @@ test("GA4 CSP sources are limited to valid enabled analytics IDs", async () => {
     assert.match(enabledPolicy, /img-src[^;]*https:\/\/\*\.google-analytics\.com/i);
     assert.match(enabledPolicy, /connect-src[^;]*https:\/\/\*\.google-analytics\.com/i);
     assert.match(enabledPolicy, /connect-src[^;]*https:\/\/analytics\.google\.com/i);
+    assert.match(enabledPolicy, /connect-src[^;]*https:\/\/www\.google\.com/i);
     assert.doesNotMatch(enabledPolicy, /doubleclick|googlesyndication|googleadservices/i);
 
+    process.env.VERCEL_ENV = "preview";
+    assert.doesNotMatch(
+      await readCsp(),
+      /googletagmanager|google-analytics|analytics\.google\.com|www\.google\.com/i,
+    );
+
+    delete process.env.VERCEL_ENV;
     process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID = "not-a-measurement-id";
-    assert.doesNotMatch(await readCsp(), /googletagmanager|google-analytics|analytics\.google\.com/i);
+    assert.doesNotMatch(
+      await readCsp(),
+      /googletagmanager|google-analytics|analytics\.google\.com|www\.google\.com/i,
+    );
   } finally {
     if (originalMeasurementId === undefined) {
       delete process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
     } else {
       process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID = originalMeasurementId;
+    }
+    if (originalVercelEnv === undefined) {
+      delete process.env.VERCEL_ENV;
+    } else {
+      process.env.VERCEL_ENV = originalVercelEnv;
     }
   }
 });
