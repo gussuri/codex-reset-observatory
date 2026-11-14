@@ -67,6 +67,8 @@ test("GA4 CSP sources are limited to valid enabled analytics IDs", async () => {
     process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID = "G-TEST123456";
     const enabledPolicy = await readCsp();
     assert.match(enabledPolicy, /script-src[^;]*https:\/\/www\.googletagmanager\.com/i);
+    assert.match(enabledPolicy, /script-src[^;]*https:\/\/static\.cloudflareinsights\.com/i);
+    assert.match(enabledPolicy, /connect-src[^;]*https:\/\/cloudflareinsights\.com/i);
     assert.match(enabledPolicy, /img-src[^;]*https:\/\/\*\.google-analytics\.com/i);
     assert.match(enabledPolicy, /connect-src[^;]*https:\/\/\*\.google-analytics\.com/i);
     assert.match(enabledPolicy, /connect-src[^;]*https:\/\/analytics\.google\.com/i);

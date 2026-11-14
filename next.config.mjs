@@ -28,8 +28,8 @@ const securityHeaders = (analyticsEnabled) => [
       "object-src 'none'",
       `img-src 'self' data: blob:${analyticsEnabled ? " https://www.googletagmanager.com https://*.google-analytics.com" : ""}`,
       "style-src 'self' 'unsafe-inline'",
-      `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}${analyticsEnabled ? " https://www.googletagmanager.com" : ""}`,
-      `connect-src 'self'${isDevelopment ? " ws: wss:" : ""}${analyticsEnabled ? " https://www.googletagmanager.com https://*.google-analytics.com https://analytics.google.com https://www.google.com" : ""}`,
+      `script-src 'self' 'unsafe-inline'${isDevelopment ? " 'unsafe-eval'" : ""}${analyticsEnabled ? " https://www.googletagmanager.com" : ""} https://static.cloudflareinsights.com`,
+      `connect-src 'self'${isDevelopment ? " ws: wss:" : ""}${analyticsEnabled ? " https://www.googletagmanager.com https://*.google-analytics.com https://analytics.google.com https://www.google.com" : ""} https://cloudflareinsights.com`,
     ].join("; "),
   },
 ];

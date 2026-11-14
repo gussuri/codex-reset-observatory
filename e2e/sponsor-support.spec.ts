@@ -118,7 +118,7 @@ async function expectHomeSponsorPanelPlacement(page: Page) {
     const explanation = document.querySelector('section[aria-labelledby="homepage-explanation-title"]');
     const footer = document.querySelector("main > div > footer");
     const nextSibling = panel?.nextElementSibling;
-    const heatmapLabels = ["過去のランダムリセット時刻", "Past random reset times", "过去的随机重置时间"];
+    const heatmapLabels = ["過去のランダムリセット時刻", "Past random reset times", "历史随机重置时刻分布"];
 
     return {
       panelImmediatelyBeforeHeatmap: heatmapLabels.includes(nextSibling?.getAttribute("aria-label") ?? ""),
