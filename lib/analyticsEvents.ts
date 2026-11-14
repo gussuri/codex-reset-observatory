@@ -1,6 +1,5 @@
 "use client";
 
-import { track } from "@vercel/analytics";
 import type { HistorySourceKind, Locale } from "./radar/types";
 
 export type AnalyticsRoute = "home" | "history" | "faq" | "about";
@@ -95,12 +94,6 @@ export function dispatchGa4AnalyticsEvent(
 }
 
 function emitAnalyticsEvent(event: AnalyticsEvent) {
-  try {
-    track(event.name, event.properties);
-  } catch {
-    // Analytics is best-effort and must never block the user action.
-  }
-
   if (typeof window !== "undefined") {
     dispatchGa4AnalyticsEvent(event, window.gtag);
   }

@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import { SiteJsonLd } from "@/components/SiteJsonLd";
 import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 import { getRootMetadata } from "@/lib/siteMetadata";
@@ -16,8 +14,6 @@ export default function EnglishRootLayout({ children }: { children: ReactNode })
         <SiteJsonLd locale="en" />
         {children}
         <GoogleAnalytics />
-        <Analytics />
-        <SpeedInsights />
       </body>
     </html>
   );

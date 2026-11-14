@@ -1,0 +1,63 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "codex-reset-observatory",
+  "main": ".open-next/worker.js",
+  "routes": [
+    {
+      "pattern": "codex.gussuriworks.com",
+      "custom_domain": true
+    }
+  ],
+  "compatibility_date": "2026-11-14",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "codex-reset-observatory"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "NEXT_INC_CACHE_R2_BUCKET",
+      "bucket_name": "codex-next-inc-cache"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "NEXT_CACHE_DO_QUEUE",
+        "class_name": "DOQueueHandler"
+      },
+      {
+        "name": "NEXT_TAG_CACHE_DO_SHARDED",
+        "class_name": "DOShardedTagCache"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "DOQueueHandler",
+        "DOShardedTagCache"
+      ]
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "GEMINI_MODEL": "gemini-3.5-flash-lite",
+    "GEMINI_CLASSIFICATION_MODE": "primary",
+    "RESET_DISPLAY_NAME_CANDIDATE_MODE": "full",
+    "RESET_DISPLAY_NAME_CANDIDATE_ADOPTION_AT": "2026-09-09T00:00:00Z",
+    "NEXT_PUBLIC_GA_MEASUREMENT_ID": "G-GH6NGYG5B5"
+  }
+}

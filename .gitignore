@@ -1,6 +1,9 @@
 node_modules
 .next
+.open-next
 .vercel
+.wrangler
+.dev.vars
 .tools
 .worktrees
 *.tgz
