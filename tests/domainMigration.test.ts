@@ -75,7 +75,7 @@ test("published site URLs and robots sitemap use the new domain", () => {
     (match) => match[1],
   );
   const expectedPaths = [
-    "/",
+    "",
     "/faq",
     "/history",
     "/about",
