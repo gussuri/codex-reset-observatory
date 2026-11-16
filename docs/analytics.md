@@ -2,7 +2,7 @@
 
 Google Analytics is optional. To enable the site tag, set `NEXT_PUBLIC_GA_MEASUREMENT_ID` in the hosting environment to the GA4 web stream ID (`G-` followed by 10 letters or digits). Leave it unset to omit the Google tag. The site does not need a server key or API endpoint for measurement.
 
-Vercel preview deployments (`VERCEL_ENV=preview`) and `*.vercel.app` hostnames never load the Google tag. In production (`VERCEL_ENV=production`), only `codex.gussuriworks.com` initializes GA4. Setting `localStorage.setItem("codex_ga_opt_out", "1")` in a browser also suppresses tag loading for that browser profile.
+Vercel preview deployments (`VERCEL_ENV=preview`) and `*.vercel.app` hostnames never load the Google tag. In production (`VERCEL_ENV=production` or `NEXT_PUBLIC_VERCEL_ENV=production`), only `codex.gussuriworks.com` initializes GA4. Because Next.js bakes `NEXT_PUBLIC_GA_MEASUREMENT_ID` into both client bundles and CSP response headers at build time, Cloudflare Workers builds run via `scripts/cloudflare-next-build.mjs` (configured as OpenNext `buildCommand`) so `wrangler.jsonc` `vars.NEXT_PUBLIC_GA_MEASUREMENT_ID` and `NEXT_PUBLIC_VERCEL_ENV=production` are applied during `next build`. Setting `localStorage.setItem("codex_ga_opt_out", "1")` in a browser also suppresses tag loading for that browser profile.
 
 The tag disables Google Signals and advertising personalization. The site records the initial page view and emits one `sponsor_click` event when a GitHub Sponsors link is activated. That event contains only `placement` (`header`, `panel`, `footer`, or `about`), `locale` (`ja`, `en`, or `zh`), and `page_type` (`home`, `history`, `faq`, or `about`). The explicit page location contains the origin and pathname without query parameters or fragments.
 

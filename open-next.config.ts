@@ -4,7 +4,7 @@ import { withRegionalCache } from "@opennextjs/cloudflare/overrides/incremental-
 import doQueue from "@opennextjs/cloudflare/overrides/queue/do-queue";
 import doShardedTagCache from "@opennextjs/cloudflare/overrides/tag-cache/do-sharded-tag-cache";
 
-export default defineCloudflareConfig({
+const config = defineCloudflareConfig({
   incrementalCache: withRegionalCache(r2IncrementalCache, {
     mode: "short-lived",
   }),
@@ -13,3 +13,7 @@ export default defineCloudflareConfig({
     baseShardSize: 4,
   }),
 });
+
+config.buildCommand = "node scripts/cloudflare-next-build.mjs";
+
+export default config;
