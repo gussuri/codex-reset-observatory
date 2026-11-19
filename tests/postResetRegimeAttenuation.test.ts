@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
   NEXT_GENERATION_B_POST_RESET_AGE_MODEL_VERSION,
@@ -265,7 +266,7 @@ test("the age-attenuated B candidate has a distinct version and is the configure
     candidate.regimeMultiplierPolicyVersion,
     NEXT_GENERATION_B_POST_RESET_AGE_POLICY_VERSION,
   );
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
 });
 
 test("the candidate preserves the existing signal multiplier policy", () => {

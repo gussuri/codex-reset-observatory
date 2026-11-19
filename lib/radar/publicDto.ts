@@ -56,6 +56,8 @@ export type PublicRadarSnapshotOptions = {
   calculationContext?: RadarCalculationContext;
   /** Internal evaluation override; this value is never copied into the public DTO. */
   publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null;
+  /** Internal evaluation override; this value is never copied into the public DTO. */
+  publishedAdaptiveRegimeSurvivalReadoptionAt?: string | null;
   /** Internal calculation hooks for deterministic offline measurements. */
   publishedProbabilityRuntime?: PublishedProbabilityRuntime;
 };
@@ -535,6 +537,7 @@ export function toPublicRadarSnapshot(
     calculationContext,
     options.publishedAdaptiveRegimeSurvivalAdoptionAt,
     options.publishedProbabilityRuntime,
+    options.publishedAdaptiveRegimeSurvivalReadoptionAt,
   );
   const latestResetAt = getLastResetBoundaryAt(
     internal,

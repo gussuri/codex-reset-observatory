@@ -32,6 +32,7 @@ import {
   NEXT_GENERATION_V3_MODEL_VERSION,
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
@@ -133,7 +134,8 @@ export type PublicProbabilityPeriodId =
   | "broad-banked-v2"
   | "survival-conditioned-v1"
   | "adaptive-regime-survival-v2"
-  | "survival-conditioned-v1-restored";
+  | "survival-conditioned-v1-restored"
+  | "adaptive-regime-survival-v2-readopted";
 
 export type PublicProbabilityPeriodEntry = {
   id: PublicProbabilityPeriodId;
@@ -712,7 +714,7 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     variant: "adaptive-h45-tail-h24",
     revision: "v1",
     kind: "forecast",
-    publicStatus: "current",
+    publicStatus: "historical",
     status: "active",
     roles: ["public-runtime", "fallback", "experimental-log"],
     parentModelVersion: BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
@@ -723,7 +725,7 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     truncationHours: null,
     calibration: "none",
     differenceFromParent: "Conditions the random-reset hazard on survival age using completed broad-banked intervals, H45 recency weighting, adaptive 6-24h smoothing, and an H24 tail return toward the weighted long-run rate.",
-    notes: "Current public identity, with the original September 19 period and a distinct restored period from the November 3 boundary; the frozen estimator is unchanged.",
+    notes: "Previous public identity, with the original September 19 period and a distinct restored period from the November 3 boundary; the frozen estimator is unchanged.",
   }),
   model({
     key: "adaptive-regime-survival/base/v2",
@@ -733,7 +735,7 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     variant: "base",
     revision: "v2",
     kind: "forecast",
-    publicStatus: "historical",
+    publicStatus: "current",
     status: "active",
     roles: ["public-runtime", "experimental-log"],
     parentModelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
@@ -743,7 +745,7 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     bandwidthHours: SURVIVAL_CONDITIONED_BIN_HOURS,
     calibration: "none",
     differenceFromParent: "Applies a 72h decayed, 48h-prior-shrunk recent random-boundary rate multiplier through the existing v1 age hazard, then reuses the v1 signal, teaser, and notice policies.",
-    notes: "Historical public model from the explicit 2026-10-29T12:20:00.000Z adoption boundary through the forward Survival-Conditioned v1 restoration boundary.",
+    notes: "Public model from the explicit 2026-10-29T12:20:00.000Z adoption boundary, with a separate readopted period beginning at the forward 2026-11-20T00:00:00.000Z boundary; the frozen estimator is unchanged.",
   }),
   ...[
     ["previous-interval", SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION],
@@ -982,9 +984,19 @@ export const PUBLIC_PROBABILITY_PERIOD_REGISTRY: readonly PublicProbabilityPerio
         id: "survival-conditioned-v1-restored" as const,
         modelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
         startAt: PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
-        endAt: null,
+        endAt: PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT,
         adoptionMode: "manual" as const,
         note: "Prospective restoration of the frozen Survival-Conditioned v1 identity; the new boundary distinguishes this period from its historical v1 period.",
+      }]),
+  ...(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT === null
+    ? []
+    : [{
+        id: "adaptive-regime-survival-v2-readopted" as const,
+        modelVersion: ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
+        startAt: PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT,
+        endAt: null,
+        adoptionMode: "manual" as const,
+        note: "Prospective readoption of the same frozen Adaptive Regime Survival v2 identity; earlier public periods and saved forecasts retain their identities.",
       }]),
 ];
 

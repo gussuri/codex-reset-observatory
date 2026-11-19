@@ -13,6 +13,7 @@ import {
   PUBLISHED_PROBABILITY_V4_ROLLBACK_AT,
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
@@ -173,7 +174,8 @@ export type PublishedProbabilityPeriod =
   | "broad-banked-v2"
   | "survival-conditioned-v1"
   | "adaptive-regime-survival-v2"
-  | "survival-conditioned-v1-restored";
+  | "survival-conditioned-v1-restored"
+  | "adaptive-regime-survival-v2-readopted";
 
 export type PublishedProbabilityPeriodOptions = {
   historicalV4AdoptionAt?: string | null;
@@ -186,6 +188,7 @@ export type PublishedProbabilityPeriodOptions = {
   survivalConditionedAdoptionAt?: string | null;
   adaptiveRegimeSurvivalAdoptionAt?: string | null;
   survivalConditionedRestorationAt?: string | null;
+  adaptiveRegimeSurvivalReadoptionAt?: string | null;
 };
 
 function resolveBoundary<T>(value: T | undefined, fallback: T) {
@@ -245,6 +248,13 @@ export function getPublishedProbabilityPeriodAt(
       PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
     ),
   );
+  const adaptiveRegimeSurvivalReadoptionTime = parseAdoptionTime(
+    options.adaptiveRegimeSurvivalReadoptionAt === undefined
+      ? options.adaptiveRegimeSurvivalAdoptionAt === undefined
+        ? PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT
+        : null
+      : options.adaptiveRegimeSurvivalReadoptionAt,
+  );
 
   if (historicalV4AdoptionTime !== null && valueTime < historicalV4AdoptionTime) {
     return "historical-elapsed-v1";
@@ -259,10 +269,17 @@ export function getPublishedProbabilityPeriodAt(
     return "b-v2";
   }
   const restorationBoundaryIsValid = survivalConditionedAdoptionTime !== null
-    && adaptiveRegimeSurvivalAdoptionTime !== null
     && survivalConditionedRestorationTime !== null
     && survivalConditionedRestorationTime >= survivalConditionedAdoptionTime
-    && survivalConditionedRestorationTime >= adaptiveRegimeSurvivalAdoptionTime;
+    && (adaptiveRegimeSurvivalAdoptionTime === null
+      || survivalConditionedRestorationTime >= adaptiveRegimeSurvivalAdoptionTime);
+  const readoptionBoundaryIsValid = restorationBoundaryIsValid
+    && adaptiveRegimeSurvivalReadoptionTime !== null
+    && survivalConditionedRestorationTime !== null
+    && adaptiveRegimeSurvivalReadoptionTime >= survivalConditionedRestorationTime;
+  if (readoptionBoundaryIsValid && valueTime >= adaptiveRegimeSurvivalReadoptionTime) {
+    return "adaptive-regime-survival-v2-readopted";
+  }
   if (restorationBoundaryIsValid && valueTime >= survivalConditionedRestorationTime) {
     return "survival-conditioned-v1-restored";
   }
@@ -851,6 +868,8 @@ export type PublishedProbabilityOptions = {
   publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null;
   /** Explicit forward boundary restoring the frozen Survival v1 selector. */
   publishedSurvivalConditionedRestorationAt?: string | null;
+  /** Explicit forward boundary re-adopting the frozen Adaptive v2 selector. */
+  publishedAdaptiveRegimeSurvivalReadoptionAt?: string | null;
   canonicalHistoryContext?: CanonicalResetHistoryContext;
 };
 
@@ -870,6 +889,7 @@ export function calculatePublishedProbability(
     publishedSurvivalConditionedAdoptionAt,
     publishedAdaptiveRegimeSurvivalAdoptionAt,
     publishedSurvivalConditionedRestorationAt,
+    publishedAdaptiveRegimeSurvivalReadoptionAt,
     ...calculationOptions
   } = options;
   const resolvedTrainingRows = nextGenerationBTrainingRows ?? attachedTraining?.trainingRows ?? [];
@@ -934,6 +954,12 @@ export function calculatePublishedProbability(
   const resolvedPublishedAdaptiveRegimeSurvivalAdoptionAt = publishedAdaptiveRegimeSurvivalAdoptionAt === undefined
     ? PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT
     : publishedAdaptiveRegimeSurvivalAdoptionAt;
+  const resolvedPublishedAdaptiveRegimeSurvivalReadoptionAt =
+    publishedAdaptiveRegimeSurvivalReadoptionAt === undefined
+      ? publishedAdaptiveRegimeSurvivalAdoptionAt === undefined
+        ? PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT
+        : null
+      : publishedAdaptiveRegimeSurvivalReadoptionAt;
   const resolvedPublishedSurvivalConditionedRestorationAt = publishedSurvivalConditionedRestorationAt === undefined
     ? PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT
     : publishedSurvivalConditionedRestorationAt;
@@ -959,14 +985,24 @@ export function calculatePublishedProbability(
     resolvedPublishedSurvivalConditionedRestorationAt,
   );
   const restorationBoundaryIsValid = survivalConditionedAdoptionTime !== null
-    && adaptiveRegimeSurvivalAdoptionTime !== null
     && survivalConditionedRestorationAdoptionTime !== null
     && survivalConditionedRestorationAdoptionTime >= survivalConditionedAdoptionTime
-    && survivalConditionedRestorationAdoptionTime >= adaptiveRegimeSurvivalAdoptionTime;
-  const adaptiveRegimeSurvivalActive = adaptiveRegimeSurvivalAdoptionTime !== null
+    && (adaptiveRegimeSurvivalAdoptionTime === null
+      || survivalConditionedRestorationAdoptionTime >= adaptiveRegimeSurvivalAdoptionTime);
+  const adaptiveRegimeSurvivalPreviouslyActive = adaptiveRegimeSurvivalAdoptionTime !== null
     && publicModelOptions.now.getTime() >= adaptiveRegimeSurvivalAdoptionTime
     && !(restorationBoundaryIsValid
       && publicModelOptions.now.getTime() >= survivalConditionedRestorationAdoptionTime);
+  const adaptiveRegimeSurvivalReadoptionTime = parseAdoptionTime(
+    resolvedPublishedAdaptiveRegimeSurvivalReadoptionAt,
+  );
+  const adaptiveRegimeSurvivalReadoptionActive = restorationBoundaryIsValid
+    && adaptiveRegimeSurvivalReadoptionTime !== null
+    && survivalConditionedRestorationAdoptionTime !== null
+    && adaptiveRegimeSurvivalReadoptionTime >= survivalConditionedRestorationAdoptionTime
+    && publicModelOptions.now.getTime() >= adaptiveRegimeSurvivalReadoptionTime;
+  const adaptiveRegimeSurvivalActive = adaptiveRegimeSurvivalPreviouslyActive
+    || adaptiveRegimeSurvivalReadoptionActive;
 
   let survivalConditioned: SurvivalConditionedProbabilityResult | null = null;
   let survivalConditionedFailureReason: Extract<
@@ -1050,6 +1086,7 @@ export function calculatePublishedProbability(
           survivalConditionedAdoptionAt: resolvedPublishedSurvivalConditionedAdoptionAt,
           adaptiveRegimeSurvivalAdoptionAt: resolvedPublishedAdaptiveRegimeSurvivalAdoptionAt,
           survivalConditionedRestorationAt: resolvedPublishedSurvivalConditionedRestorationAt,
+          adaptiveRegimeSurvivalReadoptionAt: resolvedPublishedAdaptiveRegimeSurvivalReadoptionAt,
         });
         const selected = { ...selection, adaptiveRegimeSurvival, publicPeriod };
         if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
@@ -1243,6 +1280,7 @@ export function calculatePublishedProbability(
     survivalConditionedAdoptionAt: resolvedPublishedSurvivalConditionedAdoptionAt,
     adaptiveRegimeSurvivalAdoptionAt: resolvedPublishedAdaptiveRegimeSurvivalAdoptionAt,
     survivalConditionedRestorationAt: resolvedPublishedSurvivalConditionedRestorationAt,
+    adaptiveRegimeSurvivalReadoptionAt: resolvedPublishedAdaptiveRegimeSurvivalReadoptionAt,
   });
   const selected = { ...selection, adaptiveRegimeSurvival, publicPeriod };
   if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);

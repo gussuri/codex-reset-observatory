@@ -389,12 +389,19 @@ export const PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_MODEL_VERSION =
 export const PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_ADOPTION_AT =
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT;
 
+// Re-adopt the same frozen Adaptive v2 prospectively after the restored v1
+// period. Earlier public periods and saved forecasts retain their boundaries.
+export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT: string | null =
+  "2026-11-20T00:00:00.000Z";
+export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_DATE: string | null =
+  "2026-11-20";
+
 // Current/previous aliases describe the latest public period, while the
 // adoption constants above preserve both earlier periods for replay and audit.
 export const PUBLISHED_PROBABILITY_MODEL_VERSION =
-  SURVIVAL_CONDITIONED_MODEL_VERSION;
-export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION =
   ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION;
+export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION =
+  SURVIVAL_CONDITIONED_MODEL_VERSION;
 
 // Prospective context-aware shadow layered on the fixed 18/54 challenger.
 // This is intentionally a separate identity and freeze boundary; it is never

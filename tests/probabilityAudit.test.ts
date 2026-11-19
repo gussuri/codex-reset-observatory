@@ -120,7 +120,7 @@ test("pre-adoption history classification uses the calibrated fallback under the
   );
   const published = calculatePublishedProbability(data, { now }, { logFallback: false });
 
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.source, "calibrated");
   assert.equal(viewModel.probability24h, published.probability24h);
@@ -213,6 +213,53 @@ test("Survival v1 audit metadata distinguishes its historical and restored publi
   assert.equal(restored.audit.previousModelVersion, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
   assert.equal(restored.audit.previousAdoptionAt, PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT);
   assert.equal(Object.hasOwn(restored.audit, "publicPeriod"), false);
+});
+
+test("Adaptive v2 readoption audit records its new boundary and immediate v1 predecessor", () => {
+  const firstAdoptionAt = new Date(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT!);
+  const firstPublished = calculatePublishedProbability(null, {
+    now: firstAdoptionAt,
+    staticHistory: frozenSupportShapeSurvivalStaticHistory(),
+    activeOfficialNotice: null,
+  }, { logFallback: false });
+  const firstDebug = buildProbabilityDebugInfo(
+    {},
+    firstPublished.primary,
+    firstAdoptionAt.toISOString(),
+    firstAdoptionAt,
+    null,
+    firstPublished,
+  );
+  const firstAudit = firstDebug.publishedProbabilityModel as Record<string, unknown>;
+
+  assert.equal(firstPublished.publicPeriod, "adaptive-regime-survival-v2");
+  assert.equal(firstAudit.adoptionAt, PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT);
+  assert.equal(firstAudit.previousModelVersion, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(firstAudit.previousAdoptionAt, PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT);
+
+  const now = new Date("2026-11-20T00:00:00.000Z");
+  const published = calculatePublishedProbability(null, {
+    now,
+    staticHistory: frozenSupportShapeSurvivalStaticHistory(),
+    activeOfficialNotice: null,
+  }, { logFallback: false });
+  const debug = buildProbabilityDebugInfo(
+    {},
+    published.primary,
+    now.toISOString(),
+    now,
+    null,
+    published,
+  );
+  const audit = debug.publishedProbabilityModel as Record<string, unknown>;
+
+  assert.equal(published.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(published.publicPeriod, "adaptive-regime-survival-v2-readopted");
+  assert.equal(audit.adoptionDate, "2026-11-20");
+  assert.equal(audit.adoptionAt, "2026-11-20T00:00:00.000Z");
+  assert.equal(audit.previousModelVersion, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(audit.previousAdoptionAt, "2026-11-02T15:30:00.000Z");
+  assert.equal(Object.hasOwn(audit, "publicPeriod"), false);
 });
 
 test("elapsed reset time uses fractional real days rather than calendar days", () => {

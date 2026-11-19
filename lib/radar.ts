@@ -232,6 +232,7 @@ export type RadarCalculationContext = {
     calculationNowTime: number;
     signalEvaluationOverride?: LocalSignalEvaluation;
     publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null;
+    publishedAdaptiveRegimeSurvivalReadoptionAt?: string | null;
     publishedProbabilityRuntime?: PublishedProbabilityRuntime;
     signalEvaluation: LocalSignalEvaluation;
     activeOfficialNotice: ReturnType<typeof getActiveOfficialNotice>;
@@ -384,6 +385,7 @@ export function getRadarViewModel(
   calculationContext?: RadarCalculationContext,
   publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null,
   publishedProbabilityRuntime?: PublishedProbabilityRuntime,
+  publishedAdaptiveRegimeSurvivalReadoptionAt?: string | null,
 ): RadarViewModel {
   const resolvedCalculationContext = calculationContext ?? createRadarCalculationContext(data, calculationNow);
   const source = resolvedCalculationContext.source;
@@ -395,6 +397,7 @@ export function getRadarViewModel(
     cached.calculationNowTime === calculationNow.getTime() &&
     cached.signalEvaluationOverride === signalEvaluationOverride &&
     cached.publishedAdaptiveRegimeSurvivalAdoptionAt === publishedAdaptiveRegimeSurvivalAdoptionAt &&
+    cached.publishedAdaptiveRegimeSurvivalReadoptionAt === publishedAdaptiveRegimeSurvivalReadoptionAt &&
     cached.publishedProbabilityRuntime === publishedProbabilityRuntime,
   );
 
@@ -466,6 +469,7 @@ export function getRadarViewModel(
       regularResetExpectedAt: regularResetForecast.expectedAt,
       canonicalHistoryContext,
       publishedAdaptiveRegimeSurvivalAdoptionAt,
+      publishedAdaptiveRegimeSurvivalReadoptionAt,
     }, { skipShadowAuditsWhenAdopted: true, ...publishedProbabilityRuntime });
     randomElapsedDiagnostics = getRandomElapsedDisplayDiagnostics(
       source,
@@ -478,6 +482,7 @@ export function getRadarViewModel(
       calculationNowTime: calculationNow.getTime(),
       signalEvaluationOverride,
       publishedAdaptiveRegimeSurvivalAdoptionAt,
+      publishedAdaptiveRegimeSurvivalReadoptionAt,
       publishedProbabilityRuntime,
       signalEvaluation,
       activeOfficialNotice,

@@ -1,6 +1,7 @@
 # Adaptive regime survival v2 — implementation specification
 
 > Status update (2026-10-29): the reviewed model is configured for a manual public boundary at `2026-10-29T12:20:00.000Z` (JST 21:20). The selector remains on Survival v1 before that boundary; no prior prediction is relabeled.
+> Status update (2026-11-20): the same frozen model was manually readopted at `2026-11-20T00:00:00.000Z` (JST 09:00), after the distinct restored Survival v1 period. The formula and parameters remain unchanged; no prior prediction is relabeled.
 
 User explicitly requests creating an improved new model and changing Production to it after verification. Sol owns design/evaluation/review; existing Luna7 owns implementation. This supersedes publishing the old burst candidate, whose uncommitted work must remain preserved.
 Design fixed before scoring this new formula. Design timestamp2026-10-29T10:26:53Z. Do not search/tune parameters against recent outcomes under this identity.
