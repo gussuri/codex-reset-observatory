@@ -65,6 +65,7 @@ import { frozenSupportShapeSurvivalStaticHistory } from "./fixtures/survivalCond
 
 const NOW = new Date("2026-08-04T00:00:00.000Z");
 const PUBLIC_SURVIVAL_ADOPTION_AT = "2026-09-19T06:00:00.000Z";
+const ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT = "2026-11-20T00:00:00.000Z";
 
 function randomHistoryEvent(
   id: string,
@@ -106,11 +107,11 @@ function calculatePublishedSurvivalAt(now: Date, staticHistory: WindowEventLike[
   return published.survivalConditioned;
 }
 
-test("the current public model is restored Survival-Conditioned v1 with Adaptive Regime Survival v2 as its previous baseline", () => {
+test("the current public model is Adaptive Regime Survival v2 with restored Survival v1 as its previous baseline", () => {
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION, "hazard-odds-v4-logit-calibrated-prequential-v3");
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION_V2, "hazard-odds-v4-logit-calibrated-prequential-v2");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT, "2026-10-29T12:20:00.000Z");
   assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE, "2026-10-29");
@@ -161,7 +162,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.calibrated);
   assert.ok(published.rawShadow);
   assert.equal(ELAPSED_ONLY_MODEL_VERSION, "hazard-elapsed-v1");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.deepEqual(PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS, {
@@ -1012,6 +1013,18 @@ test("Survival v1 restoration has a distinct forward public period and preserves
   assert.equal(getPublishedProbabilityPeriodAt(boundaryAt), "survival-conditioned-v1-restored");
   assert.equal(getPublishedProbabilityPeriodAt(afterAt), "survival-conditioned-v1-restored");
   assert.equal(
+    getPublishedProbabilityPeriodAt("2026-11-19T23:59:59.999Z"),
+    "survival-conditioned-v1-restored",
+  );
+  assert.equal(
+    getPublishedProbabilityPeriodAt(ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT),
+    "adaptive-regime-survival-v2-readopted",
+  );
+  assert.equal(
+    getPublishedProbabilityPeriodAt("2026-11-20T00:00:00.001Z"),
+    "adaptive-regime-survival-v2-readopted",
+  );
+  assert.equal(
     getPublishedProbabilityPeriodAt(boundaryAt, { survivalConditionedRestorationAt: null }),
     "adaptive-regime-survival-v2",
   );
@@ -1020,6 +1033,118 @@ test("Survival v1 restoration has a distinct forward public period and preserves
     "adaptive-regime-survival-v2",
   );
   assert.equal(getPublishedProbabilityPeriodAt("not-a-date"), null);
+});
+
+test("configured Adaptive v2 readoption starts a new period and preserves explicit legacy overrides", () => {
+  const readoptionAt = ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT;
+  assert.equal(readoptionAt, "2026-11-20T00:00:00.000Z");
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory();
+  const readoptionTime = Date.parse(readoptionAt!);
+  const beforeAt = new Date(readoptionTime - 1);
+  const boundaryAt = new Date(readoptionTime);
+  const afterAt = new Date(readoptionTime + 1);
+  const calculateAt = (
+    now: Date,
+    overrides: {
+      publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null;
+      publishedAdaptiveRegimeSurvivalReadoptionAt?: string | null;
+    } = {},
+  ) => calculatePublishedProbability(null, {
+    now,
+    activeOfficialNotice: null,
+    staticHistory,
+    ...overrides,
+  }, { logFallback: false });
+
+  const before = calculateAt(beforeAt);
+  const at = calculateAt(boundaryAt);
+  const after = calculateAt(afterAt);
+  const legacyOverride = calculateAt(afterAt, {
+    publishedAdaptiveRegimeSurvivalAdoptionAt: null,
+  });
+  const explicitReadoption = calculateAt(afterAt, {
+    publishedAdaptiveRegimeSurvivalAdoptionAt: null,
+    publishedAdaptiveRegimeSurvivalReadoptionAt: readoptionAt,
+  });
+
+  assert.equal(before.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(at.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(after.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(at.publicPeriod, "adaptive-regime-survival-v2-readopted");
+  assert.equal(after.publicPeriod, "adaptive-regime-survival-v2-readopted");
+  assert.equal(legacyOverride.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(legacyOverride.publicPeriod, "survival-conditioned-v1-restored");
+  assert.equal(explicitReadoption.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(explicitReadoption.publicPeriod, "adaptive-regime-survival-v2-readopted");
+  assert.equal(
+    getPublishedProbabilityPeriodAt(afterAt, { adaptiveRegimeSurvivalAdoptionAt: null }),
+    "survival-conditioned-v1-restored",
+  );
+  assert.equal(
+    getPublishedProbabilityPeriodAt(afterAt, {
+      adaptiveRegimeSurvivalAdoptionAt: null,
+      adaptiveRegimeSurvivalReadoptionAt: readoptionAt,
+    }),
+    "adaptive-regime-survival-v2-readopted",
+  );
+});
+
+test("readopted Adaptive v2 falls back to frozen Survival v1 when its calculation fails", () => {
+  const now = new Date(ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT);
+  const published = calculatePublishedProbability(null, {
+    now,
+    activeOfficialNotice: null,
+    staticHistory: frozenSupportShapeSurvivalStaticHistory(),
+  }, {
+    logFallback: false,
+    adaptiveRegimeSurvivalCalculator: () => {
+      throw new Error("simulated adaptive v2 failure");
+    },
+  });
+
+  assert.equal(published.publicPeriod, "adaptive-regime-survival-v2-readopted");
+  assert.equal(published.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(published.source, "survival-conditioned");
+  assert.equal(published.fallbackReason, "adaptive_regime_survival_exception");
+});
+
+test("public DTO context cache distinguishes the Adaptive v2 readoption override", () => {
+  const now = new Date(ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT);
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory();
+  const data = getLocalRadarData({ calculationNow: now });
+  const calculationContext = {
+    source: null,
+    canonicalHistoryContext: buildCanonicalResetHistoryContext(null, {
+      defaultStaticHistory: staticHistory,
+      displayStaticHistory: staticHistory,
+      dynamicStaticHistory: [],
+    }),
+  };
+  let adaptiveCalculations = 0;
+  const publishedProbabilityRuntime = {
+    logFallback: false,
+    survivalConditionedCalculator: (input: Parameters<typeof calculateSurvivalConditionedProbability>[0], options: Parameters<typeof calculateSurvivalConditionedProbability>[1]) =>
+      calculateSurvivalConditionedProbability(input, options),
+    adaptiveRegimeSurvivalCalculator: (survivalBase: Parameters<typeof calculateAdaptiveRegimeSurvivalProbability>[0]) => {
+      adaptiveCalculations += 1;
+      return calculateAdaptiveRegimeSurvivalProbability(survivalBase);
+    },
+  };
+  const sharedOptions = {
+    calculationNow: now,
+    limitHistory: false,
+    calculationContext,
+    publishedAdaptiveRegimeSurvivalAdoptionAt: null,
+    publishedProbabilityRuntime,
+  };
+
+  toPublicRadarSnapshot(data, "en", sharedOptions);
+  assert.equal(adaptiveCalculations, 0);
+  toPublicRadarSnapshot(data, "en", {
+    ...sharedOptions,
+    publishedAdaptiveRegimeSurvivalReadoptionAt: ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT,
+  });
+  assert.equal(adaptiveCalculations, 1);
 });
 
 test("restored public period reuses frozen Survival v1 without invoking Adaptive v2", () => {
