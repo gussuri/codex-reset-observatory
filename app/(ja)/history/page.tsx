@@ -11,7 +11,7 @@ export const metadata: Metadata = {
   applicationName: SITE_NAME,
   title: "リセット履歴",
   description:
-    "Codexの全体リセット、任意リセット配布、実施時刻、出典を新しい順に確認できます。",
+    "CodexおよびChatGPT Workの全体リセットや任意リセット配布の実施時刻、前回からの間隔、公式アナウンスなどの出典を新しい順にまとめて確認できます。",
   alternates: {
     canonical: siteUrl("/history"),
     languages: {
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "リセット履歴",
     description:
-      "Codexの全体リセット、任意リセット配布、実施時刻、出典を新しい順に確認できます。",
+      "CodexおよびChatGPT Workの全体リセットや任意リセット配布の実施時刻、前回からの間隔、公式アナウンスなどの出典を新しい順にまとめて確認できます。",
     url: siteUrl("/history"),
     siteName: SITE_NAME,
     type: "article",
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "リセット履歴",
     description:
-      "Codexの全体リセット、任意リセット配布、実施時刻、出典を新しい順に確認できます。",
+      "CodexおよびChatGPT Workの全体リセットや任意リセット配布の実施時刻、前回からの間隔、公式アナウンスなどの出典を新しい順にまとめて確認できます。",
     images: [SITE_OG_IMAGE_URL],
   },
 };

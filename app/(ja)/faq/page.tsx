@@ -8,7 +8,7 @@ import {
 
 const FAQ_TITLE = "Codex・ChatGPT Work リセットFAQ | Codex Reset Observatory";
 const FAQ_DESCRIPTION =
-  "CodexやChatGPT Workのリセット、共有される利用上限、リセット時期、公式予告、過去の履歴や予測の見方を説明します。";
+  "CodexやChatGPT Workのリセットの仕組み、共有される利用上限、全体リセットと任意リセットの違い、公式予告、過去の履歴や次回予測の見方をわかりやすく説明します。";
 
 export const metadata: Metadata = {
   applicationName: SITE_NAME,

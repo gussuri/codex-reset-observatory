@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     absolute: "关于 " + SITE_NAME,
   },
   description:
-    "了解 " + SITE_NAME + " 观测的内容、如何处理重置历史，以及手动重置可能如何影响账号使用周期。",
+    "了解 " + SITE_NAME + " 的观测范围、如何整理全局重置与手动重置历史记录，以及重置预测与官方公告如何帮助规划账号使用周期。",
   alternates: {
     canonical: siteUrl("/zh/about"),
     languages: {

@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     absolute: "Codex 重置历史 | 确认最近的重置记录",
   },
   description:
-    "按时间倒序查看 Codex 全局重置、手动重置发放记录、执行时间和来源。",
+    "按时间倒序查看 OpenAI Codex 与 ChatGPT Work 的全局重置记录、手动重置发放记录、每次重置的执行时间、历史间隔周期与官方公告出典来源。",
   alternates: {
     canonical: siteUrl("/zh/history"),
     languages: {
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Codex 重置历史",
     description:
-      "按时间倒序查看 Codex 全局重置、手动重置发放记录、执行时间和来源。",
+      "按时间倒序查看 OpenAI Codex 与 ChatGPT Work 的全局重置记录、手动重置发放记录、每次重置的执行时间、历史间隔周期与官方公告出典来源。",
     url: siteUrl("/zh/history"),
     siteName: SITE_NAME,
     type: "article",
@@ -45,7 +45,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Codex 重置历史",
     description:
-      "按时间倒序查看 Codex 全局重置、手动重置发放记录、执行时间和来源。",
+      "按时间倒序查看 OpenAI Codex 与 ChatGPT Work 的全局重置记录、手动重置发放记录、每次重置的执行时间、历史间隔周期与官方公告出典来源。",
     images: [SITE_OG_IMAGE_URL],
   },
 };

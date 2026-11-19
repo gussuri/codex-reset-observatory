@@ -65,7 +65,7 @@ test("home metadata preserves exact localized SEO contracts", () => {
       descriptionConstant: HOME_DESCRIPTION_JA,
       path: "/",
       expectedTitle: "Codexリセット観測所｜タイミング・履歴・次回予測",
-      expectedDescription: "Codexの最新リセット時刻、過去の履歴、公式予告、24時間・48時間以内のリセット予測を確認できます。",
+      expectedDescription: "CodexおよびChatGPT Workの最新リセット時刻、全体リセット・任意リセットの履歴、公式予告、24時間・48時間以内の次回リセット予測をまとめて確認できます。",
       expectedAlternateLocale: ["en_US", "zh_CN"],
     },
     {
@@ -85,7 +85,7 @@ test("home metadata preserves exact localized SEO contracts", () => {
       descriptionConstant: HOME_DESCRIPTION_ZH,
       path: "/zh",
       expectedTitle: "Codex 重置观测站｜使用额度、时间、历史与预测",
-      expectedDescription: "查看 Codex 最新重置时间、历史记录、官方预告，以及未来 24 小时和 48 小时内的重置预测。",
+      expectedDescription: "查看 OpenAI Codex 与 ChatGPT Work 的最新重置时间、全局重置与手动重置历史记录、官方预告，以及未来 24 小时和 48 小时内的重置预测。",
       expectedAlternateLocale: ["ja_JP", "en_US"],
     },
   ] as const;
@@ -148,10 +148,10 @@ test("localized FAQ metadata preserves search contracts", () => {
     {
       metadata: jaFaqMetadata,
       title: "Codex・ChatGPT Work リセットFAQ | Codex Reset Observatory",
-      description: "CodexやChatGPT Workのリセット、共有される利用上限、リセット時期、公式予告、過去の履歴や予測の見方を説明します。",
+      description: "CodexやChatGPT Workのリセットの仕組み、共有される利用上限、全体リセットと任意リセットの違い、公式予告、過去の履歴や次回予測の見方をわかりやすく説明します。",
       openGraphTitle: "Codex・ChatGPT Work リセットFAQ | Codex Reset Observatory",
-      openGraphDescription: "CodexやChatGPT Workのリセット、共有される利用上限、リセット時期、公式予告、過去の履歴や予測の見方を説明します。",
-      twitterDescription: "CodexやChatGPT Workのリセット、共有される利用上限、リセット時期、公式予告、過去の履歴や予測の見方を説明します。",
+      openGraphDescription: "CodexやChatGPT Workのリセットの仕組み、共有される利用上限、全体リセットと任意リセットの違い、公式予告、過去の履歴や次回予測の見方をわかりやすく説明します。",
+      twitterDescription: "CodexやChatGPT Workのリセットの仕組み、共有される利用上限、全体リセットと任意リセットの違い、公式予告、過去の履歴や次回予測の見方をわかりやすく説明します。",
     },
     {
       metadata: enFaqMetadata,
@@ -164,10 +164,10 @@ test("localized FAQ metadata preserves search contracts", () => {
     {
       metadata: zhFaqMetadata,
       title: "Codex 重置 FAQ | 重置时机、使用限制与手动重置",
-      description: "关于 Codex 重置具体时机、Token 和使用额度重置、手动重置以及随机重置期望度的常见问题解答。",
+      description: "解答关于 OpenAI Codex 与 ChatGPT Work 重置时机、共享使用额度、全局重置与手动重置区别、历史记录以及随机重置期望度的常见问题。",
       openGraphTitle: "Codex 重置 FAQ",
-      openGraphDescription: "关于 Codex 重置具体时机、使用额度重置、手动重置以及随机重置期望度的常见问题解答。",
-      twitterDescription: "关于 Codex 重置具体时机、使用额度重置、手动重置以及随机重置期望度的常见问题解答。",
+      openGraphDescription: "解答关于 OpenAI Codex 与 ChatGPT Work 重置时机、共享使用额度、全局重置与手动重置区别、历史记录以及随机重置期望度的常见问题。",
+      twitterDescription: "解答关于 OpenAI Codex 与 ChatGPT Work 重置时机、共享使用额度、全局重置与手动重置区别、历史记录以及随机重置期望度的常见问题。",
     },
   ] as const;
 
@@ -254,7 +254,7 @@ test("history metadata describes the combined chronological reset list", () => {
   const cases = [
     {
       metadata: jaHistoryMetadata,
-      description: "Codexの全体リセット、任意リセット配布、実施時刻、出典を新しい順に確認できます。",
+      description: "CodexおよびChatGPT Workの全体リセットや任意リセット配布の実施時刻、前回からの間隔、公式アナウンスなどの出典を新しい順にまとめて確認できます。",
     },
     {
       metadata: enHistoryMetadata,
@@ -262,7 +262,7 @@ test("history metadata describes the combined chronological reset list", () => {
     },
     {
       metadata: zhHistoryMetadata,
-      description: "按时间倒序查看 Codex 全局重置、手动重置发放记录、执行时间和来源。",
+      description: "按时间倒序查看 OpenAI Codex 与 ChatGPT Work 的全局重置记录、手动重置发放记录、每次重置的执行时间、历史间隔周期与官方公告出典来源。",
     },
   ];
 

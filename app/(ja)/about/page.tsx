@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   applicationName: SITE_NAME,
   title: "このサイトについて",
   description:
-    "Codexリセット観測所は、Codexのリセット情報を観測・整理する非公式サイトです。",
+    "Codexリセット観測所（Codex Reset Observatory）は、OpenAI Codexの利用上限リセット時刻や履歴、24時間・48時間予測を観測・整理する非公式サイトです。",
   alternates: {
     canonical: siteUrl("/about"),
     languages: {
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "このサイトについて",
     description:
-      "Codexリセット観測所は、Codexのリセット情報を観測・整理する非公式サイトです。",
+      "Codexリセット観測所（Codex Reset Observatory）は、OpenAI Codexの利用上限リセット時刻や履歴、24時間・48時間予測を観測・整理する非公式サイトです。",
     url: siteUrl("/about"),
     siteName: SITE_NAME,
     type: "article",
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "このサイトについて",
     description:
-      "Codexリセット観測所は、Codexのリセット情報を観測・整理する非公式サイトです。",
+      "Codexリセット観測所（Codex Reset Observatory）は、OpenAI Codexの利用上限リセット時刻や履歴、24時間・48時間予測を観測・整理する非公式サイトです。",
     images: [SITE_OG_IMAGE_URL],
   },
 };
