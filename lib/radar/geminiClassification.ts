@@ -610,6 +610,93 @@ Respond ONLY with a JSON object strictly matching this schema:
 }
 `;
 
+export const TIBO_OPENAI_COMPAT_SYSTEM_PROMPT = `You are an AI classifier for the OpenAI Codex Reset Observatory. Analyze tweets from Tibo (@thsottiaux), OpenAI Codex lead.
+
+Classify each tweet into EXACTLY ONE of 4 signalType categories:
+1. "reset_executed": A Codex/ChatGPT Work usage/rate limit reset HAS ALREADY COMPLETED or IS HAPPENING NOW (including present progressive like "We are resetting/reseting usage limits", "Limits have been reset", "Enjoy a reset everyone", "Resets all propagated"). Short completion replies ("Done") require validated connected context tying them to the same global reset.
+2. "official_notice": An explicit announcement of an upcoming Codex/ChatGPT Work usage-limit reset, OR an official broad BANKED reset credit distribution/activation rolling out to all paid users / everyone ("The banked reset has been activated and should land in everyone's accounts sometime soon!").
+   - Short headline naming a Codex usage-limit reset as the announced event (e.g. "Day 13/ Le limit reset") is official_notice (NOT execution); when no schedule is stated, set temporalDirection="unclear", noticeTimingStatus="unknown", and leave schedule fields null.
+   - Contracted futures ("I'll reset", "we'll reset") are official_notice, not reset_executed. Service recovery ("back in action") is operational status only.
+   - Personal/one-off banked reset replies or how-to explanations remain "irrelevant".
+3. "teaser": Forward-looking hint that Tibo may perform a Codex/ChatGPT Work usage-limit reset:
+   - Direct/discretionary hint or conditional ("Maybe time to press the reset button", "If we hit 20M, maybe I will reset everyone", "I am feeling like a limit reset").
+   - Recent first-person acquisition of a new reset button/mechanism ("I was gifted a very fancy new reset button today") -> signalType="teaser", teaserStrength="strong" (not executed; NOT historical memories like "years ago", UI features, or device buttons).
+   - Narrow concealed imminent-reveal exception: ONLY when whole AUTHOR TEXT combines (a) clearly near-term event/reveal by Tibo, (b) OpenAI/Codex product/subscription/usage context, (c) deliberate concealment/surprise/emphatic good-news framing, and (d) plausible usage-reset reveal. Keep confidence 0.80-0.90; never official_notice/reset_executed.
+   - Usage-limit restoration phrasing ("bring back the 5h limit") counts as reset-related.
+4. "irrelevant": General chatter, ordinary feature/model launches ("flipped the switch", "Model X live"), historical-only past resets ("We reset everyone yesterday", "last week" -> MUST be signalType="irrelevant" with temporalDirection="historical", NEVER reset_executed), negations/retractions ("No reset today", "Scratch that"), pure hypotheticals/wishes ("Would be nice to reset everyone", "Imagine if..."), personal/single-account resets ("Just reset your account"), non-usage resets (cache/server/database/model/sleep/laptop/UI button), or contextless short replies ("No.", "lol", "Done" without context).
+
+Decision order: (1) domain (Codex/ChatGPT Work usage limits vs unrelated), (2) temporal meaning (historical, completed_now, future, unclear), (3) speech act in AUTHOR TEXT.
+Parent/quoted text is context ONLY and never supplies Tibo's own assertion.
+Historical language does not veto a separate later future reset passage.
+When a post has BOTH a completed reset and a distinct future reset/teaser, primary signalType="reset_executed" and populate futureSignal (with non-overlapping exact substring evidenceQuote from AUTHOR TEXT; generic "More updates tomorrow" is futureSignal.signalType="none").
+
+Independent axes:
+- teaserStrength ("strong" | "weak" | "none" | null): judged independently of signalType (weak can occur on ambiguous/playful context-dependent hints even if signalType="irrelevant"; none for completed/historical/negative/UI/unrelated).
+- contextualResetAssessment: "same_global_reset" | "same_banked_distribution" | "same_personal_reset" | "different_event" | "negated" | "uncertain" | "not_applicable" | "unknown". Set contextualResetTweetId only when "same_global_reset".
+- resetMeaning: { method: "forced"|"regular_scheduled"|"banked_distribution"|"personal"|"unknown", methodEvidence: {tweetId, quote}|null, scope: "all_paid_users"|"all_users"|"affected_users"|"single_account"|"unknown", scopeEvidence: {tweetId, quote}|null } | null.
+- resetTypeJa: ONLY "ご祝儀リセット" | "詫びリセット" | null (never "定期リセット"/"ランダムリセット").
+- codexOperationalStatus: "none" | "investigating" | "active" | "recovered" | null (independent of resets; resets/banked propagation alone -> "none").
+- Temporal fields: extract exact contiguous substring from AUTHOR TEXT for temporalExpression (no invented UTC timestamps); explicitTimezone only if written in text; for "in two hours"/"in an hour" use temporalKind="relative_duration", temporalPrecision="exact_time"; for "during the day" use temporalKind="daypart", temporalPrecision="daypart", daypart="day"; for vague ("soon"/"later") use temporalKind="vague" or "none".
+
+CRITICAL: evidenceQuote, teaserStrengthEvidenceQuote, futureSignal.evidenceQuote, and codexOperationalEvidenceQuote MUST be exact contiguous substrings of AUTHOR TEXT (or null).
+
+Respond ONLY with a valid JSON object matching these keys:
+{
+  "signalType": "reset_executed" | "official_notice" | "teaser" | "irrelevant",
+  "confidence": number,
+  "temporalDirection": "future" | "completed_now" | "historical" | "unclear",
+  "evidenceQuote": string | null,
+  "contextualResetAssessment": "same_global_reset" | "same_banked_distribution" | "same_personal_reset" | "different_event" | "negated" | "uncertain" | "not_applicable" | "unknown",
+  "contextualResetTweetId": string | null,
+  "noticeTimingStatus": "known" | "unknown" | null,
+  "resetMeaning": {"method": string, "methodEvidence": {"tweetId": string, "quote": string} | null, "scope": string, "scopeEvidence": {"tweetId": string, "quote": string} | null} | null,
+  "reasonJa": string,
+  "resetTypeJa": "ご祝儀リセット" | "詫びリセット" | null,
+  "noticeToExecution": string | null,
+  "teaserStrength": "strong" | "weak" | "none" | null,
+  "teaserStrengthConfidence": number | null,
+  "teaserStrengthEvidenceQuote": string | null,
+  "teaserStrengthReasonJa": string | null,
+  "futureSignal": {
+    "signalType": "official_notice" | "teaser" | "none" | null,
+    "teaserStrength": "strong" | "weak" | null,
+    "confidence": number | null,
+    "evidenceQuote": string | null,
+    "reasonJa": string | null,
+    "temporalDirection": "future" | "completed_now" | "historical" | "unclear" | null,
+    "temporalExpression": string | null,
+    "temporalKind": "none" | "absolute" | "weekday" | "relative_day" | "relative_duration" | "daypart" | "range" | "vague",
+    "temporalPrecision": "exact_time" | "day" | "daypart" | "range" | "unknown",
+    "weekday": "monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday"|"sunday"|null,
+    "relativeDayOffset": number | null,
+    "relativeAmount": number | null,
+    "relativeUnit": "minutes" | "hours" | "days" | null,
+    "explicitDateParts": {"year": number | null, "month": number, "day": number} | null,
+    "explicitTimeParts": {"hour": number, "minute": number} | null,
+    "daypart": "day" | "morning" | "afternoon" | "evening" | "tonight" | null,
+    "rangeKind": "this_week" | "this_weekend" | "next_week" | null,
+    "explicitTimezone": string | null,
+    "temporalConfidence": number | null
+  } | null,
+  "temporalExpression": string | null,
+  "temporalKind": "none" | "absolute" | "weekday" | "relative_day" | "relative_duration" | "daypart" | "range" | "vague",
+  "temporalPrecision": "exact_time" | "day" | "daypart" | "range" | "unknown",
+  "weekday": "monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday"|"sunday"|null,
+  "relativeDayOffset": number | null,
+  "relativeAmount": number | null,
+  "relativeUnit": "minutes" | "hours" | "days" | null,
+  "explicitDateParts": {"year": number | null, "month": number, "day": number} | null,
+  "explicitTimeParts": {"hour": number, "minute": number} | null,
+  "daypart": "day" | "morning" | "afternoon" | "evening" | "tonight" | null,
+  "rangeKind": "this_week" | "this_weekend" | "next_week" | null,
+  "explicitTimezone": string | null,
+  "temporalConfidence": number,
+  "codexOperationalStatus": "none" | "investigating" | "active" | "recovered" | null,
+  "codexOperationalConfidence": number | null,
+  "codexOperationalEvidenceQuote": string | null,
+  "codexOperationalReasonJa": string | null
+}`;
+
 export function buildGeminiPrompt(input: GeminiClassificationInput) {
   const postType = input.isReply === true ? "reply" : "standard post";
   const handles = input.replyToHandles?.length ? input.replyToHandles.join(", ") : "none";
@@ -1062,6 +1149,21 @@ export function applyTiboClassificationSafetyGuard(
 const RESET_KEYWORD_ESCALATION_PATTERN =
   /\b(?:reset(?:s|ting)?|banked|limits?|quotas?|codex)\b|リセット|利用枠|上限/i;
 
+export function shouldEscalateTiboClassification(
+  input: Pick<GeminiClassificationInput, "text" | "replyContextText" | "quoteContextText" | "secondOpinionMonitorContext">,
+): boolean {
+  if (process.env.GEMINI_DISABLE_KEYWORD_MODEL_ESCALATION === "true") {
+    return false;
+  }
+  if (input.secondOpinionMonitorContext?.trim()) {
+    return true;
+  }
+  const combinedText = [input.text, input.replyContextText, input.quoteContextText]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+  return RESET_KEYWORD_ESCALATION_PATTERN.test(combinedText);
+}
+
 export function resolveGeminiClassificationModel(
   input: Pick<GeminiClassificationInput, "text" | "replyContextText" | "quoteContextText" | "secondOpinionMonitorContext">,
   explicitModel?: string,
@@ -1234,6 +1336,31 @@ function buildValidatedClassificationOutput(
   };
 }
 
+function resolveOpenAICompatibleConfig(options: {
+  apiKey?: string;
+  model?: string;
+  baseUrl?: string;
+}) {
+  const apiKey =
+    options.apiKey !== undefined
+      ? options.apiKey.trim()
+      : (
+        process.env.OPENAI_FALLBACK_API_KEY?.trim() ||
+        process.env.OPENAI_API_KEY?.trim() ||
+        ""
+      );
+  const model =
+    options.model?.trim() ||
+    process.env.OPENAI_FALLBACK_MODEL?.trim() ||
+    "gpt-4o-mini";
+  const baseUrl = (
+    options.baseUrl?.trim() ||
+    process.env.OPENAI_FALLBACK_BASE_URL?.trim() ||
+    "https://api.openai.com/v1"
+  ).replace(/\/+$/, "");
+  return { apiKey, model, baseUrl };
+}
+
 async function tryOpenAICompatibleFallback(
   input: GeminiClassificationInput,
   options: {
@@ -1246,22 +1373,22 @@ async function tryOpenAICompatibleFallback(
   nowIso: string,
   fallback: (status: GeminiClassificationStatus, diagnostic?: GeminiFailureDiagnostic) => GeminiClassificationOutput,
 ): Promise<GeminiClassificationOutput | null> {
-  const apiKey =
-    options.apiKey?.trim() ||
-    process.env.OPENAI_FALLBACK_API_KEY?.trim() ||
-    process.env.OPENAI_API_KEY?.trim();
+  const { apiKey, model, baseUrl } = resolveOpenAICompatibleConfig(options);
   if (!apiKey) return null;
 
-  const model =
-    options.model?.trim() ||
-    process.env.OPENAI_FALLBACK_MODEL?.trim() ||
-    "gpt-4o-mini";
-  const baseUrl = (
-    options.baseUrl?.trim() ||
-    process.env.OPENAI_FALLBACK_BASE_URL?.trim() ||
-    "https://api.openai.com/v1"
-  ).replace(/\/+$/, "");
   const fetchFn = options.fetchImpl ?? fetch;
+  const requestBody: Record<string, unknown> = {
+    model,
+    temperature: 0,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: TIBO_OPENAI_COMPAT_SYSTEM_PROMPT },
+      { role: "user", content: buildGeminiPrompt(input) },
+    ],
+  };
+  if (/^openai\/gpt-oss-/i.test(model)) {
+    requestBody.reasoning_effort = "low";
+  }
 
   try {
     const res = await fetchFn(`${baseUrl}/chat/completions`, {
@@ -1270,15 +1397,7 @@ async function tryOpenAICompatibleFallback(
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: TIBO_GEMINI_SYSTEM_PROMPT },
-          { role: "user", content: buildGeminiPrompt(input) },
-        ],
-      }),
+      body: JSON.stringify(requestBody),
       signal: AbortSignal.timeout(options.timeoutMs),
     });
     if (!res.ok) return null;
@@ -1301,6 +1420,7 @@ export async function classifyWithGemini(
     model?: string;
     mode?: string;
     timeoutMs?: number;
+    escalateToOpenAiCompat?: boolean;
     openAiFallbackApiKey?: string;
     openAiFallbackModel?: string;
     openAiFallbackBaseUrl?: string;
@@ -1313,7 +1433,22 @@ export async function classifyWithGemini(
   const mode = (options.mode || process.env.GEMINI_CLASSIFICATION_MODE || "off").toLowerCase();
   const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
   const baseModel = process.env.GEMINI_MODEL?.trim();
-  const model = resolveGeminiClassificationModel(input, options.model, baseModel);
+  const openAiCompatConfig = resolveOpenAICompatibleConfig({
+    apiKey: options.openAiFallbackApiKey,
+    model: options.openAiFallbackModel,
+    baseUrl: options.openAiFallbackBaseUrl,
+  });
+  const escalateToOpenAiCompat =
+    options.escalateToOpenAiCompat ??
+    (process.env.GEMINI_ESCALATE_TO_OPENAI_COMPAT === "true");
+  const shouldTryOpenAiCompatFirst =
+    !options.model &&
+    escalateToOpenAiCompat &&
+    Boolean(openAiCompatConfig.apiKey) &&
+    shouldEscalateTiboClassification(input);
+  const model = shouldTryOpenAiCompatFirst
+    ? baseModel
+    : resolveGeminiClassificationModel(input, options.model, baseModel);
   const timeoutMs = Math.min(
     Math.max(1, options.timeoutMs || GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS),
     GEMINI_CLASSIFICATION_ATTEMPT_TIMEOUT_MS,
@@ -1368,6 +1503,26 @@ export async function classifyWithGemini(
 
   if (!apiKey || !model) {
     return fallback("model_not_configured");
+  }
+
+  let openAiCompatAttempted = false;
+  if (shouldTryOpenAiCompatFirst) {
+    openAiCompatAttempted = true;
+    const escalatedResult = await tryOpenAICompatibleFallback(
+      input,
+      {
+        apiKey: options.openAiFallbackApiKey,
+        model: options.openAiFallbackModel,
+        baseUrl: options.openAiFallbackBaseUrl,
+        timeoutMs,
+        fetchImpl: options.openAiFetch,
+      },
+      nowIso,
+      fallback,
+    );
+    if (escalatedResult) {
+      return escalatedResult;
+    }
   }
 
   // 3. Prepare Single API Payload (Max 1 call per tweet)
@@ -1490,18 +1645,20 @@ export async function classifyWithGemini(
       textContent = undefined;
     }
     if (!textContent) {
-      const openAiFallback = await tryOpenAICompatibleFallback(
-        input,
-        {
-          apiKey: options.openAiFallbackApiKey,
-          model: options.openAiFallbackModel,
-          baseUrl: options.openAiFallbackBaseUrl,
-          timeoutMs,
-          fetchImpl: options.openAiFetch,
-        },
-        nowIso,
-        fallback,
-      );
+      const openAiFallback = openAiCompatAttempted
+        ? null
+        : await tryOpenAICompatibleFallback(
+          input,
+          {
+            apiKey: options.openAiFallbackApiKey,
+            model: options.openAiFallbackModel,
+            baseUrl: options.openAiFallbackBaseUrl,
+            timeoutMs,
+            fetchImpl: options.openAiFetch,
+          },
+          nowIso,
+          fallback,
+        );
       return openAiFallback ?? fallback("invalid_json", { category: "response_parse", httpStatus: null });
     }
     return buildValidatedClassificationOutput(textContent, input, model, nowIso, fallback);
@@ -1515,18 +1672,20 @@ export async function classifyWithGemini(
     ) {
       return classifyWithGemini(input, { ...options, model: baseModel });
     }
-    const openAiFallback = await tryOpenAICompatibleFallback(
-      input,
-      {
-        apiKey: options.openAiFallbackApiKey,
-        model: options.openAiFallbackModel,
-        baseUrl: options.openAiFallbackBaseUrl,
-        timeoutMs,
-        fetchImpl: options.openAiFetch,
-      },
-      nowIso,
-      fallback,
-    );
+    const openAiFallback = openAiCompatAttempted
+      ? null
+      : await tryOpenAICompatibleFallback(
+        input,
+        {
+          apiKey: options.openAiFallbackApiKey,
+          model: options.openAiFallbackModel,
+          baseUrl: options.openAiFallbackBaseUrl,
+          timeoutMs,
+          fetchImpl: options.openAiFetch,
+        },
+        nowIso,
+        fallback,
+      );
     if (openAiFallback) return openAiFallback;
 
     if (err instanceof GeminiRequestFailure) {

@@ -59,6 +59,9 @@
   "vars": {
     "GEMINI_MODEL": "gemini-3.5-flash-lite",
     "GEMINI_CLASSIFICATION_MODE": "primary",
+    "GEMINI_ESCALATE_TO_OPENAI_COMPAT": "true",
+    "OPENAI_FALLBACK_BASE_URL": "https://api.groq.com/openai/v1",
+    "OPENAI_FALLBACK_MODEL": "openai/gpt-oss-120b",
     "RESET_DISPLAY_NAME_CANDIDATE_MODE": "full",
     "RESET_DISPLAY_NAME_CANDIDATE_ADOPTION_AT": "2026-09-09T00:00:00Z",
     "NEXT_PUBLIC_GA_MEASUREMENT_ID": "G-GH6NGYG5B5"

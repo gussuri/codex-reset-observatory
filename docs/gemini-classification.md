@@ -27,6 +27,13 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 
 # Google AI Studio APIキー。実際の値はリポジトリ外の環境変数へ設定する
 GEMINI_API_KEY=<set outside this repository>
+
+# 任意: リセット関連語やSecond Opinion時にOpenAI互換API（例: Groq）へエスカレーションし、
+# Gemini失敗時のフォールバックとしても利用する設定
+GEMINI_ESCALATE_TO_OPENAI_COMPAT=true
+OPENAI_FALLBACK_BASE_URL=https://api.groq.com/openai/v1
+OPENAI_FALLBACK_MODEL=openai/gpt-oss-120b
+OPENAI_FALLBACK_API_KEY=<set outside this repository>
 ```
 
 `GEMINI_MODEL` は呼び出すモデル名、`GEMINI_API_KEY` はGoogle AI Studioの認証情報です。APIキーをREADME、ドキュメント、Issue、ログ、コミットへ記載しないでください。
@@ -34,7 +41,7 @@ GEMINI_API_KEY=<set outside this repository>
 ## 実行上の制約と保存内容
 
 - 1回のWebhook処理では、最初の分類に加え、`timeout`、`rate_limited`、`api_error` の場合だけGemini分類を1回再試行します。合計で最大2回です。
-- モデルの自動フォールバックは行いません。Geminiが失敗した場合の最終結果のfallbackは、`primary`／`hybrid` の分類選択処理でルール分類へ戻します。
+- `GEMINI_ESCALATE_TO_OPENAI_COMPAT=true` かつ `OPENAI_FALLBACK_API_KEY` 設定時は、リセット関連キーワードを含む投稿やSecond Opinion再審ではOpenAI互換API（本番はGroq `openai/gpt-oss-120b`、コンパクト版システムプロンプトを使用）を優先実行し、失敗時は安定した `GEMINI_MODEL`（`gemini-3.5-flash-lite`）へフォールバックします。通常投稿では `GEMINI_MODEL` を優先実行し、失敗時のみOpenAI互換APIへフォールバックします。両方が失敗した場合は `primary`／`hybrid` の分類選択処理でルール分類へ戻します。
 - Geminiの応答は、4種類のシグナル種別、信頼度、時間方向、本文内に存在する証拠引用などを検証してから利用します。
 - ルール分類、Gemini分類、モデル名、分類ステータス、分類元はSupabaseの `public.tibo_signals` に監査情報として保存されます。
 - 最終的なGeminiステータスが `timeout`、`rate_limited`、`api_error` の場合、Chrome拡張は保存済みfallbackを処理済みにせず、tweet_id単位の再送キューへ入れます。Webhook全体の再送は初回を含め最大3回で、失敗が続く場合は明示的な再試行が必要です。
