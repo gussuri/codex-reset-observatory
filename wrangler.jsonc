@@ -56,6 +56,9 @@
   "observability": {
     "enabled": true
   },
+  "cache": {
+    "enabled": true
+  },
   "vars": {
     "GEMINI_MODEL": "gemini-3.5-flash-lite",
     "GEMINI_CLASSIFICATION_MODE": "primary",
