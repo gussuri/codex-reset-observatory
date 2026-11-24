@@ -896,19 +896,19 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "Codex Reset Observatory 由个人独立开发和运营。实现代码和开发记录可在 GitHub 查看。",
   },
   sponsorPanelTitle: {
-    ja: "無料公開の継続を応援してください",
-    en: "Help support the work behind this site",
-    zh: "欢迎支持本站持续运营",
+    ja: "サイトの応援はこちらから",
+    en: "Support this site",
+    zh: "支持本站请由此进入",
   },
   sponsorPanelBody: {
-    ja: "リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsでの支援を募集しています。単発・月額を問わず、少額からのご支援がサーバー維持や開発・運営の支えになります。",
-    en: "Voluntary support through GitHub Sponsors helps sustain the work of collecting reset information, organizing history, and improving forecasts. One-time or monthly support at any amount helps cover hosting, development, and operation.",
-    zh: "我们通过 GitHub Sponsors 接受自愿支持，以便继续收集重置信息、整理历史记录并改进预测。无论是单次还是按月小额支持，都能帮助分担服务器与开发运营成本。",
+    ja: "GitHubに飛びます",
+    en: "Opens GitHub",
+    zh: "将跳转至 GitHub",
   },
   sponsorLink: {
-    ja: "GitHub Sponsorsで支援する",
+    ja: "GitHub Sponsorsで応援する",
     en: "Support on GitHub Sponsors",
-    zh: "在 GitHub Sponsors 上支持",
+    zh: "前往 GitHub Sponsors 支持",
   },
   sponsorFooter: {
     ja: "運営を支援",
@@ -916,14 +916,14 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "支持本站",
   },
   aboutSupportHeading: {
-    ja: "サイト運営への任意の支援",
-    en: "Voluntary support for this site",
-    zh: "自愿支持本站运营",
+    ja: "サイトの応援について",
+    en: "Supporting this site",
+    zh: "关于支持本站",
   },
   aboutSupportBody: {
-    ja: "本サイトは個人で開発・運営しています。リセット情報の収集・履歴の整理・予測の改善を続けるため、GitHub Sponsorsで単発・月額の任意の支援を募集しています。支援の有無によって予測や閲覧できる情報が変わることはありません。",
-    en: "This site is developed and operated independently. Voluntary one-time or monthly support through GitHub Sponsors helps continue collecting reset information, organizing history, and improving forecasts. Sponsorship does not affect forecasts or access to information.",
-    zh: "本站由个人独立开发和运营。我们通过 GitHub Sponsors 接受单次或按月的自愿支持，以便继续收集重置信息、整理历史记录并改进预测。是否支持不会影响预测结果或可查看的信息。",
+    ja: "サイトの応援は GitHub Sponsors から受け付けています（ボタンからGitHubに飛びます）。応援の有無によって予測や閲覧できる情報が変わることはありません。",
+    en: "Support for this site is welcome via GitHub Sponsors (the button opens GitHub). Support does not affect forecasts or access to information.",
+    zh: "本站通过 GitHub Sponsors 接受自愿支持（点击按钮将跳转至 GitHub）。是否支持不会影响预测结果或可查看的信息。",
   },
   analyticsMeasurementNote: {
     ja: "Google Analyticsを設定している場合、ページ閲覧とスポンサーリンクのクリックを計測します。Googleのサービスを利用するサイトでは、訪問ページのURL、IPアドレスやCookie等がGoogleに送られることがあります。スポンサークリックイベントに含めるのは配置場所・表示言語・ページ種別です。詳しくはGoogleのサイト・アプリ情報の利用とプライバシーポリシーをご覧ください。計測を希望しない場合は、オプトアウト アドオンをご確認ください。",
