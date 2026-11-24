@@ -12,7 +12,10 @@ import {
   getShadowCompletedResetEvents,
   type ShadowResetEvent,
 } from "../lib/radar/shadowProbability";
-import { toCodexRecoveryObservation, toResetExecutionEstimate } from "../lib/codexUsageRecoveryStore";
+import {
+  readResetExecutionEstimates,
+  toCodexRecoveryObservation,
+} from "../lib/codexUsageRecoveryStore";
 import { getLocalRadarData, type RadarData } from "../lib/radar";
 import { readTiboFormalAdoptions } from "../lib/radar/tiboFormalAdoptionStore";
 import {
@@ -214,6 +217,25 @@ export async function loadFormalTiboResets(): Promise<Array<FormalTiboResetSigna
   }
 }
 
+async function readAllTiboSignals(
+  supabase: Parameters<typeof readResetExecutionEstimates>[0],
+): Promise<{ rows: Array<FormalTiboResetSignal>; error: unknown | null }> {
+  const PAGE_SIZE = 1000;
+  const rows: Array<FormalTiboResetSignal> = [];
+  for (let offset = 0; ; offset += PAGE_SIZE) {
+    const result = await supabase
+      .from("tibo_signals")
+      .select("*")
+      .order("tweet_created_at", { ascending: true })
+      .order("tweet_id", { ascending: true })
+      .range(offset, offset + PAGE_SIZE - 1);
+    if (result.error) return { rows: [], error: result.error };
+    const page = (result.data ?? []) as Array<FormalTiboResetSignal>;
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return { rows, error: null };
+  }
+}
+
 export async function loadProductionCanonicalRadarData(
   asOf: Date,
 ): Promise<ProductionCanonicalRadarDataLoadResult> {
@@ -230,11 +252,7 @@ export async function loadProductionCanonicalRadarData(
     auth: { persistSession: false },
   });
   const [signals, regular, observations, estimates, adoptions] = await Promise.all([
-    supabase
-      .from("tibo_signals")
-      .select("*")
-      .order("tweet_created_at", { ascending: true })
-      .limit(10_000),
+    readAllTiboSignals(supabase as never),
     supabase
       .from("regular_reset_events")
       .select("*")
@@ -245,11 +263,7 @@ export async function loadProductionCanonicalRadarData(
       .select("*")
       .order("observed_at", { ascending: true })
       .limit(1_000),
-    supabase
-      .from("reset_execution_estimates")
-      .select("*")
-      .order("display_execution_at", { ascending: true })
-      .limit(1_000),
+    readResetExecutionEstimates(supabase as never),
     readTiboFormalAdoptions(supabase as never),
   ]);
   const errors = [signals.error, regular.error, observations.error, estimates.error, adoptions.error]
@@ -261,7 +275,7 @@ export async function loadProductionCanonicalRadarData(
     };
   }
 
-  const rawSignals = (signals.data ?? []) as Array<FormalTiboResetSignal>;
+  const rawSignals = signals.rows;
   const rejectedTiboResets = rawSignals.flatMap((signal) => {
     if (
       signal.signal_type !== "reset_executed"
@@ -282,14 +296,13 @@ export async function loadProductionCanonicalRadarData(
     formalTiboResets: rawSignals,
     recentTiboSignals: rawSignals as never,
     activeTiboSignals: rawSignals as never,
+    canonicalTiboSignals: rawSignals as never,
     rejectedTiboResets,
     regularResetEvents: (regular.data ?? []) as never,
     codexRecoveryObservations: (observations.data ?? [])
       .map((row) => toCodexRecoveryObservation(row as never))
       .filter((row): row is NonNullable<typeof row> => row !== null),
-    resetExecutionEstimates: (estimates.data ?? [])
-      .map((row) => toResetExecutionEstimate(row as never))
-      .filter((row): row is NonNullable<typeof row> => row !== null),
+    resetExecutionEstimates: estimates.rows,
     tiboFormalAdoptions: adoptions.ledgers,
   });
   return { data, reason: null };

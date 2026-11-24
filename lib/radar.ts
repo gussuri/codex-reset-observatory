@@ -233,6 +233,7 @@ export type RadarCalculationContext = {
     signalEvaluationOverride?: LocalSignalEvaluation;
     publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null;
     publishedAdaptiveRegimeSurvivalReadoptionAt?: string | null;
+    publishedAdaptiveRegimeSurvivalV3AdoptionAt?: string | null;
     publishedProbabilityRuntime?: PublishedProbabilityRuntime;
     signalEvaluation: LocalSignalEvaluation;
     activeOfficialNotice: ReturnType<typeof getActiveOfficialNotice>;
@@ -386,6 +387,7 @@ export function getRadarViewModel(
   publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null,
   publishedProbabilityRuntime?: PublishedProbabilityRuntime,
   publishedAdaptiveRegimeSurvivalReadoptionAt?: string | null,
+  publishedAdaptiveRegimeSurvivalV3AdoptionAt?: string | null,
 ): RadarViewModel {
   const resolvedCalculationContext = calculationContext ?? createRadarCalculationContext(data, calculationNow);
   const source = resolvedCalculationContext.source;
@@ -398,6 +400,7 @@ export function getRadarViewModel(
     cached.signalEvaluationOverride === signalEvaluationOverride &&
     cached.publishedAdaptiveRegimeSurvivalAdoptionAt === publishedAdaptiveRegimeSurvivalAdoptionAt &&
     cached.publishedAdaptiveRegimeSurvivalReadoptionAt === publishedAdaptiveRegimeSurvivalReadoptionAt &&
+    cached.publishedAdaptiveRegimeSurvivalV3AdoptionAt === publishedAdaptiveRegimeSurvivalV3AdoptionAt &&
     cached.publishedProbabilityRuntime === publishedProbabilityRuntime,
   );
 
@@ -470,6 +473,7 @@ export function getRadarViewModel(
       canonicalHistoryContext,
       publishedAdaptiveRegimeSurvivalAdoptionAt,
       publishedAdaptiveRegimeSurvivalReadoptionAt,
+      publishedAdaptiveRegimeSurvivalV3AdoptionAt,
     }, { skipShadowAuditsWhenAdopted: true, ...publishedProbabilityRuntime });
     randomElapsedDiagnostics = getRandomElapsedDisplayDiagnostics(
       source,
@@ -483,6 +487,7 @@ export function getRadarViewModel(
       signalEvaluationOverride,
       publishedAdaptiveRegimeSurvivalAdoptionAt,
       publishedAdaptiveRegimeSurvivalReadoptionAt,
+      publishedAdaptiveRegimeSurvivalV3AdoptionAt,
       publishedProbabilityRuntime,
       signalEvaluation,
       activeOfficialNotice,

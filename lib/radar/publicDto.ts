@@ -58,6 +58,8 @@ export type PublicRadarSnapshotOptions = {
   publishedAdaptiveRegimeSurvivalAdoptionAt?: string | null;
   /** Internal evaluation override; this value is never copied into the public DTO. */
   publishedAdaptiveRegimeSurvivalReadoptionAt?: string | null;
+  /** Internal evaluation override; this value is never copied into the public DTO. */
+  publishedAdaptiveRegimeSurvivalV3AdoptionAt?: string | null;
   /** Internal calculation hooks for deterministic offline measurements. */
   publishedProbabilityRuntime?: PublishedProbabilityRuntime;
 };
@@ -538,6 +540,7 @@ export function toPublicRadarSnapshot(
     options.publishedAdaptiveRegimeSurvivalAdoptionAt,
     options.publishedProbabilityRuntime,
     options.publishedAdaptiveRegimeSurvivalReadoptionAt,
+    options.publishedAdaptiveRegimeSurvivalV3AdoptionAt,
   );
   const latestResetAt = getLastResetBoundaryAt(
     internal,

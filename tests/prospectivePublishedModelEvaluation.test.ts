@@ -134,18 +134,18 @@ test("the default prospective canonical truth uses the broad-banked v2 eligibili
   assert.equal(BROAD_BANKED_RANDOM_CLOCK_V2_REGIME_POLICY, "broad-banked-boundary-v2");
 });
 
-test("the default prospective adoption boundary is the exact Adaptive v2 readoption boundary", () => {
-  const historicalAt = "2026-09-19T06:00:00.000Z";
-  const generatedAt = "2026-11-20T00:00:00.000Z";
+test("the default prospective adoption boundary is the exact Adaptive v3 adoption boundary", () => {
+  const historicalAt = "2026-11-20T00:00:00.000Z";
+  const generatedAt = "2026-11-24T11:15:00.000Z";
   const report = evaluatePublishedModelProspectively(
     [forecastRow(historicalAt), forecastRow(generatedAt)],
     [],
-    new Date("2026-11-21T00:00:00.000Z"),
+    new Date("2026-11-25T00:00:00.000Z"),
   );
 
   assert.equal(report.forecastCounts.comparable, 1);
   assert.equal(report.evaluationStartAt, generatedAt);
-  assert.match(report.notes.join("\n"), /2026-11-20T00:00:00\.000Z/);
+  assert.match(report.notes.join("\n"), /2026-11-24T11:15:00\.000Z/);
 });
 
 test("published metric formatting includes bias without breaking legacy metric callers", () => {

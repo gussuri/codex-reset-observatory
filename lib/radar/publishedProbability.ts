@@ -1,5 +1,6 @@
 import {
   ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
+  ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
@@ -14,6 +15,7 @@ import {
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
@@ -65,8 +67,11 @@ import {
 } from "./broadBankedRandomContinuousShadow";
 import {
   calculateAdaptiveRegimeSurvivalProbability,
+  calculateAdaptiveRegimeSurvivalV3Probability,
   isValidAdaptiveRegimeSurvivalPrediction,
+  isValidAdaptiveRegimeSurvivalV3Prediction,
   type AdaptiveRegimeSurvivalProbabilityResult,
+  type AdaptiveRegimeSurvivalV3ProbabilityResult,
 } from "./adaptiveRegimeSurvivalProbability";
 import {
   calculateSurvivalConditionedProbability,
@@ -91,6 +96,7 @@ export type PublishedProbabilityRuntime = {
   logFallback?: boolean;
   survivalConditionedCalculator?: typeof calculateSurvivalConditionedProbability;
   adaptiveRegimeSurvivalCalculator?: typeof calculateAdaptiveRegimeSurvivalProbability;
+  adaptiveRegimeSurvivalV3Calculator?: typeof calculateAdaptiveRegimeSurvivalV3Probability;
   skipShadowAuditsWhenAdopted?: boolean;
 };
 export type PublishedProbabilityFallbackReason =
@@ -109,6 +115,8 @@ export type PublishedProbabilityFallbackReason =
   | "survival_conditioned_invalid_prediction"
   | "adaptive_regime_survival_exception"
   | "adaptive_regime_survival_invalid_prediction"
+  | "adaptive_regime_survival_v3_exception"
+  | "adaptive_regime_survival_v3_invalid_prediction"
   | "raw_continuous_exception"
   | "raw_continuous_invalid_prediction";
 
@@ -175,7 +183,8 @@ export type PublishedProbabilityPeriod =
   | "survival-conditioned-v1"
   | "adaptive-regime-survival-v2"
   | "survival-conditioned-v1-restored"
-  | "adaptive-regime-survival-v2-readopted";
+  | "adaptive-regime-survival-v2-readopted"
+  | "adaptive-regime-survival-v3";
 
 export type PublishedProbabilityPeriodOptions = {
   historicalV4AdoptionAt?: string | null;
@@ -189,6 +198,7 @@ export type PublishedProbabilityPeriodOptions = {
   adaptiveRegimeSurvivalAdoptionAt?: string | null;
   survivalConditionedRestorationAt?: string | null;
   adaptiveRegimeSurvivalReadoptionAt?: string | null;
+  adaptiveRegimeSurvivalV3AdoptionAt?: string | null;
 };
 
 function resolveBoundary<T>(value: T | undefined, fallback: T) {
@@ -255,6 +265,18 @@ export function getPublishedProbabilityPeriodAt(
         : null
       : options.adaptiveRegimeSurvivalReadoptionAt,
   );
+  const hasOlderAdaptivePeriodOverride =
+    options.adaptiveRegimeSurvivalAdoptionAt !== undefined
+    || options.adaptiveRegimeSurvivalReadoptionAt !== undefined
+    || options.survivalConditionedRestorationAt !== undefined
+    || options.survivalConditionedAdoptionAt !== undefined;
+  const adaptiveRegimeSurvivalV3AdoptionTime = parseAdoptionTime(
+    options.adaptiveRegimeSurvivalV3AdoptionAt === undefined
+      ? hasOlderAdaptivePeriodOverride
+        ? null
+        : PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT
+      : options.adaptiveRegimeSurvivalV3AdoptionAt,
+  );
 
   if (historicalV4AdoptionTime !== null && valueTime < historicalV4AdoptionTime) {
     return "historical-elapsed-v1";
@@ -277,6 +299,16 @@ export function getPublishedProbabilityPeriodAt(
     && adaptiveRegimeSurvivalReadoptionTime !== null
     && survivalConditionedRestorationTime !== null
     && adaptiveRegimeSurvivalReadoptionTime >= survivalConditionedRestorationTime;
+  const v3PrecedingTime = readoptionBoundaryIsValid
+    ? adaptiveRegimeSurvivalReadoptionTime
+    : restorationBoundaryIsValid
+      ? survivalConditionedRestorationTime
+      : adaptiveRegimeSurvivalAdoptionTime ?? survivalConditionedAdoptionTime;
+  const v3BoundaryIsValid = adaptiveRegimeSurvivalV3AdoptionTime !== null
+    && (v3PrecedingTime === null || adaptiveRegimeSurvivalV3AdoptionTime >= v3PrecedingTime);
+  if (v3BoundaryIsValid && valueTime >= adaptiveRegimeSurvivalV3AdoptionTime) {
+    return "adaptive-regime-survival-v3";
+  }
   if (readoptionBoundaryIsValid && valueTime >= adaptiveRegimeSurvivalReadoptionTime) {
     return "adaptive-regime-survival-v2-readopted";
   }
@@ -367,6 +399,7 @@ export type PublishedProbabilityCalculation = {
   shadow: ShadowProbabilityResult | null;
   survivalConditioned?: SurvivalConditionedProbabilityResult | null;
   adaptiveRegimeSurvival?: AdaptiveRegimeSurvivalProbabilityResult | null;
+  adaptiveRegimeSurvivalV3?: AdaptiveRegimeSurvivalV3ProbabilityResult | null;
   majorModelReleaseAdjustment: MajorModelReleaseAdjustment;
 };
 
@@ -532,6 +565,12 @@ export function selectPublishedProbability(
       PublishedProbabilityFallbackReason,
       "adaptive_regime_survival_exception" | "adaptive_regime_survival_invalid_prediction"
     > | null;
+    allowAdaptiveRegimeSurvivalV3?: boolean;
+    adaptiveRegimeSurvivalV3?: AdaptiveRegimeSurvivalV3ProbabilityResult | null;
+    adaptiveRegimeSurvivalV3FailureReason?: Extract<
+      PublishedProbabilityFallbackReason,
+      "adaptive_regime_survival_v3_exception" | "adaptive_regime_survival_v3_invalid_prediction"
+    > | null;
   } = {},
 ): PublishedProbabilityCalculation {
   const broadBankedV2 = selectionOptions.broadBankedV2 ?? null;
@@ -554,6 +593,11 @@ export function selectPublishedProbability(
   const adaptiveRegimeSurvivalFailureReason = adaptiveRegimeSurvivalActive
     ? selectionOptions.adaptiveRegimeSurvivalFailureReason ?? null
     : null;
+  const adaptiveRegimeSurvivalV3 = selectionOptions.adaptiveRegimeSurvivalV3 ?? null;
+  const adaptiveRegimeSurvivalV3Active = selectionOptions.allowAdaptiveRegimeSurvivalV3 === true;
+  const adaptiveRegimeSurvivalV3FailureReason = adaptiveRegimeSurvivalV3Active
+    ? selectionOptions.adaptiveRegimeSurvivalV3FailureReason ?? null
+    : null;
   const calibratedFallbackReason = selectionOptions.allowNextGenerationB === false
     ? calibrated && isValidCalibratedPrediction(calibrated)
       ? null
@@ -565,7 +609,13 @@ export function selectPublishedProbability(
             ? "calibrated_exception"
             : fallbackReason
     : fallbackReason;
-  const publicFallbackReason = adaptiveRegimeSurvivalActive
+  const publicFallbackReason = adaptiveRegimeSurvivalV3Active
+    ? adaptiveRegimeSurvivalV3FailureReason
+      ?? adaptiveRegimeSurvivalFailureReason
+      ?? survivalConditionedFailureReason
+      ?? broadBankedV2FailureReason
+      ?? fallbackReason
+    : adaptiveRegimeSurvivalActive
     ? adaptiveRegimeSurvivalFailureReason
       ?? survivalConditionedFailureReason
       ?? broadBankedV2FailureReason
@@ -580,16 +630,16 @@ export function selectPublishedProbability(
       : calibratedFallbackReason);
 
   if (
-    adaptiveRegimeSurvivalActive
-    && adaptiveRegimeSurvival
-    && isValidAdaptiveRegimeSurvivalPrediction(adaptiveRegimeSurvival)
+    adaptiveRegimeSurvivalV3Active
+    && adaptiveRegimeSurvivalV3
+    && isValidAdaptiveRegimeSurvivalV3Prediction(adaptiveRegimeSurvivalV3)
   ) {
     return {
-      probability12h: adaptiveRegimeSurvival.predictions.probability12h,
-      probability24h: adaptiveRegimeSurvival.predictions.probability24h,
-      probability48h: adaptiveRegimeSurvival.predictions.probability48h,
-      probability72h: adaptiveRegimeSurvival.predictions.probability72h,
-      adoptedModel: adaptiveRegimeSurvival.modelVersion,
+      probability12h: adaptiveRegimeSurvivalV3.predictions.probability12h,
+      probability24h: adaptiveRegimeSurvivalV3.predictions.probability24h,
+      probability48h: adaptiveRegimeSurvivalV3.predictions.probability48h,
+      probability72h: adaptiveRegimeSurvivalV3.predictions.probability72h,
+      adoptedModel: adaptiveRegimeSurvivalV3.modelVersion,
       source: "adaptive-regime-survival",
       fallbackReason: null,
       primary,
@@ -602,6 +652,35 @@ export function selectPublishedProbability(
       shadow: null,
       survivalConditioned,
       adaptiveRegimeSurvival,
+      adaptiveRegimeSurvivalV3,
+      majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
+    };
+  }
+
+  if (
+    adaptiveRegimeSurvivalActive
+    && adaptiveRegimeSurvival
+    && isValidAdaptiveRegimeSurvivalPrediction(adaptiveRegimeSurvival)
+  ) {
+    return {
+      probability12h: adaptiveRegimeSurvival.predictions.probability12h,
+      probability24h: adaptiveRegimeSurvival.predictions.probability24h,
+      probability48h: adaptiveRegimeSurvival.predictions.probability48h,
+      probability72h: adaptiveRegimeSurvival.predictions.probability72h,
+      adoptedModel: adaptiveRegimeSurvival.modelVersion,
+      source: "adaptive-regime-survival",
+      fallbackReason: adaptiveRegimeSurvivalV3Active ? publicFallbackReason : null,
+      primary,
+      nextGenerationB,
+      broadBankedV2,
+      rawContinuous,
+      calibrated,
+      rawShadow,
+      stableShadow,
+      shadow: null,
+      survivalConditioned,
+      adaptiveRegimeSurvival,
+      adaptiveRegimeSurvivalV3,
       majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
@@ -618,7 +697,9 @@ export function selectPublishedProbability(
       probability72h: survivalConditioned.predictions.probability72h,
       adoptedModel: survivalConditioned.modelVersion,
       source: "survival-conditioned",
-      fallbackReason: adaptiveRegimeSurvivalActive ? publicFallbackReason : null,
+      fallbackReason: (adaptiveRegimeSurvivalActive || adaptiveRegimeSurvivalV3Active)
+        ? publicFallbackReason
+        : null,
       primary,
       nextGenerationB,
       broadBankedV2,
@@ -629,6 +710,7 @@ export function selectPublishedProbability(
       shadow: null,
       survivalConditioned,
       adaptiveRegimeSurvival,
+      adaptiveRegimeSurvivalV3,
       majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
@@ -645,7 +727,7 @@ export function selectPublishedProbability(
       probability72h: broadBankedV2.predictions.probability72h,
       adoptedModel: broadBankedV2.modelVersion,
       source: "broad-banked-raw-continuous",
-      fallbackReason: (survivalConditionedActive || adaptiveRegimeSurvivalActive)
+      fallbackReason: (survivalConditionedActive || adaptiveRegimeSurvivalActive || adaptiveRegimeSurvivalV3Active)
         ? publicFallbackReason
         : null,
       primary,
@@ -658,6 +740,7 @@ export function selectPublishedProbability(
       shadow: null,
       survivalConditioned,
       adaptiveRegimeSurvival,
+      adaptiveRegimeSurvivalV3,
       majorModelReleaseAdjustment: INACTIVE_MAJOR_MODEL_RELEASE_ADJUSTMENT,
     };
   }
@@ -870,6 +953,8 @@ export type PublishedProbabilityOptions = {
   publishedSurvivalConditionedRestorationAt?: string | null;
   /** Explicit forward boundary re-adopting the frozen Adaptive v2 selector. */
   publishedAdaptiveRegimeSurvivalReadoptionAt?: string | null;
+  /** Explicit forward boundary adopting the shrunk-tail Adaptive v3 selector. */
+  publishedAdaptiveRegimeSurvivalV3AdoptionAt?: string | null;
   canonicalHistoryContext?: CanonicalResetHistoryContext;
 };
 
@@ -890,6 +975,7 @@ export function calculatePublishedProbability(
     publishedAdaptiveRegimeSurvivalAdoptionAt,
     publishedSurvivalConditionedRestorationAt,
     publishedAdaptiveRegimeSurvivalReadoptionAt,
+    publishedAdaptiveRegimeSurvivalV3AdoptionAt,
     ...calculationOptions
   } = options;
   const resolvedTrainingRows = nextGenerationBTrainingRows ?? attachedTraining?.trainingRows ?? [];
@@ -963,6 +1049,17 @@ export function calculatePublishedProbability(
   const resolvedPublishedSurvivalConditionedRestorationAt = publishedSurvivalConditionedRestorationAt === undefined
     ? PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT
     : publishedSurvivalConditionedRestorationAt;
+  const hasOlderAdaptiveBoundaryOverride =
+    publishedAdaptiveRegimeSurvivalAdoptionAt !== undefined
+    || publishedAdaptiveRegimeSurvivalReadoptionAt !== undefined
+    || publishedSurvivalConditionedRestorationAt !== undefined
+    || publishedSurvivalConditionedAdoptionAt !== undefined;
+  const resolvedPublishedAdaptiveRegimeSurvivalV3AdoptionAt =
+    publishedAdaptiveRegimeSurvivalV3AdoptionAt === undefined
+      ? hasOlderAdaptiveBoundaryOverride
+        ? null
+        : PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT
+      : publishedAdaptiveRegimeSurvivalV3AdoptionAt;
   const rollbackActive = isPublishedV4RollbackActive(
     publicModelOptions.now,
     resolvedPublishedV4RollbackAt,
@@ -1001,6 +1098,20 @@ export function calculatePublishedProbability(
     && survivalConditionedRestorationAdoptionTime !== null
     && adaptiveRegimeSurvivalReadoptionTime >= survivalConditionedRestorationAdoptionTime
     && publicModelOptions.now.getTime() >= adaptiveRegimeSurvivalReadoptionTime;
+  const adaptiveRegimeSurvivalV3AdoptionTime = parseAdoptionTime(
+    resolvedPublishedAdaptiveRegimeSurvivalV3AdoptionAt,
+  );
+  const v3PrecedingBoundaryTime = (restorationBoundaryIsValid
+    && adaptiveRegimeSurvivalReadoptionTime !== null
+    && survivalConditionedRestorationAdoptionTime !== null
+    && adaptiveRegimeSurvivalReadoptionTime >= survivalConditionedRestorationAdoptionTime)
+    ? adaptiveRegimeSurvivalReadoptionTime
+    : restorationBoundaryIsValid
+      ? survivalConditionedRestorationAdoptionTime
+      : adaptiveRegimeSurvivalAdoptionTime ?? survivalConditionedAdoptionTime;
+  const adaptiveRegimeSurvivalV3Active = adaptiveRegimeSurvivalV3AdoptionTime !== null
+    && (v3PrecedingBoundaryTime === null || adaptiveRegimeSurvivalV3AdoptionTime >= v3PrecedingBoundaryTime)
+    && publicModelOptions.now.getTime() >= adaptiveRegimeSurvivalV3AdoptionTime;
   const adaptiveRegimeSurvivalActive = adaptiveRegimeSurvivalPreviouslyActive
     || adaptiveRegimeSurvivalReadoptionActive;
 
@@ -1014,57 +1125,95 @@ export function calculatePublishedProbability(
     PublishedProbabilityFallbackReason,
     "adaptive_regime_survival_exception" | "adaptive_regime_survival_invalid_prediction"
   > | null = null;
+  let adaptiveRegimeSurvivalV3: AdaptiveRegimeSurvivalV3ProbabilityResult | null = null;
+  let adaptiveRegimeSurvivalV3FailureReason: Extract<
+    PublishedProbabilityFallbackReason,
+    "adaptive_regime_survival_v3_exception" | "adaptive_regime_survival_v3_invalid_prediction"
+  > | null = null;
+
+  const evaluateSurvivalConditioned = () => {
+    try {
+      const calculateSurvival = runtime.survivalConditionedCalculator
+        ?? calculateSurvivalConditionedProbability;
+      survivalConditioned = calculateSurvival(
+        data,
+        publicModelOptions,
+      );
+      if (!isValidSurvivalConditionedPrediction(survivalConditioned)) {
+        survivalConditionedFailureReason = "survival_conditioned_invalid_prediction";
+        survivalConditioned = {
+          ...survivalConditioned,
+          survival: {
+            ...survivalConditioned.survival,
+            fallbackUsed: true,
+            fallbackReason: survivalConditionedFailureReason,
+          },
+        };
+      }
+    } catch {
+      survivalConditionedFailureReason = "survival_conditioned_exception";
+    }
+  };
+
+  const evaluateAdaptiveRegimeV2 = () => {
+    try {
+      if (!survivalConditioned) {
+        adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_invalid_prediction";
+      } else {
+        const calculateAdaptive = runtime.adaptiveRegimeSurvivalCalculator
+          ?? calculateAdaptiveRegimeSurvivalProbability;
+        adaptiveRegimeSurvival = calculateAdaptive(survivalConditioned);
+        if (!isValidAdaptiveRegimeSurvivalPrediction(adaptiveRegimeSurvival)) {
+          adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_invalid_prediction";
+        }
+      }
+    } catch {
+      adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_exception";
+    }
+  };
+
+  const evaluateAdaptiveRegimeV3 = () => {
+    try {
+      if (!survivalConditioned) {
+        adaptiveRegimeSurvivalV3FailureReason = "adaptive_regime_survival_v3_invalid_prediction";
+      } else {
+        const calculateAdaptiveV3 = runtime.adaptiveRegimeSurvivalV3Calculator
+          ?? calculateAdaptiveRegimeSurvivalV3Probability;
+        adaptiveRegimeSurvivalV3 = calculateAdaptiveV3(survivalConditioned);
+        if (!isValidAdaptiveRegimeSurvivalV3Prediction(adaptiveRegimeSurvivalV3)) {
+          adaptiveRegimeSurvivalV3FailureReason = "adaptive_regime_survival_v3_invalid_prediction";
+        }
+      }
+    } catch {
+      adaptiveRegimeSurvivalV3FailureReason = "adaptive_regime_survival_v3_exception";
+    }
+  };
 
   if (runtime.skipShadowAuditsWhenAdopted === true) {
-    if (survivalConditionedActive || adaptiveRegimeSurvivalActive) {
-      try {
-        const calculateSurvival = runtime.survivalConditionedCalculator
-          ?? calculateSurvivalConditionedProbability;
-        survivalConditioned = calculateSurvival(
-          data,
-          publicModelOptions,
-        );
-        if (!isValidSurvivalConditionedPrediction(survivalConditioned)) {
-          survivalConditionedFailureReason = "survival_conditioned_invalid_prediction";
-          survivalConditioned = {
-            ...survivalConditioned,
-            survival: {
-              ...survivalConditioned.survival,
-              fallbackUsed: true,
-              fallbackReason: survivalConditionedFailureReason,
-            },
-          };
-        }
-      } catch {
-        survivalConditionedFailureReason = "survival_conditioned_exception";
-      }
+    if (survivalConditionedActive || adaptiveRegimeSurvivalActive || adaptiveRegimeSurvivalV3Active) {
+      evaluateSurvivalConditioned();
 
-      if (adaptiveRegimeSurvivalActive) {
-        try {
-          if (!survivalConditioned) {
-            adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_invalid_prediction";
-          } else {
-            const calculateAdaptive = runtime.adaptiveRegimeSurvivalCalculator
-              ?? calculateAdaptiveRegimeSurvivalProbability;
-            adaptiveRegimeSurvival = calculateAdaptive(survivalConditioned);
-            if (!isValidAdaptiveRegimeSurvivalPrediction(adaptiveRegimeSurvival)) {
-              adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_invalid_prediction";
-            }
-          }
-        } catch {
-          adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_exception";
-        }
+      if (adaptiveRegimeSurvivalV3Active) {
+        evaluateAdaptiveRegimeV3();
       }
+      const isAdaptiveV3Adopted = adaptiveRegimeSurvivalV3Active
+        && adaptiveRegimeSurvivalV3 !== null
+        && isValidAdaptiveRegimeSurvivalV3Prediction(adaptiveRegimeSurvivalV3);
 
-      const isAdaptiveAdopted = adaptiveRegimeSurvivalActive
+      if ((adaptiveRegimeSurvivalActive && !adaptiveRegimeSurvivalV3Active)
+        || (adaptiveRegimeSurvivalV3Active && !isAdaptiveV3Adopted)) {
+        evaluateAdaptiveRegimeV2();
+      }
+      const isAdaptiveV2Adopted = (adaptiveRegimeSurvivalActive || adaptiveRegimeSurvivalV3Active)
         && adaptiveRegimeSurvival !== null
         && isValidAdaptiveRegimeSurvivalPrediction(adaptiveRegimeSurvival);
       const isSurvivalAdopted = !adaptiveRegimeSurvivalActive
+        && !adaptiveRegimeSurvivalV3Active
         && survivalConditionedActive
         && survivalConditioned !== null
         && isValidSurvivalConditionedPrediction(survivalConditioned);
 
-      if (isAdaptiveAdopted || isSurvivalAdopted) {
+      if (isAdaptiveV3Adopted || isAdaptiveV2Adopted || isSurvivalAdopted) {
         const selection = selectPublishedProbability(
           primary,
           null,
@@ -1074,12 +1223,16 @@ export function calculatePublishedProbability(
           null,
           null,
           {
-            allowSurvivalConditioned: survivalConditionedActive || adaptiveRegimeSurvivalActive,
+            allowSurvivalConditioned:
+              survivalConditionedActive || adaptiveRegimeSurvivalActive || adaptiveRegimeSurvivalV3Active,
             survivalConditioned,
             survivalConditionedFailureReason,
-            allowAdaptiveRegimeSurvival: adaptiveRegimeSurvivalActive,
+            allowAdaptiveRegimeSurvival: adaptiveRegimeSurvivalActive || adaptiveRegimeSurvivalV3Active,
             adaptiveRegimeSurvival,
             adaptiveRegimeSurvivalFailureReason,
+            allowAdaptiveRegimeSurvivalV3: adaptiveRegimeSurvivalV3Active,
+            adaptiveRegimeSurvivalV3,
+            adaptiveRegimeSurvivalV3FailureReason,
           },
         );
         const publicPeriod = getPublishedProbabilityPeriodAt(publicModelOptions.now, {
@@ -1087,8 +1240,9 @@ export function calculatePublishedProbability(
           adaptiveRegimeSurvivalAdoptionAt: resolvedPublishedAdaptiveRegimeSurvivalAdoptionAt,
           survivalConditionedRestorationAt: resolvedPublishedSurvivalConditionedRestorationAt,
           adaptiveRegimeSurvivalReadoptionAt: resolvedPublishedAdaptiveRegimeSurvivalReadoptionAt,
+          adaptiveRegimeSurvivalV3AdoptionAt: resolvedPublishedAdaptiveRegimeSurvivalV3AdoptionAt,
         });
-        const selected = { ...selection, adaptiveRegimeSurvival, publicPeriod };
+        const selected = { ...selection, adaptiveRegimeSurvival, adaptiveRegimeSurvivalV3, publicPeriod };
         if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
         return selected;
       }
@@ -1168,45 +1322,28 @@ export function calculatePublishedProbability(
     }
   }
 
-  if ((survivalConditionedActive || adaptiveRegimeSurvivalActive) && survivalConditioned === null && survivalConditionedFailureReason === null) {
-    try {
-      const calculateSurvival = runtime.survivalConditionedCalculator
-        ?? calculateSurvivalConditionedProbability;
-      survivalConditioned = calculateSurvival(
-        data,
-        publicModelOptions,
-      );
-      if (!isValidSurvivalConditionedPrediction(survivalConditioned)) {
-        survivalConditionedFailureReason = "survival_conditioned_invalid_prediction";
-        survivalConditioned = {
-          ...survivalConditioned,
-          survival: {
-            ...survivalConditioned.survival,
-            fallbackUsed: true,
-            fallbackReason: survivalConditionedFailureReason,
-          },
-        };
-      }
-    } catch {
-      survivalConditionedFailureReason = "survival_conditioned_exception";
-    }
+  if (
+    (survivalConditionedActive || adaptiveRegimeSurvivalActive || adaptiveRegimeSurvivalV3Active)
+    && survivalConditioned === null
+    && survivalConditionedFailureReason === null
+  ) {
+    evaluateSurvivalConditioned();
   }
 
-  if (adaptiveRegimeSurvivalActive && adaptiveRegimeSurvival === null && adaptiveRegimeSurvivalFailureReason === null) {
-    try {
-      if (!survivalConditioned) {
-        adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_invalid_prediction";
-      } else {
-        const calculateAdaptive = runtime.adaptiveRegimeSurvivalCalculator
-          ?? calculateAdaptiveRegimeSurvivalProbability;
-        adaptiveRegimeSurvival = calculateAdaptive(survivalConditioned);
-        if (!isValidAdaptiveRegimeSurvivalPrediction(adaptiveRegimeSurvival)) {
-          adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_invalid_prediction";
-        }
-      }
-    } catch {
-      adaptiveRegimeSurvivalFailureReason = "adaptive_regime_survival_exception";
-    }
+  if (
+    adaptiveRegimeSurvivalV3Active
+    && adaptiveRegimeSurvivalV3 === null
+    && adaptiveRegimeSurvivalV3FailureReason === null
+  ) {
+    evaluateAdaptiveRegimeV3();
+  }
+
+  if (
+    (adaptiveRegimeSurvivalActive || adaptiveRegimeSurvivalV3Active)
+    && adaptiveRegimeSurvival === null
+    && adaptiveRegimeSurvivalFailureReason === null
+  ) {
+    evaluateAdaptiveRegimeV2();
   }
 
   try {
@@ -1268,12 +1405,16 @@ export function calculatePublishedProbability(
       allowRawContinuous: rawContinuousActive,
       rawContinuous,
       rawContinuousFailureReason,
-      allowSurvivalConditioned: survivalConditionedActive || adaptiveRegimeSurvivalActive,
+      allowSurvivalConditioned:
+        survivalConditionedActive || adaptiveRegimeSurvivalActive || adaptiveRegimeSurvivalV3Active,
       survivalConditioned,
       survivalConditionedFailureReason,
-      allowAdaptiveRegimeSurvival: adaptiveRegimeSurvivalActive,
+      allowAdaptiveRegimeSurvival: adaptiveRegimeSurvivalActive || adaptiveRegimeSurvivalV3Active,
       adaptiveRegimeSurvival,
       adaptiveRegimeSurvivalFailureReason,
+      allowAdaptiveRegimeSurvivalV3: adaptiveRegimeSurvivalV3Active,
+      adaptiveRegimeSurvivalV3,
+      adaptiveRegimeSurvivalV3FailureReason,
     },
   );
   const publicPeriod = getPublishedProbabilityPeriodAt(publicModelOptions.now, {
@@ -1281,8 +1422,9 @@ export function calculatePublishedProbability(
     adaptiveRegimeSurvivalAdoptionAt: resolvedPublishedAdaptiveRegimeSurvivalAdoptionAt,
     survivalConditionedRestorationAt: resolvedPublishedSurvivalConditionedRestorationAt,
     adaptiveRegimeSurvivalReadoptionAt: resolvedPublishedAdaptiveRegimeSurvivalReadoptionAt,
+    adaptiveRegimeSurvivalV3AdoptionAt: resolvedPublishedAdaptiveRegimeSurvivalV3AdoptionAt,
   });
-  const selected = { ...selection, adaptiveRegimeSurvival, publicPeriod };
+  const selected = { ...selection, adaptiveRegimeSurvival, adaptiveRegimeSurvivalV3, publicPeriod };
   if (runtime.logFallback !== false) logPublishedProbabilityFallback(selected);
   return selected;
 }

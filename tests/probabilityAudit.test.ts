@@ -19,6 +19,7 @@ import {
 import type { WindowEventLike } from "../lib/radar/types";
 import {
   ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
+  ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   NEXT_GENERATION_B_MODEL_VERSION,
@@ -27,6 +28,9 @@ import {
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_DATE,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_DATE,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_AT,
   PUBLISHED_RAW_CONTINUOUS_18_54_ADOPTION_DATE,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
@@ -120,7 +124,7 @@ test("pre-adoption history classification uses the calibrated fallback under the
   );
   const published = calculatePublishedProbability(data, { now }, { logFallback: false });
 
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.source, "calibrated");
   assert.equal(viewModel.probability24h, published.probability24h);
@@ -259,6 +263,33 @@ test("Adaptive v2 readoption audit records its new boundary and immediate v1 pre
   assert.equal(audit.adoptionAt, "2026-11-20T00:00:00.000Z");
   assert.equal(audit.previousModelVersion, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(audit.previousAdoptionAt, "2026-11-02T15:30:00.000Z");
+  assert.equal(Object.hasOwn(audit, "publicPeriod"), false);
+});
+
+test("Adaptive v3 audit records the v3 adoption boundary and readopted v2 as previous model", () => {
+  const now = new Date("2026-11-24T11:20:00.000Z");
+  const published = calculatePublishedProbability(null, {
+    now,
+    staticHistory: frozenSupportShapeSurvivalStaticHistory(),
+    activeOfficialNotice: null,
+  }, { logFallback: false });
+  const debug = buildProbabilityDebugInfo(
+    {},
+    published.primary,
+    now.toISOString(),
+    now,
+    null,
+    published,
+  );
+  const audit = debug.publishedProbabilityModel as Record<string, unknown>;
+
+  assert.equal(published.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION);
+  assert.equal(published.publicPeriod, "adaptive-regime-survival-v3");
+  assert.equal(audit.version, ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION);
+  assert.equal(audit.adoptionDate, PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_DATE);
+  assert.equal(audit.adoptionAt, PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT);
+  assert.equal(audit.previousModelVersion, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(audit.previousAdoptionAt, PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT);
   assert.equal(Object.hasOwn(audit, "publicPeriod"), false);
 });
 

@@ -1,6 +1,8 @@
 import {
   ADAPTIVE_REGIME_SURVIVAL_FREEZE_AT,
   ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
+  ADAPTIVE_REGIME_SURVIVAL_V3_FREEZE_AT,
+  ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION,
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_CONTROL_MODEL_VERSION,
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NEUTRAL_MODEL_VERSION,
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_LATE_NO_DOWNWARD_MODEL_VERSION,
@@ -33,6 +35,7 @@ import {
   PUBLISHED_BROAD_BANKED_V2_ADOPTION_AT,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_ADOPTION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
   PUBLISHED_PROBABILITY_ADOPTION_AT,
@@ -135,7 +138,8 @@ export type PublicProbabilityPeriodId =
   | "survival-conditioned-v1"
   | "adaptive-regime-survival-v2"
   | "survival-conditioned-v1-restored"
-  | "adaptive-regime-survival-v2-readopted";
+  | "adaptive-regime-survival-v2-readopted"
+  | "adaptive-regime-survival-v3";
 
 export type PublicProbabilityPeriodEntry = {
   id: PublicProbabilityPeriodId;
@@ -735,9 +739,9 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     variant: "base",
     revision: "v2",
     kind: "forecast",
-    publicStatus: "current",
+    publicStatus: "historical",
     status: "active",
-    roles: ["public-runtime", "experimental-log"],
+    roles: ["public-runtime", "fallback", "experimental-log"],
     parentModelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
     comparisonBaselineModelVersion: SURVIVAL_CONDITIONED_MODEL_VERSION,
     freezeAt: ADAPTIVE_REGIME_SURVIVAL_FREEZE_AT,
@@ -745,7 +749,27 @@ export const PROBABILITY_MODEL_REGISTRY: readonly ProbabilityModelRegistryEntry[
     bandwidthHours: SURVIVAL_CONDITIONED_BIN_HOURS,
     calibration: "none",
     differenceFromParent: "Applies a 72h decayed, 48h-prior-shrunk recent random-boundary rate multiplier through the existing v1 age hazard, then reuses the v1 signal, teaser, and notice policies.",
-    notes: "Public model from the explicit 2026-10-29T12:20:00.000Z adoption boundary, with a separate readopted period beginning at the forward 2026-11-20T00:00:00.000Z boundary; the frozen estimator is unchanged.",
+    notes: "Historical public model from 2026-10-29T12:20:00.000Z and readopted from 2026-11-20T00:00:00.000Z until 2026-11-24T11:15:00.000Z; the frozen estimator is unchanged.",
+  }),
+  model({
+    key: "adaptive-regime-survival/tail-shrunk/v3",
+    modelVersion: ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION,
+    displayName: "Adaptive Regime Survival v3",
+    family: "adaptive-regime-survival",
+    variant: "tail-shrunk",
+    revision: "v3",
+    kind: "forecast",
+    publicStatus: "current",
+    status: "active",
+    roles: ["public-runtime", "experimental-log"],
+    parentModelVersion: ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
+    comparisonBaselineModelVersion: ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
+    freezeAt: ADAPTIVE_REGIME_SURVIVAL_V3_FREEZE_AT,
+    eligibilityPolicyVersion: BROAD_BANKED_RANDOM_CLOCK_V2_POLICY_VERSION,
+    bandwidthHours: SURVIVAL_CONDITIONED_BIN_HOURS,
+    calibration: "none",
+    differenceFromParent: "Applies empirical Bayes sqrt(ess0) prior shrinkage toward longTermHazardPerHour to both bin qRaw and kernel neighbor estimates inside the age-hazard evaluator to prevent small-risk-set right-tail blowup, then reuses frozen Adaptive v2 regime attenuation and v1 runtime policies.",
+    notes: "Current public model from the explicit 2026-11-24T11:15:00.000Z adoption boundary; fallback chain runs v3 -> v2 -> Survival v1 -> Broad-Banked v2 -> remaining fallback chain.",
   }),
   ...[
     ["previous-interval", SURVIVAL_CONTEXT_PREVIOUS_INTERVAL_MODEL_VERSION],
@@ -994,9 +1018,19 @@ export const PUBLIC_PROBABILITY_PERIOD_REGISTRY: readonly PublicProbabilityPerio
         id: "adaptive-regime-survival-v2-readopted" as const,
         modelVersion: ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
         startAt: PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT,
-        endAt: null,
+        endAt: PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT,
         adoptionMode: "manual" as const,
         note: "Prospective readoption of the same frozen Adaptive Regime Survival v2 identity; earlier public periods and saved forecasts retain their identities.",
+      }]),
+  ...(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT === null
+    ? []
+    : [{
+        id: "adaptive-regime-survival-v3" as const,
+        modelVersion: ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION,
+        startAt: PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT,
+        endAt: null,
+        adoptionMode: "manual" as const,
+        note: "Prospective adoption of Adaptive Regime Survival v3 with empirical Bayes sqrt(ess0) tail shrinkage; earlier periods and saved forecasts retain their identities and fallback runs v3 -> v2 -> Survival v1.",
       }]),
 ];
 

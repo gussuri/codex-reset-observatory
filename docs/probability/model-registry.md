@@ -4,9 +4,9 @@
 
 ## Current public model
 
-- key: adaptive-regime-survival/base/v2
-- modelVersion: hazard-adaptive-regime-survival-v2
-- previous public modelVersion: hazard-survival-conditioned-adaptive-h45-tail-h24-v1
+- key: adaptive-regime-survival/tail-shrunk/v3
+- modelVersion: hazard-adaptive-regime-survival-v3
+- previous public modelVersion: hazard-adaptive-regime-survival-v2
 - stable fallback modelVersion: hazard-elapsed-v1
 
 ## Public probability periods
@@ -24,7 +24,8 @@
 | survival-conditioned-v1 | hazard-survival-conditioned-adaptive-h45-tail-h24-v1 | 2026-09-19T06:00:00.000Z | 2026-10-29T12:20:00.000Z | manual | Original Survival-Conditioned v1 public period; its historical boundary and saved rows are retained unchanged. |
 | adaptive-regime-survival-v2 | hazard-adaptive-regime-survival-v2 | 2026-10-29T12:20:00.000Z | 2026-11-02T15:30:00.000Z | manual | Adaptive regime survival v2 public period begins only at its explicit forward adoption boundary; earlier forecasts keep their saved identity. |
 | survival-conditioned-v1-restored | hazard-survival-conditioned-adaptive-h45-tail-h24-v1 | 2026-11-02T15:30:00.000Z | 2026-11-20T00:00:00.000Z | manual | Prospective restoration of the frozen Survival-Conditioned v1 identity; the new boundary distinguishes this period from its historical v1 period. |
-| adaptive-regime-survival-v2-readopted | hazard-adaptive-regime-survival-v2 | 2026-11-20T00:00:00.000Z | — | manual | Prospective readoption of the same frozen Adaptive Regime Survival v2 identity; earlier public periods and saved forecasts retain their identities. |
+| adaptive-regime-survival-v2-readopted | hazard-adaptive-regime-survival-v2 | 2026-11-20T00:00:00.000Z | 2026-11-24T11:15:00.000Z | manual | Prospective readoption of the same frozen Adaptive Regime Survival v2 identity; earlier public periods and saved forecasts retain their identities. |
+| adaptive-regime-survival-v3 | hazard-adaptive-regime-survival-v3 | 2026-11-24T11:15:00.000Z | — | manual | Prospective adoption of Adaptive Regime Survival v3 with empirical Bayes sqrt(ess0) tail shrinkage; earlier periods and saved forecasts retain their identities and fallback runs v3 -> v2 -> Survival v1. |
 
 ## Public history model entries
 
@@ -38,6 +39,7 @@
 | raw-continuous/bw18-tr54/v1 | hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1 | Raw Continuous Bandwidth 18/54 v1 | raw-continuous-bandwidth | bw18-tr54 | v1 | forecast | historical | active | fallback, experimental-log | hazard-regime-random-continuous-post-reset-age-raw-bw24-tr72-v1 | — | 2026-09-02T09:00:00.000Z | legacy-random-cycle-v1 | post-reset-regime-attenuation-0-24h-v1 | 18 | 54 | none | Uses the preregistered 18h bandwidth and 54h truncation instead of the 24/72 control. | — |
 | broad-banked/base/v2 | hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2 | Broad-Banked Random Continuous 18/54 v2 | broad-banked | base | v2 | forecast | historical | active | public-runtime, fallback, experimental-log | hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1 | — | 2026-09-18T03:10:48.666Z | broad-banked-distribution-random-clock-v2 | post-reset-regime-attenuation-0-24h-v1 | 18 | 54 | none | Broad completed banked distributions become eligible random-clock boundaries; estimator and frozen 18/54 parameters remain unchanged. | — |
 | survival-conditioned/base/v1 | hazard-survival-conditioned-adaptive-h45-tail-h24-v1 | Survival-Conditioned Adaptive H45 Tail H24 v1 | survival-conditioned | adaptive-h45-tail-h24 | v1 | forecast | historical | active | public-runtime, fallback, experimental-log | hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2 | hazard-regime-broad-banked-random-continuous-post-reset-age-raw-bw18-tr54-v2 | 2026-09-18T18:55:00.000Z | broad-banked-distribution-random-clock-v2 | — | 6 | — | none | Conditions the random-reset hazard on survival age using completed broad-banked intervals, H45 recency weighting, adaptive 6-24h smoothing, and an H24 tail return toward the weighted long-run rate. | Previous public identity, with the original September 19 period and a distinct restored period from the November 3 boundary; the frozen estimator is unchanged. |
+| adaptive-regime-survival/base/v2 | hazard-adaptive-regime-survival-v2 | Adaptive Regime Survival v2 | adaptive-regime-survival | base | v2 | forecast | historical | active | public-runtime, fallback, experimental-log | hazard-survival-conditioned-adaptive-h45-tail-h24-v1 | hazard-survival-conditioned-adaptive-h45-tail-h24-v1 | 2026-10-29T10:26:53.000Z | broad-banked-distribution-random-clock-v2 | — | 6 | — | none | Applies a 72h decayed, 48h-prior-shrunk recent random-boundary rate multiplier through the existing v1 age hazard, then reuses the v1 signal, teaser, and notice policies. | Historical public model from 2026-10-29T12:20:00.000Z and readopted from 2026-11-20T00:00:00.000Z until 2026-11-24T11:15:00.000Z; the frozen estimator is unchanged. |
 
 ## Active and shadow model entries
 

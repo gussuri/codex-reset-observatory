@@ -16,6 +16,7 @@ import {
 import { monitorRecoveryObservationsFor } from "./fixtures/monitorRecovery";
 import {
   ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
+  ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION,
   BROAD_BANKED_RANDOM_CLOCK_V2_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION,
   CALIBRATED_SHADOW_MODEL_VERSION_V2,
@@ -33,6 +34,9 @@ import {
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE,
   PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_DATE,
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_PREVIOUS_MODEL_VERSION,
   PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_AT,
   PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_DATE,
   PUBLISHED_SURVIVAL_CONDITIONED_RESTORATION_PREVIOUS_MODEL_VERSION,
@@ -56,7 +60,10 @@ import { calculateRegimeElapsedProbability } from "../lib/radar/regimeElapsedPro
 import { calculateRecencyWeightedShadowProbability } from "../lib/radar/recencyWeightedProbability";
 import { buildCanonicalResetHistoryContext } from "../lib/radar/tiboHistory";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
-import { calculateAdaptiveRegimeSurvivalProbability } from "../lib/radar/adaptiveRegimeSurvivalProbability";
+import {
+  calculateAdaptiveRegimeSurvivalProbability,
+  calculateAdaptiveRegimeSurvivalV3Probability,
+} from "../lib/radar/adaptiveRegimeSurvivalProbability";
 import { calculateSurvivalConditionedProbability } from "../lib/radar/survivalConditionedProbability";
 import type { WindowEventLike } from "../lib/radar/types";
 import { frozenSupportShapeSurvivalStaticHistory } from "./fixtures/survivalConditionedHistory";
@@ -107,11 +114,14 @@ function calculatePublishedSurvivalAt(now: Date, staticHistory: WindowEventLike[
   return published.survivalConditioned;
 }
 
-test("the current public model is Adaptive Regime Survival v2 with restored Survival v1 as its previous baseline", () => {
+test("the current public model is Adaptive Regime Survival v3 with Adaptive v2 as its previous baseline", () => {
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION, "hazard-odds-v4-logit-calibrated-prequential-v3");
   assert.equal(CALIBRATED_SHADOW_MODEL_VERSION_V2, "hazard-odds-v4-logit-calibrated-prequential-v2");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
-  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT, "2026-11-24T11:15:00.000Z");
+  assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_DATE, "2026-11-24");
+  assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_PREVIOUS_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
   assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_PREVIOUS_MODEL_VERSION, SURVIVAL_CONDITIONED_MODEL_VERSION);
   assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_AT, "2026-10-29T12:20:00.000Z");
   assert.equal(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_ADOPTION_DATE, "2026-10-29");
@@ -162,7 +172,7 @@ test("Shadow values stay aligned across DTO, UI, and history fields", () => {
   assert.ok(published.calibrated);
   assert.ok(published.rawShadow);
   assert.equal(ELAPSED_ONLY_MODEL_VERSION, "hazard-elapsed-v1");
-  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(PUBLISHED_PROBABILITY_MODEL_VERSION, ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION);
   assert.equal(published.adoptedModel, CALIBRATED_SHADOW_MODEL_VERSION);
   assert.equal(published.fallbackReason, null);
   assert.deepEqual(PUBLISHED_REGIME_ELAPSED_MODEL_OPTIONS, {
@@ -1780,4 +1790,167 @@ test("public probability fields stay aligned in Japanese, English, and Chinese",
     assert.equal("action" in snapshot.viewModel, false);
     assert.doesNotMatch(JSON.stringify(snapshot), /hazard-odds-v3-random-inclusive|hazard-odds-v2-random-only|publishedProbabilityModel|基礎確率|観測シグナルで補正/);
   }
+});
+
+test("public selector switches to Adaptive v3 at its forward boundary while isolating legacy overrides", () => {
+  const unshifted = frozenSupportShapeSurvivalStaticHistory([280]);
+  const atRoundedBoundary = new Date("2026-11-24T11:20:00.000Z");
+  const before = new Date(Date.parse(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT!) - 1);
+  const atBoundary = new Date(PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT!);
+  const latestResetMs = Date.parse(String(unshifted.at(-1)?.completed_at));
+  const shiftMs = (atRoundedBoundary.getTime() - 278 * 60 * 60 * 1000) - latestResetMs;
+  const staticHistory = unshifted.map((event) => {
+    const shiftedIso = new Date(Date.parse(String(event.completed_at)) + shiftMs).toISOString();
+    return {
+      ...event,
+      closed_at: shiftedIso,
+      completed_at: shiftedIso,
+    };
+  });
+
+  assert.equal(getPublishedProbabilityPeriodAt(before), "adaptive-regime-survival-v2-readopted");
+  assert.equal(getPublishedProbabilityPeriodAt(atBoundary), "adaptive-regime-survival-v3");
+  assert.equal(
+    getPublishedProbabilityPeriodAt(atBoundary, {
+      adaptiveRegimeSurvivalReadoptionAt: ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT,
+    }),
+    "adaptive-regime-survival-v2-readopted",
+  );
+  assert.equal(
+    getPublishedProbabilityPeriodAt(atBoundary, {
+      adaptiveRegimeSurvivalReadoptionAt: ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT,
+      adaptiveRegimeSurvivalV3AdoptionAt: PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT,
+    }),
+    "adaptive-regime-survival-v3",
+  );
+
+  const beforePublished = calculatePublishedProbability(null, {
+    now: new Date("2026-11-24T11:10:00.000Z"),
+    staticHistory,
+    activeOfficialNotice: null,
+  }, { logFallback: false });
+  assert.equal(beforePublished.publicPeriod, "adaptive-regime-survival-v2-readopted");
+  assert.equal(beforePublished.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+
+  let v3Calls = 0;
+  const v3Published = calculatePublishedProbability(null, {
+    now: atRoundedBoundary,
+    staticHistory,
+    activeOfficialNotice: null,
+  }, {
+    logFallback: false,
+    adaptiveRegimeSurvivalV3Calculator: (survivalBase) => {
+      v3Calls += 1;
+      return calculateAdaptiveRegimeSurvivalV3Probability(survivalBase);
+    },
+  });
+  assert.equal(v3Calls, 1);
+  assert.equal(v3Published.publicPeriod, "adaptive-regime-survival-v3");
+  assert.equal(v3Published.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION);
+  assert.equal(v3Published.source, "adaptive-regime-survival");
+  assert.equal(v3Published.fallbackReason, null);
+  assert.ok(v3Published.adaptiveRegimeSurvivalV3);
+  assert.ok(v3Published.probability24h < beforePublished.probability24h);
+});
+
+test("Adaptive v3 falls back safely to v2 and Survival v1 on exception or invalid prediction", () => {
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory();
+  const atRoundedBoundary = new Date("2026-11-24T11:20:00.000Z");
+
+  const onException = calculatePublishedProbability(null, {
+    now: atRoundedBoundary,
+    staticHistory,
+    activeOfficialNotice: null,
+  }, {
+    logFallback: false,
+    adaptiveRegimeSurvivalV3Calculator: () => {
+      throw new Error("v3 failure");
+    },
+  });
+  assert.equal(onException.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(onException.fallbackReason, "adaptive_regime_survival_v3_exception");
+
+  const onInvalidV3 = calculatePublishedProbability(null, {
+    now: atRoundedBoundary,
+    staticHistory,
+    activeOfficialNotice: null,
+  }, {
+    logFallback: false,
+    adaptiveRegimeSurvivalV3Calculator: (base) => {
+      const valid = calculateAdaptiveRegimeSurvivalV3Probability(base);
+      return {
+        ...valid,
+        predictions: { ...valid.predictions, probability48h: Number.NaN },
+      };
+    },
+  });
+  assert.equal(onInvalidV3.adoptedModel, ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION);
+  assert.equal(onInvalidV3.fallbackReason, "adaptive_regime_survival_v3_invalid_prediction");
+
+  const onBothInvalid = calculatePublishedProbability(null, {
+    now: atRoundedBoundary,
+    staticHistory,
+    activeOfficialNotice: null,
+  }, {
+    logFallback: false,
+    adaptiveRegimeSurvivalV3Calculator: () => {
+      throw new Error("v3 failure");
+    },
+    adaptiveRegimeSurvivalCalculator: (base) => {
+      const valid = calculateAdaptiveRegimeSurvivalProbability(base);
+      return {
+        ...valid,
+        predictions: { ...valid.predictions, probability24h: Number.NaN },
+      };
+    },
+  });
+  assert.equal(onBothInvalid.adoptedModel, SURVIVAL_CONDITIONED_MODEL_VERSION);
+  assert.equal(onBothInvalid.source, "survival-conditioned");
+  assert.equal(onBothInvalid.fallbackReason, "adaptive_regime_survival_v3_exception");
+});
+
+test("DTO cache separates publishedAdaptiveRegimeSurvivalV3AdoptionAt and omits v3 diagnostics", () => {
+  const now = new Date("2026-11-24T11:20:00.000Z");
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory();
+  const data = getLocalRadarData({ calculationNow: now });
+  const canonicalHistoryContext = buildCanonicalResetHistoryContext(null, {
+    defaultStaticHistory: staticHistory,
+    displayStaticHistory: staticHistory,
+    dynamicStaticHistory: [],
+  });
+  const calculationContext = { source: null, canonicalHistoryContext };
+  let v3Calculations = 0;
+
+  const sharedRuntime = {
+    logFallback: false,
+    survivalConditionedCalculator: (input: Parameters<typeof calculateSurvivalConditionedProbability>[0], options: Parameters<typeof calculateSurvivalConditionedProbability>[1]) =>
+      calculateSurvivalConditionedProbability(input, options),
+    adaptiveRegimeSurvivalV3Calculator: (survivalBase: Parameters<typeof calculateAdaptiveRegimeSurvivalV3Probability>[0]) => {
+      v3Calculations += 1;
+      return calculateAdaptiveRegimeSurvivalV3Probability(survivalBase);
+    },
+  };
+
+  toPublicRadarSnapshot(data, "en", {
+    calculationNow: now,
+    limitHistory: false,
+    calculationContext,
+    publishedAdaptiveRegimeSurvivalV3AdoptionAt: null,
+    publishedProbabilityRuntime: sharedRuntime,
+  });
+  assert.equal(v3Calculations, 0);
+
+  const v3Snapshot = toPublicRadarSnapshot(data, "en", {
+    calculationNow: now,
+    limitHistory: false,
+    calculationContext,
+    publishedAdaptiveRegimeSurvivalV3AdoptionAt: PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT,
+    publishedProbabilityRuntime: sharedRuntime,
+  });
+  assert.equal(v3Calculations, 1);
+  assert.ok(Number.isFinite(v3Snapshot.viewModel.probability24h));
+  assert.doesNotMatch(
+    JSON.stringify(v3Snapshot),
+    /adaptive-regime-survival|adaptiveRegimeSurvival|shrunkTailAnchorHazardPerHour|publishedAdaptiveRegimeSurvivalV3AdoptionAt/,
+  );
 });

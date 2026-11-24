@@ -396,12 +396,32 @@ export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT: string | null =
 export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_DATE: string | null =
   "2026-11-20";
 
-// Current/previous aliases describe the latest public period, while the
-// adoption constants above preserve both earlier periods for replay and audit.
-export const PUBLISHED_PROBABILITY_MODEL_VERSION =
+// Adaptive regime survival v3 eliminates the small-risk-set right-tail blowup
+// via empirical Bayes sqrt(ess0) shrinkage while keeping v1 and v2 frozen intact.
+export const ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION =
+  "hazard-adaptive-regime-survival-v3" as const;
+export const ADAPTIVE_REGIME_SURVIVAL_V3_FREEZE_AT = "2026-11-24T11:10:00.000Z" as const;
+export const ADAPTIVE_REGIME_SURVIVAL_V3_FREEZE_POLICY =
+  "Architecture and hyperparameters are frozen; observations may accumulate, but historical forecasts and parameters are never rewritten under this identity." as const;
+export const ADAPTIVE_REGIME_SURVIVAL_V3_TARGET_DEFINITION =
+  "Broad-scope random reset probability using empirical-Bayes sqrt(ess0)-shrunk Survival v1 age hazard multiplied by an exponentially decayed, prior-shrunk recent event rate under the no-next-event path." as const;
+export const ADAPTIVE_REGIME_SURVIVAL_V3_FORECAST_POLICY_VERSION =
+  "adaptive-regime-survival-audit-v3" as const;
+export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_AT: string | null =
+  "2026-11-24T11:15:00.000Z";
+export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_ADOPTION_DATE: string | null =
+  "2026-11-24";
+export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_PREVIOUS_MODEL_VERSION =
   ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION;
+export const PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_V3_PREVIOUS_ADOPTION_AT =
+  PUBLISHED_ADAPTIVE_REGIME_SURVIVAL_READOPTION_AT;
+
+// Current/previous aliases describe the latest public period, while the
+// adoption constants above preserve all earlier periods for replay and audit.
+export const PUBLISHED_PROBABILITY_MODEL_VERSION =
+  ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION;
 export const PUBLISHED_PROBABILITY_PREVIOUS_MODEL_VERSION =
-  SURVIVAL_CONDITIONED_MODEL_VERSION;
+  ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION;
 
 // Prospective context-aware shadow layered on the fixed 18/54 challenger.
 // This is intentionally a separate identity and freeze boundary; it is never

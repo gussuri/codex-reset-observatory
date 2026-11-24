@@ -34,6 +34,10 @@ import {
   ADAPTIVE_REGIME_SURVIVAL_FREEZE_POLICY,
   ADAPTIVE_REGIME_SURVIVAL_MODEL_VERSION,
   ADAPTIVE_REGIME_SURVIVAL_FORECAST_POLICY_VERSION,
+  ADAPTIVE_REGIME_SURVIVAL_V3_FREEZE_AT,
+  ADAPTIVE_REGIME_SURVIVAL_V3_FREEZE_POLICY,
+  ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION,
+  ADAPTIVE_REGIME_SURVIVAL_V3_FORECAST_POLICY_VERSION,
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_AT,
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_FREEZE_POLICY,
   BROAD_BANKED_LATE_AGE_REGIME_DIAGNOSTIC_MODEL_VERSIONS,
@@ -76,8 +80,11 @@ import { buildPublishedV3FeatureSnapshot } from "./radar/publishedV3FeatureSnaps
 import type { ShadowProbabilityOptions } from "./radar/shadowProbability";
 import {
   calculateAdaptiveRegimeSurvivalProbability,
+  calculateAdaptiveRegimeSurvivalV3Probability,
   isValidAdaptiveRegimeSurvivalPrediction,
+  isValidAdaptiveRegimeSurvivalV3Prediction,
   type AdaptiveRegimeSurvivalProbabilityResult,
+  type AdaptiveRegimeSurvivalV3ProbabilityResult,
 } from "./radar/adaptiveRegimeSurvivalProbability";
 import {
   calculateSurvivalConditionedContextArms,
@@ -486,6 +493,55 @@ function toAdaptiveRegimeSurvivalForecast(
   };
 }
 
+function toAdaptiveRegimeSurvivalV3Forecast(
+  result: AdaptiveRegimeSurvivalV3ProbabilityResult,
+): ExperimentalProbabilityForecast {
+  const audit = result.audit;
+  return {
+    modelVersion: result.modelVersion,
+    forecastPolicyVersion: ADAPTIVE_REGIME_SURVIVAL_V3_FORECAST_POLICY_VERSION,
+    generatedAt: result.calculatedAt,
+    probability12h: result.predictions.probability12h,
+    probability24h: result.predictions.probability24h,
+    probability48h: result.predictions.probability48h,
+    probability72h: result.predictions.probability72h,
+    halfLifeDays: 3,
+    completedEventCount: audit.completedIntervalCount,
+    completedIntervalCount: audit.completedIntervalCount,
+    weightedEventCount: audit.weightedEventCount,
+    weightedExposureDays: audit.weightedExposureDays,
+    baseline12h: result.baseline.probability12h,
+    baseline24h: result.baseline.probability24h,
+    baseline48h: result.baseline.probability48h,
+    baseline72h: result.baseline.probability72h,
+    combinedSignalMultiplier24h: audit.ordinaryMultiplier24h,
+    combinedSignalMultiplier48h: audit.ordinaryMultiplier48h,
+    combinedSignalMultiplier72h: audit.ordinaryMultiplier48h,
+    officialNoticeOverride: audit.officialNoticeOverride,
+    targetDefinition: result.targetDefinition,
+    rawModelVersion: audit.baseModelVersion,
+    rawProbability24h: result.baseline.probability24h,
+    rawProbability48h: result.baseline.probability48h,
+    confidence: result.confidence.level,
+    confidenceReason: result.confidence.reason,
+    calibrationApplied: false,
+    integrationStepHours: audit.integrationStepHours,
+    experimentRole: "diagnostic",
+    randomEligibilityPolicyVersion: audit.randomEligibilityPolicyVersion,
+    elapsedHoursSinceRandom: audit.randomElapsedHours,
+    randomElapsedHours: audit.randomElapsedHours,
+    latestRandomResetAt: audit.latestRandomResetAt,
+    estimator: "adaptive-regime-survival",
+    freezeAt: ADAPTIVE_REGIME_SURVIVAL_V3_FREEZE_AT,
+    freezePolicy: ADAPTIVE_REGIME_SURVIVAL_V3_FREEZE_POLICY,
+    nextGenerationRole: "adaptive-regime-survival-shadow",
+    fallbackUsed: audit.fallbackUsed,
+    fallbackReason: audit.fallbackReason,
+    adaptiveRegimeSurvival: audit,
+    backfilled: false,
+  };
+}
+
 function isValidContextAwareResult(result: ReturnType<typeof calculateContextAwareContinuousProbability>) {
   return [
     result.predictions.probability12h,
@@ -741,6 +797,8 @@ export type NextGenerationShadowBuildOptions = {
   survivalConditionedContextArmsCalculator?: typeof calculateSurvivalConditionedContextArms;
   /** Null suppresses only the v2 artifact for controlled baseline comparisons. */
   adaptiveRegimeSurvivalCalculator?: typeof calculateAdaptiveRegimeSurvivalProbability | null;
+  /** Null suppresses only the v3 artifact for controlled baseline comparisons. */
+  adaptiveRegimeSurvivalV3Calculator?: typeof calculateAdaptiveRegimeSurvivalV3Probability | null;
 };
 
 export function buildNextGenerationExperimentalProbabilityForecasts(
@@ -1044,6 +1102,26 @@ export function buildNextGenerationExperimentalProbabilityForecasts(
             }
           } catch {
             // Adaptive v2 is an independent fail-open shadow and cannot suppress v1 or context arms.
+          }
+        }
+        if (
+          generatedAt.getTime() >= new Date(ADAPTIVE_REGIME_SURVIVAL_V3_FREEZE_AT).getTime()
+          && options.adaptiveRegimeSurvivalV3Calculator !== null
+        ) {
+          try {
+            const calculateAdaptiveV3 = options.adaptiveRegimeSurvivalV3Calculator
+              ?? calculateAdaptiveRegimeSurvivalV3Probability;
+            const adaptiveRegimeSurvivalV3 = calculateAdaptiveV3(survivalResult);
+            if (isValidAdaptiveRegimeSurvivalV3Prediction(adaptiveRegimeSurvivalV3)) {
+              forecasts = {
+                ...forecasts,
+                [ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION]: toAdaptiveRegimeSurvivalV3Forecast(
+                  adaptiveRegimeSurvivalV3,
+                ),
+              };
+            }
+          } catch {
+            // Adaptive v3 is an independent fail-open shadow and cannot suppress v1/v2 or context arms.
           }
         }
         withSurvival = {

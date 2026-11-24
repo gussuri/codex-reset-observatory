@@ -1,6 +1,6 @@
 # 公開確率モデルのgovernance記録
 
-この文書は、2026-11-20時点の設定、runtime、prospective evaluation、リポジトリ履歴を照合した現行状態の監査記録です。過去時点のevaluation reportやdesign specは、その時点のスナップショットとして書き換えません。
+この文書は、2026-11-24時点の設定、runtime、prospective evaluation、リポジトリ履歴を照合した現行状態の監査記録です。過去時点のevaluation reportやdesign specは、その時点のスナップショットとして書き換えません。
 
 Canonical model inventory: [model-registry.md](model-registry.md)（machine-readable source: data/probabilityModelRegistry.ts）。
 
@@ -8,7 +8,8 @@ Canonical model inventory: [model-registry.md](model-registry.md)（machine-read
 
 | 役割 | model version / value |
 | --- | --- |
-| 公開モデル（2026-11-20T00:00:00.000Z以後） | `hazard-adaptive-regime-survival-v2`（readopted frozen Adaptive Regime Survival v2） |
+| 公開モデル（2026-11-24T11:15:00.000Z以後） | `hazard-adaptive-regime-survival-v3`（Adaptive Regime Survival v3; empirical Bayes `sqrt(ess0)` tail-shrunk） |
+| 公開モデル（2026-11-20T00:00:00.000Z〜2026-11-24T11:15:00.000Z） | `hazard-adaptive-regime-survival-v2`（readopted frozen Adaptive Regime Survival v2） |
 | 公開モデル（2026-11-02T15:30:00.000Z〜2026-11-20T00:00:00.000Z） | `hazard-survival-conditioned-adaptive-h45-tail-h24-v1`（restored frozen Survival-Conditioned v1） |
 | 公開モデル（2026-10-29T12:20:00.000Z〜2026-11-02T15:30:00.000Z） | `hazard-adaptive-regime-survival-v2`（first Adaptive Regime Survival v2 period） |
 | 公開モデル（2026-09-19T06:00:00.000Z〜2026-10-29T12:20:00.000Z） | `hazard-survival-conditioned-adaptive-h45-tail-h24-v1`（original Survival-Conditioned v1 period） |
@@ -16,7 +17,7 @@ Canonical model inventory: [model-registry.md](model-registry.md)（machine-read
 | 公開モデル（2026-09-17T05:45:00.000Z〜2026-09-18T06:00:00.000Z） | `hazard-regime-random-continuous-post-reset-age-raw-bw18-tr54-v1`（historical raw continuous 18/54） |
 | 公開モデル（2026-09-10T01:00:00.000Z〜2026-09-11T02:20:00.000Z） | `hazard-regime-random-continuous-selective-calibration-post-reset-age-v3`（historical selective hybrid） |
 | 公開モデル（2026-09-11T02:20:00.000Z〜2026-09-17T05:45:00.000Z） | `hazard-odds-v4-logit-calibrated-prequential-v3`（corrective rollback V4） |
-| 比較用のprevious model（再採用後） | `hazard-survival-conditioned-adaptive-h45-tail-h24-v1` |
+| 比較用のprevious model（v3採用後） | `hazard-adaptive-regime-survival-v2` |
 | v2より前のhistorical model | `hazard-regime-random-continuous-calibrated-v1`（Model B v1） |
 | 安定fallback | `hazard-elapsed-v1` |
 | adoption mode | `manual` |
@@ -43,18 +44,22 @@ Canonical model inventory: [model-registry.md](model-registry.md)（machine-read
 | Adaptive Regime Survival v2 freeze timestamp | `2026-10-29T10:26:53.000Z` |
 | Adaptive Regime Survival v2 readoption boundary | `2026-11-20T00:00:00.000Z` (JST `2026-11-20 09:00`) |
 | readopted v2 previous model / previous boundary | `hazard-survival-conditioned-adaptive-h45-tail-h24-v1` / `2026-11-02T15:30:00.000Z` |
+| Adaptive Regime Survival v3 adoption boundary | `2026-11-24T11:15:00.000Z` (JST `2026-11-24 20:15`) |
+| Adaptive Regime Survival v3 adoption date | `2026-11-24` |
+| Adaptive Regime Survival v3 freeze timestamp | `2026-11-24T11:10:00.000Z` |
+| v3 previous model / previous boundary | `hazard-adaptive-regime-survival-v2` / `2026-11-20T00:00:00.000Z` |
 | Survival-Conditioned v1 restoration boundary | `2026-11-02T15:30:00.000Z` (JST `2026-11-03 00:30`) |
 | restored v1 previous model | `hazard-adaptive-regime-survival-v2` |
 
-Model A（`hazard-ensemble-logit-stack-v1`）、Model C（`hazard-contextual-burst-circadian-v1`）、selective hybrid v3、raw 18/54 challengerは、採用期間以外ではshadow/evaluation用です。Adaptive v2は2026-11-20T00:00:00.000Zのmanual readoption boundary以後に、既存のv1 support gateとfinite・monotonic validity条件を使って選択します。同一originのpoint-in-time比較では、公開v1のBrier `.081/.203` に対して凍結済みv2は `.064/.143`（24h/48h）でした。これは成熟済み34/32 forecast、36 origins、reset event 1件の記述的な比較であり、独立した大標本の優越性を示すものではありません。今回の判断でv2の式・凍結済みパラメータ、eligibility、signal、official notice、teaser、horizon coherence policyは変更しません。過去のprediction rowやprospective scoreboardを再ラベルしません。late-age diagnostic arms、context arms、その他のexperiment-only fieldsはpublic selectorへ接続しません。
+Model A（`hazard-ensemble-logit-stack-v1`）、Model C（`hazard-contextual-burst-circadian-v1`）、selective hybrid v3、raw 18/54 challengerは、採用期間以外ではshadow/evaluation用です。Adaptive v3は`2026-11-24T11:15:00.000Z`のmanual adoption boundary以後に、凍結済みv1 support gate・empirical Bayes `sqrt(ess0)` tail shrinkage・Adaptive v2 regime rate multiplier・finite/monotonic validity条件を使って選択します。197 deduplicated origins（`2026-09-19..2026-11-24`）のpoint-in-time replayでは、full 24h Brierが`0.1839 -> 0.1810`（LogLoss `0.5867 -> 0.5626`、AUC `0.642 -> 0.653`）、48h Brierが`0.2513 -> 0.2496`（LogLoss `0.7440 -> 0.7288`）、full no-notice 24h Brierが`0.1735 -> 0.1702`へ改善し、11.4日無リセット局面のright-tail blowup（`80.9%/day` anchorによる`36.2% / 55.3%`過大予測）を`37.6%/day` anchor（`16.2% / 26.4%`）へ抑制しました。凍結済み`Survival v1`および`Adaptive v2`の式・パラメータ、eligibility、signal、official notice、teaser、horizon coherence policy、過去のprediction rowやprospective scoreboardは一切変更しません。
 
 ## Gate and manual adoption
 
 `not_met` はprospective evaluationの診断状態であり、`adoption mode = manual` のときに公開モデルを自動的に無効化するruntime switchではありません。gateの結果だけでselective hybrid v3やraw 18/54を自動publishしたり、V4を自動rollbackしたりしません。
 
-selective hybrid v3のProduction adoption boundaryは`2026-09-10T01:00:00.000Z`（UTC）です。`2026-09-01T08:00:00.000Z`以後かつv3 boundary前はv2、その前はB v1を使用しました。v3 boundaryからrollback boundaryまではselective hybrid v3、rollback boundaryからraw boundaryまではcorrective rollback V4、raw boundaryからbroad-banked v2 boundaryまではhistorical raw 18/54を使用します。`2026-09-18T06:00:00.000Z`以後`2026-09-19T06:00:00.000Z`までは、凍結済みbroad-banked v2 challengerを選択しました。`2026-09-19T06:00:00.000Z`以後`2026-10-29T12:20:00.000Z`まではSurvival-Conditioned v1、`2026-10-29T12:20:00.000Z`以後`2026-11-02T15:30:00.000Z`未満はAdaptive v2、次の`2026-11-20T00:00:00.000Z`までは同じ凍結済みSurvival v1を選択しました。現在は同じ凍結済みAdaptive v2をreadoption boundary以後に選択します。各期間は明示boundaryで分離し、無効・例外・非単調な候補は既存fallback chainへ退避します。過去のforecast rowを新しいモデルとして再ラベルしません。
+selective hybrid v3のProduction adoption boundaryは`2026-09-10T01:00:00.000Z`（UTC）です。`2026-09-01T08:00:00.000Z`以後かつv3 boundary前はv2、その前はB v1を使用しました。v3 boundaryからrollback boundaryまではselective hybrid v3、rollback boundaryからraw boundaryまではcorrective rollback V4、raw boundaryからbroad-banked v2 boundaryまではhistorical raw 18/54を使用します。`2026-09-18T06:00:00.000Z`以後`2026-09-19T06:00:00.000Z`までは、凍結済みbroad-banked v2 challengerを選択しました。`2026-09-19T06:00:00.000Z`以後`2026-10-29T12:20:00.000Z`まではSurvival-Conditioned v1、`2026-10-29T12:20:00.000Z`以後`2026-11-02T15:30:00.000Z`未満はAdaptive v2、`2026-11-20T00:00:00.000Z`未満は同じ凍結済みSurvival v1、`2026-11-20T00:00:00.000Z`以後`2026-11-24T11:15:00.000Z`未満はreadopted Adaptive v2を選択しました。現在はAdaptive v3をadoption boundary以後に選択し、無効・例外・非単調な場合は`v3 -> v2 -> Survival v1 -> Broad-Banked v2 -> remaining chain`へフォールバックします。過去のforecast rowを新しいモデルとして再ラベルしません。
 
-logging cycleでは、同じoriginについてB v1、v2、selective hybrid v3、corrective V4、raw 18/54、Broad-Banked v2、Survival-Conditioned v1、Adaptive Regime Survival v2を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存します。prospective evaluatorは新しいreadoption boundary以後だけを現在の採用期間として評価し、元のv1・初回Adaptive v2・復帰v1期間と混ぜません。
+logging cycleでは、同じoriginについてB v1、v2、selective hybrid v3、corrective V4、raw 18/54、Broad-Banked v2、Survival-Conditioned v1、Adaptive Regime Survival v2、Adaptive Regime Survival v3を`prediction_history.debug_info.experimentalProbabilityForecasts`へ保存します。prospective evaluatorは新しいv3 adoption boundary以後だけを現在の採用期間として評価し、過去のv1・Adaptive v2期間と混ぜません。
 
 ## 2026-09-18 broad-banked random clock v2 adoption (historical)
 
@@ -132,6 +137,21 @@ The restored period has its own boundary-defined period identity even though it 
 - model formula, frozen parameters, public DTO, database schema, migrations, and forecast-save behavior: unchanged
 
 The same-origin point-in-time comparison reported Adaptive v2 Brier scores of `.064` at 24h and `.143` at 48h, versus public Survival v1 at `.081` and `.203`. The comparison included 36 saved origins, with 34 mature 24h forecasts, 32 mature 48h forecasts, and one reset event; these are descriptive results with limited event count. Readopted origins have their own period identity and audit adoption metadata. If v2 is invalid or throws, the existing fallback selects frozen Survival v1.
+
+## 2026-11-24 Adaptive Regime Survival v3 adoption
+
+- model identity: `hazard-adaptive-regime-survival-v3` (empirical Bayes `sqrt(ess0)` tail-shrunk survival hazard + frozen Adaptive v2 regime multiplier)
+- previous public model: `hazard-adaptive-regime-survival-v2`
+- adoption boundary: `2026-11-24T11:15:00.000Z` (UTC), `2026-11-24 20:15` (JST)
+- freeze timestamp: `2026-11-24T11:10:00.000Z` (UTC)
+- previous public period boundary: `2026-11-20T00:00:00.000Z` (UTC)
+- adoption mode: `manual`
+- backfill/relabel: none; all earlier v1 and v2 public periods and saved forecasts retain their original identities
+- frozen v1 / v2 preservation: `hazard-survival-conditioned-adaptive-h45-tail-h24-v1` and `hazard-adaptive-regime-survival-v2` remain untouched and bit-for-bit identical
+- official notice, ordinary/timed teaser, eligibility, signal, validity, and fallback policies: unchanged (`v3 -> v2 -> Survival v1 -> Broad-Banked v2 -> remaining chain`)
+- public DTO, database schema, migrations, and forecast-save behavior: unchanged
+
+An audit across 197 deduplicated origins (`2026-09-19..2026-11-24`) against 49 canonical broad random events (`48` completed intervals) identified a small-risk-set right-tail artifact in `Survival v1`: unshrunk `qRaw` and `getNeighborEstimate()` allow `ess = 1` near `maxSupportedAgeHours = 288h` to inflate the right-tail anchor daily hazard to `80.9%/day`, pulling readopted `Adaptive v2` (despite `r = 0.372` attenuation after 11.4 days without a random reset) up to `36.2% / 55.3%` (24h/48h). `Adaptive v3` applies empirical Bayes `sqrt(ess0)` prior shrinkage toward `longTermHazardPerHour` (`w0 = 5.56` on 48 intervals) to both `qRaw` and `qNeighbor` inside the age-hazard evaluator, bringing the 11.4-day baseline down to `37.6%/day` (`12h = 9.4%`, `24h = 16.2%`, `48h = 26.4%`, `72h = 34.0%`) and improving 197-origin PIT replay across full (`24h Brier 0.1839 -> 0.1810`, `LogLoss 0.5867 -> 0.5626`, `AUC 0.642 -> 0.653`; `48h Brier 0.2513 -> 0.2496`, `LogLoss 0.7440 -> 0.7288`) and full no-notice (`24h Brier 0.1735 -> 0.1702`, `LogLoss 0.5403 -> 0.5177`). If v3 throws or produces invalid/non-monotonic forecasts, the runtime falls back to frozen `Adaptive v2` and then frozen `Survival v1`.
 
 ## 2026-09-17 raw 18/54 corrective adoption
 

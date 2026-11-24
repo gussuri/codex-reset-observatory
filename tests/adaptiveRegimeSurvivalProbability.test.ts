@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { TIMED_TEASER_REALLOCATION_POLICY_VERSION } from "../data/shadowProbabilityConfig";
+import {
+  ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION,
+  TIMED_TEASER_REALLOCATION_POLICY_VERSION,
+} from "../data/shadowProbabilityConfig";
 import {
   calculateAdaptiveRegimeBaseline,
   calculateAdaptiveRegimeSurvivalProbability,
+  calculateAdaptiveRegimeSurvivalV3Probability,
   clampAdaptiveRegimeRateMultiplier,
   getAdaptiveRegimeRateState,
+  getShrunkSurvivalHazardDiagnosticsAtAge,
+  getShrunkSurvivalTailAnchorHazardPerHour,
   isValidAdaptiveRegimeSurvivalPrediction,
+  isValidAdaptiveRegimeSurvivalV3Prediction,
 } from "../lib/radar/adaptiveRegimeSurvivalProbability";
 import type { RecoveryBoundaryAudit } from "../lib/radar/recoveryBoundary";
 import {
@@ -302,5 +309,113 @@ test("adaptive regime survival applies v1 ordinary multipliers and saved teaser 
   assert.deepEqual(result.predictions, expected);
   assert.equal(result.audit.ordinaryMultiplier24h, ordinaryMultiplier24h);
   assert.equal(result.audit.ordinaryMultiplier48h, ordinaryMultiplier48h);
+  assert.equal(result.audit.timedTeaserApplied, true);
+});
+
+test("adaptive regime survival v3 suppresses small-risk-set tail blowup while keeping v1 and v2 untouched", () => {
+  const staticHistory = frozenSupportShapeSurvivalStaticHistory([280]);
+  const latestResetMs = Date.parse(String(staticHistory.at(-1)?.completed_at));
+  const tailNow = new Date(latestResetMs + 278 * HOUR_MS);
+  const base = calculateSurvivalConditionedProbability(null, {
+    now: tailNow,
+    activeOfficialNotice: null,
+    staticHistory,
+  });
+  const v2 = calculateAdaptiveRegimeSurvivalProbability(base);
+  const v3 = calculateAdaptiveRegimeSurvivalV3Probability(base);
+  const v1TailDiag = getSurvivalConditionedHazardDiagnosticsAtAge(base.hazard, 278);
+  const v3TailDiag = getShrunkSurvivalHazardDiagnosticsAtAge(base.hazard, 278);
+  const shrunkTailAnchor = getShrunkSurvivalTailAnchorHazardPerHour(base.hazard);
+
+  assert.equal(v3.modelVersion, ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION);
+  assert.equal(v3.audit.modelVersion, ADAPTIVE_REGIME_SURVIVAL_V3_MODEL_VERSION);
+  assert.equal(isValidAdaptiveRegimeSurvivalV3Prediction(v3), true);
+  assert.equal(v3.audit.priorRiskWeight, Math.sqrt(base.hazard.ess0));
+  assert.equal(v3.audit.shrunkTailAnchorHazardPerHour, shrunkTailAnchor);
+  assert.ok(v1TailDiag.ess <= 1.05);
+  assert.ok(v3TailDiag.qRaw !== null && v1TailDiag.qRaw !== null && v3TailDiag.qRaw < v1TailDiag.qRaw);
+  assert.ok(v3TailDiag.dailyProbability < v1TailDiag.dailyProbability);
+  assert.ok(shrunkTailAnchor < base.hazard.tailAnchorHazardPerHour);
+  assert.ok(v3.predictions.probability24h < v2.predictions.probability24h);
+  assert.ok(v3.predictions.probability48h < v2.predictions.probability48h);
+  assert.ok(v3.predictions.probability12h <= v3.predictions.probability24h);
+  assert.ok(v3.predictions.probability24h <= v3.predictions.probability48h);
+  assert.ok(v3.predictions.probability48h <= v3.predictions.probability72h);
+  assert.equal(v2.audit.fallbackUsed, false);
+});
+
+test("adaptive regime survival v3 preserves support gate, official notice precedence, and single signal/teaser policy", () => {
+  const unsupportedBase = calculateSurvivalConditionedProbability(null, {
+    now: origin,
+    activeOfficialNotice: null,
+    staticHistory: frozenSupportShapeSurvivalStaticHistory().slice(0, 6),
+  });
+  const unsupportedV3 = calculateAdaptiveRegimeSurvivalV3Probability(unsupportedBase);
+  assert.equal(isValidAdaptiveRegimeSurvivalV3Prediction(unsupportedV3), false);
+  assert.equal(unsupportedV3.audit.fallbackUsed, true);
+  assert.equal(unsupportedV3.audit.fallbackReason, "invalid_survival_v1_base");
+
+  const noticeHorizons = {
+    probability12h: 0.72,
+    probability24h: 0.9,
+    probability48h: 0.96,
+    probability72h: 0.985,
+  };
+  const validBase = calculateSurvivalConditionedProbability(null, {
+    now: origin,
+    activeOfficialNotice: null,
+    staticHistory: frozenSupportShapeSurvivalStaticHistory(),
+  });
+  const baseWithNotice = {
+    ...validBase,
+    officialNoticeOverride: { active: true, ...noticeHorizons },
+    survival: {
+      ...validBase.survival,
+      officialNoticeOverride: true,
+    },
+  };
+  const noticeV3 = calculateAdaptiveRegimeSurvivalV3Probability(baseWithNotice);
+  assert.deepEqual(noticeV3.predictions, noticeHorizons);
+  assert.equal(noticeV3.audit.officialNoticeOverride, true);
+  assert.equal(
+    isValidAdaptiveRegimeSurvivalV3Prediction({
+      ...noticeV3,
+      predictions: { ...noticeV3.predictions, probability48h: Number.NaN },
+    }),
+    false,
+  );
+
+  const teaserAudit: TimedTeaserReallocationAudit = {
+    policyVersion: TIMED_TEASER_REALLOCATION_POLICY_VERSION,
+    applied: true,
+    contextDependence: null,
+    timedEvidenceClass: null,
+    reallocationWeight: 0.5,
+    temporalPrecision: null,
+    cdf: { probability12h: 0.1, probability24h: 0.25, probability48h: 0.55, probability72h: 0.8 },
+  };
+  const base = calculateSurvivalConditionedProbability(null, {
+    now: origin,
+    activeOfficialNotice: null,
+    staticHistory: frozenSupportShapeSurvivalStaticHistory(),
+  });
+  const result = calculateAdaptiveRegimeSurvivalV3Probability({
+    ...base,
+    survival: {
+      ...base.survival,
+      ordinarySignalMultipliers: {
+        ...base.survival.ordinarySignalMultipliers,
+        combinedAfterCap: { probability24h: 1.4, probability48h: 1.2 },
+      },
+      timedTeaserReallocation: teaserAudit,
+    },
+  });
+  const expected = applyTimedTeaserProbabilityReallocationFromAudit({
+    probability12h: applyOddsMultiplier(result.baseline.probability12h, 1.4),
+    probability24h: applyOddsMultiplier(result.baseline.probability24h, 1.4),
+    probability48h: applyOddsMultiplier(result.baseline.probability48h, 1.2),
+    probability72h: applyOddsMultiplier(result.baseline.probability72h, 1.2),
+  }, teaserAudit).predictions;
+  assert.deepEqual(result.predictions, expected);
   assert.equal(result.audit.timedTeaserApplied, true);
 });
