@@ -9,7 +9,7 @@ const root = process.cwd();
 
 const expectedSupportCopy = {
   ja: {
-    title: "サイトの応援はこちらから",
+    title: "サイトの応援はこちらから！",
     body: "GitHubに飛びます",
     link: "GitHub Sponsorsで応援する",
     aboutTitle: "サイトの応援について",

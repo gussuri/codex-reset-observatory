@@ -896,7 +896,7 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     zh: "Codex Reset Observatory 由个人独立开发和运营。实现代码和开发记录可在 GitHub 查看。",
   },
   sponsorPanelTitle: {
-    ja: "サイトの応援はこちらから",
+    ja: "サイトの応援はこちらから！",
     en: "Support this site",
     zh: "支持本站请由此进入",
   },
