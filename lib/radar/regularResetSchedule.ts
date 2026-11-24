@@ -161,6 +161,18 @@ export function createObservedRegularResetEventRow(
   return createRegularResetEventRow(definition, representativeAt, completedDate.toISOString());
 }
 
+export const REGULAR_RESET_DETAILED_NOTE = {
+  ja: "直近の全体強制リセットを基準にした共通目安であり、実際のタイミングは人によってズレます。最後の強制リセット後に初めて Codex / Work を使用した時点から1週間後に次の定期リセットが行われ、任意リセット（バンクリセット）を使用した場合も、その後の初使用から1週間後にズレます。",
+  en: "This is a shared reference based on the latest global forced reset, so actual timing varies by user. Your next weekly reset occurs one week after your first Codex / Work usage following the latest forced reset, and using a banked reset also shifts it to one week after your first usage afterward.",
+  zh: "此为以最近一次全局强制重置为基准的通用参考时间，实际重置时间会因人而异。下一次定期重置将在最近一次强制重置后首次使用 Codex / Work 起满 1 周时进行；使用任意重置（Banked Reset）后，也会顺延至使用后首次使用起满 1 周。",
+} as const;
+
+export const REGULAR_RESET_COMPACT_NOTE = {
+  ja: "直近の全体強制リセットを基準にした7日周期の共通目安です（初回利用や任意リセット使用により人ごとにズレます）。",
+  en: "Shared 7-day reference from the latest global forced reset (actual timing varies by first usage and banked reset use).",
+  zh: "以最近一次全局强制重置为基准的 7 天周期通用参考时间（实际时间因首次使用或任意重置而因人而异）。",
+} as const;
+
 function createRegularResetReferenceEvent(
   definition: RegularResetScheduleDefinition,
   representativeAt: Date,
@@ -175,11 +187,7 @@ function createRegularResetReferenceEvent(
     definition.window_end_offset_minutes,
   );
   const scope = definition.scope;
-  const note = {
-    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
-    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
-    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
-  };
+  const note = REGULAR_RESET_COMPACT_NOTE;
 
   return {
     id: `weekly-regular-reference-${definition.schedule_id}-${scheduledAt.replace(/[^a-zA-Z0-9_-]+/g, "-")}`,

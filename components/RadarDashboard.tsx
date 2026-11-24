@@ -923,6 +923,14 @@ export function RadarDashboard({
       item.recordKind === "reference" ||
       item.recordKind === "regular_completed",
   );
+  const regularCycleLabel = translateDynamic("定期リセット", locale);
+  const bankedMethodLabel = translateDynamic("任意リセット権配布", locale);
+  const latestRegularResetKey =
+    visibleHistory.find(
+      (item) =>
+        item.details?.cycleType === regularCycleLabel &&
+        item.details?.resetMethod !== bankedMethodLabel,
+    )?.key ?? null;
   const resetNoticeTone = {
     card: "border-amber-300 bg-amber-50 text-amber-950",
     icon: "text-amber-700",
@@ -1217,34 +1225,6 @@ export function RadarDashboard({
 
         {shouldRenderRelatedTibo ? tiboActivityCard : null}
 
-        {!isDataUnavailable &&
-        viewModel.regularResetForecast.isNoticeWindow &&
-        viewModel.regularResetForecast.expectedAt ? (
-          <section className="rounded-lg border border-slate-200 bg-white/80 p-4 text-slate-700 shadow-sm">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500">
-                  {translateUI("nextRegularResetReference", locale)}
-                </p>
-                <h2 className="mt-1 flex flex-wrap items-baseline text-lg font-semibold text-slate-950 sm:text-xl">
-                  <LocalizedDateTime
-                    value={viewModel.regularResetForecast.expectedAt}
-                    locale={locale}
-                  />
-                  <span className="ml-2 text-sm font-medium text-slate-500 sm:text-base">
-                    {locale === "en"
-                      ? `(${viewModel.regularResetForecast.remaining})`
-                      : `（${viewModel.regularResetForecast.remaining}）`}
-                  </span>
-                </h2>
-              </div>
-              <p className="text-balance text-sm leading-6 text-slate-500 sm:max-w-lg sm:text-right">
-                {translateUI("regularResetReferenceNote", locale)}
-              </p>
-            </div>
-          </section>
-        ) : null}
-
         <section className="rounded-lg border border-slate-200 bg-white/90 p-3 sm:p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -1278,12 +1258,13 @@ export function RadarDashboard({
                       hideNoticeToExecutionOnMobile
                       hideNoteOnMobile
                     />
-                    {item.details?.cycleType === translateDynamic("定期リセット", locale) ? (
+                    {item.details?.cycleType === regularCycleLabel &&
+                    item.details?.resetMethod !== bankedMethodLabel ? (
                       <p className="mt-2 text-xs leading-5 text-slate-500 sm:hidden">
                         {translateUI(
-                          item.key.startsWith("weekly-regular-reference-")
-                            ? "weeklyRegularResetReferenceNote"
-                            : "regularResetTimingNote",
+                          item.key === latestRegularResetKey
+                            ? "regularResetDetailedNote"
+                            : "regularResetCompactNote",
                           locale,
                         )}
                       </p>

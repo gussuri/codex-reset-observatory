@@ -8,6 +8,10 @@ import type {
   ResetScopeType,
 } from "./types";
 import { SITE_NAME } from "../siteMetadata";
+import {
+  REGULAR_RESET_COMPACT_NOTE,
+  REGULAR_RESET_DETAILED_NOTE,
+} from "./regularResetSchedule";
 
 export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
   title: {
@@ -677,16 +681,10 @@ export const UI_TRANSLATIONS: Record<string, Record<Locale, string>> = {
     en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
     zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
   },
-  weeklyRegularResetReferenceNote: {
-    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
-    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
-    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
-  },
-  regularResetTimingNote: {
-    ja: "定期リセットのタイミングはユーザーによって異なる場合があります。",
-    en: "The timing of regular resets may vary by user.",
-    zh: "定期重置的时间可能因用户而异。",
-  },
+  weeklyRegularResetReferenceNote: REGULAR_RESET_DETAILED_NOTE,
+  regularResetDetailedNote: REGULAR_RESET_DETAILED_NOTE,
+  regularResetCompactNote: REGULAR_RESET_COMPACT_NOTE,
+  regularResetTimingNote: REGULAR_RESET_COMPACT_NOTE,
   scope: {
     ja: "対象プラン",
     en: "Scope",
@@ -2287,6 +2285,11 @@ export const DYNAMIC_TRANSLATIONS = {
 export const NORMALIZED_DYNAMIC_TRANSLATIONS: Record<string, Record<Locale, string>> = {};
 for (const [key, mapping] of Object.entries(DYNAMIC_TRANSLATIONS)) {
   NORMALIZED_DYNAMIC_TRANSLATIONS[key.normalize("NFC")] = mapping;
+}
+for (const noteMapping of [REGULAR_RESET_DETAILED_NOTE, REGULAR_RESET_COMPACT_NOTE]) {
+  for (const localized of Object.values(noteMapping)) {
+    NORMALIZED_DYNAMIC_TRANSLATIONS[localized.normalize("NFC")] = noteMapping;
+  }
 }
 
 const SORTED_NORMALIZED_DYNAMIC_ENTRIES = Object.entries(NORMALIZED_DYNAMIC_TRANSLATIONS).sort(

@@ -11,6 +11,7 @@ import {
 } from "../lib/radar";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { isNewFormalAdoption } from "../lib/radar/formalAdoption";
+import { REGULAR_RESET_COMPACT_NOTE } from "../lib/radar/regularResetSchedule";
 import {
   getLastGlobalResetAt,
   getRecent7DayResetCount,
@@ -1575,9 +1576,7 @@ test("automatically generated Tibo history is localized without Japanese leakage
       assert.equal(
         item.details?.note,
         isRegular
-          ? locale === "en"
-            ? "A regular reset occurs one week after you first use Codex or Work following the previous reset. If you use a Banked Reset, the next weekly timing is likewise counted from your first use after that reset, so it may differ from the time shown here."
-            : "定期重置会在您上次重置后首次使用 Codex 或 Work 的一周后进行。使用手动重置后也一样，会从该重置后的首次使用时间起算一周，因此实际时间可能与此处显示的时间不同。"
+          ? REGULAR_RESET_COMPACT_NOTE[locale]
           : item.summary,
       );
       const visibleText = [

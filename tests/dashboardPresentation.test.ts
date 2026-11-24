@@ -21,6 +21,10 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import type { Locale } from "../lib/radar/types";
 import { getDisplayProbabilityReason, getLocalSignalEvaluation } from "../lib/radar/probability";
 import { isEligibleRandomResetEvent } from "../lib/radar/resetEligibility";
+import {
+  REGULAR_RESET_COMPACT_NOTE,
+  REGULAR_RESET_DETAILED_NOTE,
+} from "../lib/radar/regularResetSchedule";
 import { translateDynamic, translateUI } from "../lib/radar/i18n";
 import { getHistoricalResetPresentationCorrection } from "../lib/radar/historicalResetCorrections";
 import { formatOfficialNoticeSummary } from "../lib/radar/officialNoticePresentation";
@@ -287,7 +291,7 @@ test("keeps the Tibo handle unchanged across supported locales", () => {
   }
 });
 
-test("places a related Tibo card before the next regular reference and history", () => {
+test("places a related Tibo card before history and omits the next regular reference banner", () => {
   const calculationNow = new Date("2026-08-05T03:32:00.000Z");
   const snapshot = toPublicRadarSnapshot(
     getLocalRadarData({
@@ -325,11 +329,11 @@ test("places a related Tibo card before the next regular reference and history",
   const noticeIndex = html.indexOf("Reset-related notice");
   const relatedIndex = html.indexOf("Related Tibo post");
   const statusIndex = html.indexOf("Current status");
-  const referenceIndex = html.indexOf("Next regular reset reference");
   const historyIndex = html.indexOf("Recent reset events");
 
   assert.ok(noticeIndex >= 0 && noticeIndex < statusIndex);
-  assert.ok(statusIndex < relatedIndex && relatedIndex < referenceIndex && referenceIndex < historyIndex);
+  assert.ok(statusIndex < relatedIndex && relatedIndex < historyIndex);
+  assert.doesNotMatch(html, /Next regular reset reference/);
   assert.equal((html.match(/Related Tibo post/g) ?? []).length, 1);
   assert.doesNotMatch(html, /Latest Tibo post/);
 });
@@ -1495,11 +1499,6 @@ test("keeps probability cards compact while showing the full random reset label"
 
 test("shows a localized regular reset timing note only on mobile history cards", () => {
   const calculationNow = new Date("2026-08-12T00:00:00.000Z");
-  const expectedNotes = {
-    ja: "定期リセットのタイミングはユーザーによって異なる場合があります。",
-    en: "The timing of regular resets may vary by user.",
-    zh: "定期重置的时间可能因用户而异。",
-  } as const;
 
   for (const locale of ["ja", "en", "zh"] as const) {
     const snapshot = toPublicRadarSnapshot(
@@ -1507,18 +1506,36 @@ test("shows a localized regular reset timing note only on mobile history cards",
       locale,
       { calculationNow },
     );
-    const template = snapshot.viewModel.recentHistory.find((item) => item.resetAt);
+    const template = snapshot.viewModel.recentHistory.find(
+      (item) => item.recordKind === "confirmed_global" && item.resetAt,
+    );
     if (!template) throw new Error("Expected a reset history item");
     const cycleTypes = {
-      ja: { regular: "定期リセット", random: "ランダムリセット" },
-      en: { regular: "Weekly reset", random: "Random reset" },
-      zh: { regular: "定期重置", random: "随机重置" },
+      ja: { regular: "定期リセット", random: "ランダムリセット", forced: "強制リセット" },
+      en: { regular: "Weekly reset", random: "Random reset", forced: "Forced reset" },
+      zh: { regular: "定期重置", random: "随机重置", forced: "强制重置" },
     } as const;
-    const regularItem = {
+    const latestRegularItem = {
       ...template,
-      key: "regular-timing-note",
+      key: "regular-timing-latest",
       recordKind: "regular_completed" as const,
-      details: { ...template.details!, cycleType: cycleTypes[locale].regular },
+      details: {
+        ...template.details!,
+        cycleType: cycleTypes[locale].regular,
+        resetMethod: cycleTypes[locale].forced,
+        note: REGULAR_RESET_DETAILED_NOTE[locale],
+      },
+    };
+    const olderRegularItem = {
+      ...template,
+      key: "regular-timing-older",
+      recordKind: "regular_completed" as const,
+      details: {
+        ...template.details!,
+        cycleType: cycleTypes[locale].regular,
+        resetMethod: cycleTypes[locale].forced,
+        note: REGULAR_RESET_COMPACT_NOTE[locale],
+      },
     };
     const randomItem = {
       ...template,
@@ -1531,17 +1548,26 @@ test("shows a localized regular reset timing note only on mobile history cards",
       React.createElement(RadarDashboard, {
         initialData: {
           ...snapshot,
-          viewModel: { ...snapshot.viewModel, recentHistory: [regularItem] },
+          viewModel: { ...snapshot.viewModel, recentHistory: [latestRegularItem, olderRegularItem] },
         },
         locale,
       }),
     );
-    const note = expectedNotes[locale];
-    const noteIndex = regularHtml.indexOf(note);
-    assert.ok(noteIndex >= 0, locale);
-    const noteStart = regularHtml.lastIndexOf("<p", noteIndex);
-    const noteEnd = regularHtml.indexOf("</p>", noteIndex) + 4;
-    assert.match(regularHtml.slice(noteStart, noteEnd), /sm:hidden/, locale);
+    const detailedNote = REGULAR_RESET_DETAILED_NOTE[locale];
+    const compactNote = REGULAR_RESET_COMPACT_NOTE[locale];
+    const detailedIndex = regularHtml.lastIndexOf(detailedNote);
+    assert.ok(detailedIndex >= 0, locale);
+    const detailedStart = regularHtml.lastIndexOf("<p", detailedIndex);
+    const detailedEnd = regularHtml.indexOf("</p>", detailedIndex) + 4;
+    assert.match(regularHtml.slice(detailedStart, detailedEnd), /sm:hidden/, locale);
+    assert.equal(regularHtml.split(detailedNote).length - 1, 2, locale);
+
+    const compactIndex = regularHtml.lastIndexOf(compactNote);
+    assert.ok(compactIndex >= 0, locale);
+    const compactStart = regularHtml.lastIndexOf("<p", compactIndex);
+    const compactEnd = regularHtml.indexOf("</p>", compactIndex) + 4;
+    assert.match(regularHtml.slice(compactStart, compactEnd), /sm:hidden/, locale);
+    assert.equal(regularHtml.split(compactNote).length - 1, 2, locale);
 
     const randomHtml = renderToStaticMarkup(
       React.createElement(RadarDashboard, {
@@ -1552,7 +1578,8 @@ test("shows a localized regular reset timing note only on mobile history cards",
         locale,
       }),
     );
-    assert.ok(!randomHtml.includes(note), locale);
+    assert.ok(!randomHtml.includes(detailedNote), locale);
+    assert.ok(!randomHtml.includes(compactNote), locale);
   }
 });
 

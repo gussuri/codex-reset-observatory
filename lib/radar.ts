@@ -38,6 +38,8 @@ import {
 import {
   getLatestRegularScheduleAnchorAt as getLatestRegularScheduleAnchorFromEvents,
   getDueRegularResetReferenceEvents,
+  REGULAR_RESET_COMPACT_NOTE,
+  REGULAR_RESET_DETAILED_NOTE,
 } from "./radar/regularResetSchedule";
 import { isBroadResetScope, isEligibleRandomResetEvent } from "./radar/resetEligibility";
 import {
@@ -1634,7 +1636,32 @@ function getRecentHistory(
       return bTime - aTime;
     });
 
-  return limit ? result.slice(0, HISTORY_LIMIT) : result;
+  const regularCycleLabel = translateDynamic("定期リセット", locale);
+  const bankedMethodLabel = translateDynamic("任意リセット権配布", locale);
+  let assignedLatestRegularNote = false;
+  const annotated = result.map((item) => {
+    const isRegularScheduleItem =
+      item.details?.cycleType === regularCycleLabel &&
+      item.details?.resetMethod !== bankedMethodLabel;
+    if (!isRegularScheduleItem) return item;
+
+    const noteText = assignedLatestRegularNote
+      ? REGULAR_RESET_COMPACT_NOTE[locale]
+      : REGULAR_RESET_DETAILED_NOTE[locale];
+    assignedLatestRegularNote = true;
+    return {
+      ...item,
+      details: {
+        ...item.details!,
+        note: noteText,
+      },
+      ...(item.key.startsWith("weekly-regular-reference-")
+        ? { summary: noteText }
+        : {}),
+    };
+  });
+
+  return limit ? annotated.slice(0, HISTORY_LIMIT) : annotated;
 }
 
 function getActiveWindow(

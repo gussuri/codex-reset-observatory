@@ -22,6 +22,8 @@ import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { translateDynamic, translateUI } from "../lib/radar/i18n";
 import {
   createObservedRegularResetEventRow,
+  REGULAR_RESET_COMPACT_NOTE,
+  REGULAR_RESET_DETAILED_NOTE,
 } from "../lib/radar/regularResetSchedule";
 
 (globalThis as typeof globalThis & { React: typeof React }).React = React;
@@ -1042,11 +1044,11 @@ test("normalizes regular reset presentation and hides notice/source rows", () =>
   assert.equal(regular.details?.noticeType, undefined);
   assert.equal(
     regular.summary,
-    "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
+    REGULAR_RESET_COMPACT_NOTE.ja,
   );
   assert.equal(
     regular.details?.note,
-    "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
+    REGULAR_RESET_COMPACT_NOTE.ja,
   );
   assert.equal(regular.signalAt, null);
   assert.equal(regular.signalLabel, "");
@@ -1131,18 +1133,7 @@ test("regular history keeps a known Banked Reset delivery method", () => {
   assert.equal(bankedRegular.details?.resetMethod, "任意リセット権配布");
 });
 
-test("regular reset supplement is localized without changing the history summary", () => {
-  const expectedNotes = {
-    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
-    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
-    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
-  } as const;
-  const expectedSummaries = {
-    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
-    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
-    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
-  } as const;
-
+test("regular reset supplement is localized and detailed only on the newest regular reset", () => {
   for (const locale of ["ja", "en", "zh"] as const) {
     const calculationNow = new Date("2026-08-08T05:00:00.000Z");
     const snapshot = toPublicRadarSnapshot(getLocalRadarData({
@@ -1160,8 +1151,8 @@ test("regular reset supplement is localized without changing the history summary
     );
 
     assert.ok(regular);
-    assert.equal(regular.details?.note, expectedNotes[locale]);
-    assert.equal(regular.summary, expectedSummaries[locale]);
+    assert.equal(regular.details?.note, REGULAR_RESET_COMPACT_NOTE[locale]);
+    assert.equal(regular.summary, REGULAR_RESET_COMPACT_NOTE[locale]);
   }
 });
 
@@ -1170,11 +1161,6 @@ test("top dashboard omits latest reset and weekly reference cards", () => {
     ja: "1週間サイクルのリセット参考日",
     en: "Weekly reset reference",
     zh: "每周重置参考日期",
-  } as const;
-  const weeklyNotes = {
-    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
-    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
-    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
   } as const;
   const calculationNow = new Date("2026-08-04T03:32:00.000Z");
 
@@ -1196,7 +1182,8 @@ test("top dashboard omits latest reset and weekly reference cards", () => {
     const currentStatusHtml = html.slice(currentStatusStart, historyStart);
     assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(translateUI("latestReset", locale))));
     assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(weeklyLabels[locale])));
-    assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(weeklyNotes[locale])));
+    assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(REGULAR_RESET_DETAILED_NOTE[locale])));
+    assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(REGULAR_RESET_COMPACT_NOTE[locale])));
     assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(forecast.date)));
     assert.doesNotMatch(currentStatusHtml, new RegExp(escapeRegExp(forecast.remaining)));
     assert.match(html, new RegExp(escapeRegExp(translateUI("within24h", locale))));
@@ -1206,17 +1193,12 @@ test("top dashboard omits latest reset and weekly reference cards", () => {
   }
 });
 
-test("shows the next regular reset reference only within 72 hours", () => {
+test("omits the next regular reset reference banner even within 72 hours", () => {
   const calculationNow = new Date("2026-08-05T03:32:00.000Z");
   const labels = {
     ja: "次回定期リセット参考日",
     en: "Next regular reset reference",
     zh: "下次定期重置参考日期",
-  } as const;
-  const notes = {
-    ja: "直近の全体強制リセットを基準にした7日周期の共通目安です。各アカウントの利用枠回復を確認した記録ではありません。",
-    en: "This shared reference follows seven days after the latest global forced reset. It does not confirm quota recovery for any account.",
-    zh: "此共享参考时间按最近一次全局强制重置每7天推算，不代表已确认任何账号的额度恢复。",
   } as const;
   for (const locale of ["ja", "en", "zh"] as const) {
     const data = toPublicRadarSnapshot(
@@ -1229,13 +1211,53 @@ test("shows the next regular reset reference only within 72 hours", () => {
     );
 
     assert.equal(data.viewModel.regularResetForecast.isNoticeWindow, true);
-    assert.match(html, new RegExp(escapeRegExp(labels[locale])));
-    assert.match(html, new RegExp(escapeRegExp(notes[locale])));
+    assert.equal(html.includes(labels[locale]), false);
     assert.doesNotMatch(html, /<dt[^>]*>参考日時<\/dt>|<dt[^>]*>Reference date and time<\/dt>|<dt[^>]*>参考日期和时间<\/dt>/);
-    const remaining = data.viewModel.regularResetForecast.remaining;
-    const remainingText = locale === "en" ? `(${remaining})` : `（${remaining}）`;
-    assert.match(html, new RegExp(escapeRegExp(remainingText)));
-    assert.match(html, /dateTime="2026-08-08T03:32:00\.000Z"/);
+  }
+});
+
+test("only the newest regular reset displays the detailed note while older ones stay compact across home and history", () => {
+  const calculationNow = new Date("2026-11-24T12:00:00.000Z");
+
+  for (const locale of ["ja", "en", "zh"] as const) {
+    const data = toPublicRadarSnapshot(
+      getLocalRadarData({ calculationNow }),
+      locale,
+      { calculationNow, limitHistory: false },
+    );
+    const regularCycle = translateDynamic("定期リセット", locale);
+    const bankedMethod = translateDynamic("任意リセット権配布", locale);
+    const regularItems = data.viewModel.recentHistory.filter(
+      (item) => item.details?.cycleType === regularCycle && item.details?.resetMethod !== bankedMethod,
+    );
+
+    assert.ok(regularItems.length >= 2, locale);
+    assert.equal(regularItems[0]?.details?.note, REGULAR_RESET_DETAILED_NOTE[locale], locale);
+    assert.ok(
+      regularItems.slice(1).every((item) => item.details?.note === REGULAR_RESET_COMPACT_NOTE[locale]),
+      locale,
+    );
+
+    const historyHtml = renderToStaticMarkup(React.createElement(HistoryView, { data, locale }));
+    assert.equal(historyHtml.split(REGULAR_RESET_DETAILED_NOTE[locale]).length - 1, 1, locale);
+    assert.equal(
+      historyHtml.split(REGULAR_RESET_COMPACT_NOTE[locale]).length - 1,
+      regularItems.length - 1,
+      locale,
+    );
+
+    const dashboardSnapshot = {
+      ...data,
+      viewModel: {
+        ...data.viewModel,
+        recentHistory: regularItems.slice(0, 2),
+      },
+    };
+    const dashboardHtml = renderToStaticMarkup(
+      React.createElement(RadarDashboard, { initialData: dashboardSnapshot, locale }),
+    );
+    assert.equal(dashboardHtml.split(REGULAR_RESET_DETAILED_NOTE[locale]).length - 1, 2, locale);
+    assert.equal(dashboardHtml.split(REGULAR_RESET_COMPACT_NOTE[locale]).length - 1, 2, locale);
   }
 });
 
