@@ -22,7 +22,12 @@ import { isBankedResetAvailableCountGrant } from "../lib/codexUsageRecovery";
 import { normalizeBankedPostClaim } from "../lib/radar/resetPostAssociation";
 import { resolveUniqueBankedTeaserLinks } from "../lib/radar/bankedTeaserLink";
 import { getLocalRadarData, getRadarViewModel } from "../lib/radar";
-import { getActiveOfficialNotice, getLastGlobalResetAt, getRecent7DayResetCount } from "../lib/radar/probability";
+import {
+  getActiveOfficialNotice,
+  getLastGlobalResetAt,
+  getProbabilityEligibleOfficialNotice,
+  getRecent7DayResetCount,
+} from "../lib/radar/probability";
 import { toPublicRadarSnapshot } from "../lib/radar/publicDto";
 import { collectBoundaryCensoredBoundaries } from "../lib/radar/boundaryCensoredProbability";
 import { selectEligibleCommunicationEvents } from "../lib/radar/communicationRegime";
@@ -2135,4 +2140,84 @@ test("rule-based fallback recognizes activated and should-land banked reset word
     "We shipped some good updates to dots today and the banked reset has been activated and should land in everyones accounts sometime soon!";
   assert.equal(isBankedDistributionNotice(dotsText), true);
   assert.equal(isBroadBankedDistributionNotice(dotsText), true);
+});
+
+test("recognizes apology broad adding-one-banked-reset wording, online completion, consumption, and Apology reasonType", () => {
+  const apologyNoticeText =
+    "We made a billing mistake at launch of GPT-6.2 that incorrectly discounted GPT-6.2 Astra and Sol usage for most users. As a small token to apologize for the mistake, we’ll be adding one banked reset for everyone on Go, Plus, Pro, and Business.";
+
+  assert.equal(isBankedDistributionNotice(apologyNoticeText), true);
+  assert.equal(isBroadBankedDistributionNotice(apologyNoticeText), true);
+  assert.equal(isConditionalBankedDistributionNotice(apologyNoticeText), false);
+  assert.equal(hasFutureBankedDistributionIntent(apologyNoticeText), false);
+  assert.equal(isBankedDistributionCompletionSignal(apologyNoticeText), false);
+
+  assert.equal(isBankedDistributionNotice("We added a banked reset feature."), false);
+  assert.equal(isBankedDistributionNotice("I added a banked reset to my account."), false);
+
+  const onlineCompletionText = "Banked reset is online";
+  assert.equal(isBankedDistributionCompletionSignal(onlineCompletionText), true);
+  assert.equal(
+    combineResetHistory([], [{
+      ...notice,
+      tweet_id: "2125853628250599730",
+      text: onlineCompletionText,
+      tweet_url: "https://x.com/thsottiaux/status/2125853628250599730",
+      tweet_created_at: "2026-11-26T07:26:16.000Z",
+      signal_type: "reset_executed",
+      classification_source: "gemini",
+    }], [], [], [notice], [], []).some((item) => item.recordKind === "confirmed_global"),
+    false,
+  );
+
+  const apologyNotice: TiboNoticeSignal = {
+    ...notice,
+    tweet_id: "2125784147889393806",
+    text: apologyNoticeText,
+    tweet_url: "https://x.com/thsottiaux/status/2125784147889393806",
+    tweet_created_at: "2026-11-26T02:50:10.000Z",
+    expires_at: "2026-11-27T02:50:10.000Z",
+    signal_type: "official_notice",
+    classification_source: "gemini",
+    confidence: 0.96,
+  };
+  const grantObservedAt = "2026-11-26T06:38:27.220Z";
+  const apologyEstimate = {
+    resetEventKey: "banked-reset-local-codex-app-server-observation-20261126T063827220Z",
+    displayExecutionAt: grantObservedAt,
+    executionTimeSource: "usage_observation" as const,
+    executionTimePrecision: "approximate" as const,
+    executionTimeConfidence: "high" as const,
+    executionWindowStartAt: null,
+    executionWindowEndAt: null,
+    recoveryObservationId: null,
+    tiboAnnouncedAt: apologyNotice.tweet_created_at,
+    tiboPrimaryTweetId: apologyNotice.tweet_id,
+    tiboSourceTweetIds: [apologyNotice.tweet_id],
+    officialNoticeTweetId: apologyNotice.tweet_id,
+    officialNoticeAt: apologyNotice.tweet_created_at,
+    estimatorVersion: BANKED_DISTRIBUTION_ESTIMATOR_VERSION,
+  };
+
+  const beforeGrantNow = new Date("2026-11-26T04:00:00.000Z");
+  const beforeGrantRadarData: RadarData = {
+    active_tibo_signals: [apologyNotice] as unknown as ActiveTiboSignal[],
+    recent_tibo_signals: [apologyNotice] as unknown as ActiveTiboSignal[],
+    formal_tibo_resets: [],
+  };
+  const activeBefore = getActiveOfficialNotice(beforeGrantRadarData, null, beforeGrantNow);
+  assert.ok(activeBefore);
+  assert.equal(activeBefore.isBankedDistribution, true);
+  assert.equal(getProbabilityEligibleOfficialNotice(activeBefore), null);
+
+  const afterGrantNow = new Date("2026-11-26T10:40:00.000Z");
+  const afterGrantRadarData: RadarData = {
+    ...beforeGrantRadarData,
+    reset_execution_estimates: [apologyEstimate],
+  };
+  assert.equal(getActiveOfficialNotice(afterGrantRadarData, new Date(grantObservedAt), afterGrantNow), null);
+
+  const [event] = findBankedDistributionEvents([apologyNotice], [apologyEstimate]);
+  assert.ok(event);
+  assert.equal(event.details?.reasonType, "詫びリセット");
 });

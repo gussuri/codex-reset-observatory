@@ -1093,3 +1093,116 @@ test("Tibo reset notice association scans resets chronologically and preserves d
   assert.equal(associated[0].related_notice?.tweet_id, "notice-2");
   assert.equal(associated[1].related_notice?.tweet_id, "notice-1");
 });
+
+test("normalizes formal reset expires_at timestamps and keeps online BANKED completion in latestTiboActivity", async () => {
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const originalFetch = globalThis.fetch;
+  const calculationNow = new Date("2026-11-26T10:40:00.000Z");
+  const forcedResetUrl = "https://x.com/thsottiaux/status/2125853628250599729";
+  const bankedOnlineUrl = "https://x.com/thsottiaux/status/2125853628250599730";
+  const forcedResetRow = {
+    tweet_id: "2125853628250599729",
+    text: "I reset usage limits for Codex.",
+    translated_text_ja: "Codexの利用上限をリセットしました。",
+    tweet_url: forcedResetUrl,
+    tweet_created_at: "2026-11-26T06:00:00+00:00",
+    detected_at: "2026-11-26T06:01:00.000+00:00",
+    expires_at: "2026-11-27T06:00:00+00:00",
+    signal_type: "reset_executed",
+    confidence: 0.99,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    is_reply: false,
+    logical_post_id: "2125853628250599729",
+    edit_history_tweet_ids: ["2125853628250599729"],
+    edit_version: 1,
+    edit_metadata_source: "none",
+  };
+  const bankedOnlineRow = {
+    tweet_id: "2125853628250599730",
+    text: "Banked reset is online",
+    translated_text_ja: "バンクされたリセットがオンラインになりました",
+    tweet_url: bankedOnlineUrl,
+    tweet_created_at: "2026-11-26T07:26:16+00:00",
+    detected_at: "2026-11-26T07:32:20.091+00:00",
+    expires_at: "2026-11-27T07:26:16+00:00",
+    signal_type: "reset_executed",
+    confidence: 0.96,
+    verification_status: "auto_unverified",
+    classification_source: "gemini",
+    is_reply: false,
+    logical_post_id: "2125853628250599730",
+    edit_history_tweet_ids: ["2125853628250599730"],
+    edit_version: 1,
+    edit_metadata_source: "none",
+  };
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-service-role-key";
+
+  globalThis.fetch = async (input) => {
+    const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    if (url.hostname === "status.openai.com") {
+      return url.pathname.endsWith("summary.json")
+        ? new Response(JSON.stringify({ page: {}, status: { indicator: "none" }, components: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          })
+        : new Response(JSON.stringify({ page: {}, incidents: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+    }
+
+    if (url.hostname !== "example.supabase.co") {
+      throw new Error(`Unexpected test fetch host: ${url.hostname}`);
+    }
+
+    if (url.pathname === "/rest/v1/tibo_signals") {
+      if (url.searchParams.has("expected_end_at")) return new Response("[]", { status: 200 });
+      if (url.searchParams.has("expires_at")) {
+        return new Response(JSON.stringify([bankedOnlineRow, forcedResetRow]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.searchParams.get("limit") === String(TIBO_RECENT_MAX_ROWS)) {
+        return new Response(JSON.stringify([bankedOnlineRow, forcedResetRow]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.searchParams.get("limit") === String(TIBO_HISTORY_PAGE_SIZE)) {
+        return new Response(JSON.stringify([bankedOnlineRow, forcedResetRow]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+    }
+
+    return new Response("[]", {
+      status: 200,
+      headers: { "content-type": "application/json", "content-range": "*/0" },
+    });
+  };
+
+  try {
+    const data = await fetchCurrentRadarData({ calculationNow, bypassCache: true });
+    const formalCopy = data.formal_tibo_resets?.find((signal) => signal.tweet_id === forcedResetRow.tweet_id);
+    assert.equal(formalCopy?.expires_at, "2026-11-27T06:00:00.000Z");
+    assert.equal(
+      data.formal_tibo_resets?.some((signal) => signal.tweet_id === bankedOnlineRow.tweet_id),
+      false,
+    );
+
+    const snapshot = toPublicRadarSnapshot(data, "ja", { calculationNow });
+    assert.equal(snapshot.latestTiboActivity?.classification, "reset_executed");
+    assert.equal(snapshot.latestTiboActivity?.sourceUrl, bankedOnlineUrl);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousServiceRoleKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousServiceRoleKey;
+  }
+});

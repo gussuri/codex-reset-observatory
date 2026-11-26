@@ -1390,7 +1390,14 @@ async function getTiboSignalBundle(
   const recentSignals = recentSignalsSource.map((signal) =>
     formatAsActiveSignal(signal, getEffectiveSignalExpiryMs(signal))
   );
-  const acceptedResets = signals.filter(isFormalTiboResetSignal);
+  const acceptedResets = signals
+    .filter(isFormalTiboResetSignal)
+    .map((signal) => {
+      const effectiveExpiresMs = getEffectiveSignalExpiryMs(signal);
+      return Number.isFinite(effectiveExpiresMs)
+        ? { ...signal, expires_at: new Date(effectiveExpiresMs).toISOString() }
+        : signal;
+    });
   const notices = [
     ...expandTiboSignalVariants(signals)
       .map(toNoticeSignal)
