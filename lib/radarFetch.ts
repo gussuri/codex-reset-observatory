@@ -61,6 +61,7 @@ import {
   parseNextGenerationTrainingProjectionRows,
   NEXT_GENERATION_B_TRAINING_SELECT_FIELDS,
   NEXT_GENERATION_TRAINING_SELECT_FIELDS,
+  PREDICTION_HISTORY_TRAINING_PROJECTIONS_TABLE,
   type NextGenerationTrainingProjectionRow,
   type NextGenerationTrainingState,
 } from "@/lib/radar/nextGenerationTraining";
@@ -1513,7 +1514,7 @@ async function fetchRawPredictionHistoryProjection(
       ? NEXT_GENERATION_B_TRAINING_SELECT_FIELDS
       : NEXT_GENERATION_TRAINING_SELECT_FIELDS;
     const result = await supabase
-      .from("prediction_history")
+      .from(PREDICTION_HISTORY_TRAINING_PROJECTIONS_TABLE)
       .select(selectFields)
       .gte("logged_hour", getLoggedHourQueryStart())
       .lt("logged_hour", new Date().toISOString())
@@ -1546,7 +1547,7 @@ const getCachedPredictionHistoryProjection = unstable_cache(
     }));
     return result;
   },
-  getRadarCacheKeyParts("prediction-history-projection-cache-v1"),
+  getRadarCacheKeyParts("prediction-history-projection-cache-v2"),
   {
     revalidate: PREDICTION_HISTORY_CACHE_TTL_SECONDS,
     tags: [RADAR_CACHE_TAGS.predictionHistory],

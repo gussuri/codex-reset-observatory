@@ -32,7 +32,6 @@ import {
 
 const HOUR_MS = 60 * 60 * 1000;
 
-const TRAINING_PROJECTION_ROOT = "debug_info->experimentalProbabilityForecasts";
 const B_TRAINING_PROJECTION_FIELDS = [
   "modelVersion",
   "generatedAt",
@@ -71,14 +70,6 @@ const CONTEXT_AWARE_FALLBACK_CHALLENGER_FIELDS = [
   "baseline48h",
 ] as const;
 
-function trainingProjectionField(
-  alias: string,
-  modelVersion: string,
-  field: string,
-) {
-  return `${alias}:${TRAINING_PROJECTION_ROOT}->${modelVersion}->${field}`;
-}
-
 function trainingProjectionAlias(prefix: string, field: string) {
   const snakeCaseField = field
     .replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
@@ -86,86 +77,12 @@ function trainingProjectionAlias(prefix: string, field: string) {
   return `${prefix}_${snakeCaseField.replace(/[^a-zA-Z0-9_]+/g, "_")}`;
 }
 
-function buildTrainingProjectionSelectFields() {
-  const fields = ["logged_hour"];
-  for (const field of B_TRAINING_PROJECTION_FIELDS) {
-    fields.push(
-      trainingProjectionField(
-        trainingProjectionAlias("b", field),
-        NEXT_GENERATION_B_MODEL_VERSION,
-        field,
-      ),
-    );
-  }
-  for (let index = 0; index < NEXT_GENERATION_A_COMPONENT_VERSIONS.length; index += 1) {
-    const modelVersion = NEXT_GENERATION_A_COMPONENT_VERSIONS[index];
-    // B is already projected above with both its raw and ensemble fields.
-    if (modelVersion === NEXT_GENERATION_B_MODEL_VERSION) continue;
-    for (const field of A_TRAINING_PROJECTION_FIELDS) {
-      fields.push(
-        trainingProjectionField(
-          trainingProjectionAlias(`a_${index}`, field),
-          modelVersion,
-          field,
-        ),
-      );
-    }
-  }
-  for (const field of C_TRAINING_PROJECTION_FIELDS) {
-    fields.push(
-      trainingProjectionField(
-        trainingProjectionAlias("c", field),
-        NEXT_GENERATION_C_MODEL_VERSION,
-        field,
-      ),
-    );
-  }
-  for (const field of C_TRAINING_PROJECTION_FIELDS) {
-    fields.push(
-      trainingProjectionField(
-        trainingProjectionAlias("c_v2", field),
-        NEXT_GENERATION_C_V2_MODEL_VERSION,
-        field,
-      ),
-    );
-  }
-  for (const field of CONTEXT_AWARE_TRAINING_PROJECTION_FIELDS) {
-    fields.push(
-      trainingProjectionField(
-        trainingProjectionAlias("context_aware", field),
-        CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION,
-        field,
-      ),
-    );
-  }
-  for (const field of CONTEXT_AWARE_FALLBACK_CHALLENGER_FIELDS) {
-    fields.push(
-      trainingProjectionField(
-        trainingProjectionAlias("context_challenger", field),
-        RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
-        field,
-      ),
-    );
-  }
-  return fields.join(",");
-}
-
-function buildBTrainingProjectionSelectFields() {
-  const fields = ["logged_hour"];
-  for (const field of B_TRAINING_PROJECTION_FIELDS) {
-    fields.push(
-      trainingProjectionField(
-        trainingProjectionAlias("b", field),
-        NEXT_GENERATION_B_MODEL_VERSION,
-        field,
-      ),
-    );
-  }
-  return fields.join(",");
-}
-
-export const NEXT_GENERATION_TRAINING_SELECT_FIELDS = buildTrainingProjectionSelectFields();
-export const NEXT_GENERATION_B_TRAINING_SELECT_FIELDS = buildBTrainingProjectionSelectFields();
+export const PREDICTION_HISTORY_TRAINING_PROJECTIONS_TABLE =
+  "prediction_history_training_projections";
+export const NEXT_GENERATION_TRAINING_SELECT_FIELDS =
+  "logged_hour,b_forecast,other_forecasts";
+export const NEXT_GENERATION_B_TRAINING_SELECT_FIELDS =
+  "logged_hour,b_forecast";
 
 export function getLoggedHourQueryStart() {
   const freezeTime = timestamp(NEXT_GENERATION_FREEZE_AT)!;
@@ -534,6 +451,19 @@ function getProjectedForecast(
 function toTrainingHistoryRow(
   row: NextGenerationTrainingProjectionRow,
 ): NextGenerationTrainingHistoryRow {
+  if ("b_forecast" in row || "other_forecasts" in row) {
+    const otherForecasts = parseDebugInfo(row.other_forecasts);
+    const bForecast = parseDebugInfo(row.b_forecast);
+    const forecasts: Record<string, unknown> = {
+      ...(otherForecasts ?? {}),
+      ...(bForecast ? { [NEXT_GENERATION_B_MODEL_VERSION]: bForecast } : {}),
+    };
+    return {
+      logged_hour: row.logged_hour,
+      debug_info: { experimentalProbabilityForecasts: forecasts },
+    };
+  }
+
   const forecasts: Record<string, unknown> = {};
   const bForecast = getProjectedForecast(row, "b", B_TRAINING_PROJECTION_FIELDS);
   if (bForecast) forecasts[NEXT_GENERATION_B_MODEL_VERSION] = bForecast;
@@ -634,7 +564,7 @@ async function loadTrainingStateWithProjection(
 
   try {
     const result = await client
-      .from("prediction_history")
+      .from(PREDICTION_HISTORY_TRAINING_PROJECTIONS_TABLE)
       .select(selectFields)
       .gte("logged_hour", getLoggedHourQueryStart())
       .lt("logged_hour", options.asOf.toISOString())

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 
 import {
@@ -20,6 +22,7 @@ import {
   NEXT_GENERATION_TRAINING_SELECT_FIELDS,
   parseNextGenerationTrainingProjectionRows,
   parseNextGenerationTrainingRows,
+  PREDICTION_HISTORY_TRAINING_PROJECTIONS_TABLE,
 } from "../lib/radar/nextGenerationTraining";
 
 const componentForecasts = Object.fromEntries(
@@ -168,44 +171,30 @@ function projectedHistoryRow(generatedAt = "2026-08-22T00:00:00.000Z") {
   return row;
 }
 
-test("compact training select projects only the required forecast fields", () => {
+test("compact training select projects only the sidecar projection columns", () => {
+  assert.equal(
+    PREDICTION_HISTORY_TRAINING_PROJECTIONS_TABLE,
+    "prediction_history_training_projections",
+  );
+  assert.equal(
+    NEXT_GENERATION_TRAINING_SELECT_FIELDS,
+    "logged_hour,b_forecast,other_forecasts",
+  );
   const fields = NEXT_GENERATION_TRAINING_SELECT_FIELDS.split(",");
   assert.equal(fields[0], "logged_hour");
-  assert.equal(fields.length, 44);
-  assert.ok(fields.slice(1).every((field) => field.includes("debug_info->experimentalProbabilityForecasts")));
-  assert.ok(fields.length > 31);
+  assert.equal(fields.length, 3);
   assert.doesNotMatch(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /(^|,)debug_info(,|$)/);
-  assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /b_raw_probability_24h:/);
-  assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /b_probability_24h:/);
-  for (const modelVersion of [
-    ...NEXT_GENERATION_A_COMPONENT_VERSIONS,
-    NEXT_GENERATION_C_MODEL_VERSION,
-    NEXT_GENERATION_C_V2_MODEL_VERSION,
-  ]) {
-    assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, new RegExp(`->${modelVersion}->`));
-  }
-  assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /context_aware_.*context_snapshot_version:/);
-  assert.match(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /context_challenger_.*baseline_24h:/);
   assert.doesNotMatch(NEXT_GENERATION_TRAINING_SELECT_FIELDS, /featureSnapshot|context_v3/);
 });
 
-test("public training select is limited to B fields while research keeps the full projection", () => {
+test("public training select is limited to b_forecast while research adds other_forecasts", () => {
+  assert.equal(NEXT_GENERATION_B_TRAINING_SELECT_FIELDS, "logged_hour,b_forecast");
   const publicFields = NEXT_GENERATION_B_TRAINING_SELECT_FIELDS.split(",");
   const fullFields = NEXT_GENERATION_TRAINING_SELECT_FIELDS.split(",");
   assert.equal(publicFields[0], "logged_hour");
-  assert.equal(publicFields.length, 7);
+  assert.equal(publicFields.length, 2);
   assert.ok(fullFields.length > publicFields.length);
-
-  const projectRepresentativeRow = (selectFields: string) => Object.fromEntries(
-    selectFields.split(",").map((field) => [field.split(":", 1)[0], "x".repeat(80)]),
-  );
-  const publicBytes = Buffer.byteLength(JSON.stringify(projectRepresentativeRow(
-    NEXT_GENERATION_B_TRAINING_SELECT_FIELDS,
-  )));
-  const fullBytes = Buffer.byteLength(JSON.stringify(projectRepresentativeRow(
-    NEXT_GENERATION_TRAINING_SELECT_FIELDS,
-  )));
-  assert.ok(publicBytes < fullBytes);
+  assert.doesNotMatch(NEXT_GENERATION_B_TRAINING_SELECT_FIELDS, /other_forecasts|debug_info|featureSnapshot/);
 });
 
 test("context-aware training prefers its saved audit and keeps PIT labels", () => {
@@ -423,7 +412,7 @@ test("training query distinguishes successful empty reads from query failures", 
   assert.equal(empty.cRows.length, 0);
   assert.equal(empty.backfill, false);
   assert.deepEqual(calls.slice(0, 3), [
-    "from:prediction_history",
+    "from:prediction_history_training_projections",
     `select:${NEXT_GENERATION_TRAINING_SELECT_FIELDS}`,
     "gte:logged_hour:2026-08-21T03:00:00.000Z",
   ]);
@@ -489,8 +478,91 @@ test("public training query preserves B rows while requesting only the B project
   assert.equal(result.bRows.length, 1);
   assert.equal(result.totalRows, 1);
   assert.deepEqual(calls.slice(0, 3), [
-    "from:prediction_history",
+    "from:prediction_history_training_projections",
     `select:${NEXT_GENERATION_B_TRAINING_SELECT_FIELDS}`,
     "gte:logged_hour:2026-08-21T03:00:00.000Z",
   ]);
+});
+
+test("sidecar b_forecast and other_forecasts shape parses identically to full debug_info", () => {
+  const bAt = "2026-08-22T00:00:00.000Z";
+  const cAt = "2026-08-22T07:00:00.000Z";
+  const cV2At = new Date(Date.parse(NEXT_GENERATION_C_V2_FREEZE_AT) + 60_000).toISOString();
+  const contextAt = "2026-09-01T00:00:00.000Z";
+
+  const fullRows = [
+    historyRow(bAt),
+    contextualOnlyRow(cAt),
+    contextualV2OnlyRow(cV2At),
+    contextAwareHistoryRow(contextAt),
+    {
+      logged_hour: "2026-08-23T00:00:00.000Z",
+      debug_info: {
+        experimentalProbabilityForecasts: {
+          [NEXT_GENERATION_B_MODEL_VERSION]: {
+            modelVersion: "wrong-model",
+            generatedAt: "2026-08-23T00:00:00.000Z",
+            rawProbability24h: 2,
+            rawProbability48h: 0.4,
+          },
+        },
+      },
+    },
+  ];
+
+  const sidecarRows = fullRows.map((row) => {
+    const forecasts = row.debug_info.experimentalProbabilityForecasts as Record<string, unknown>;
+    const bForecast = forecasts[NEXT_GENERATION_B_MODEL_VERSION] ?? null;
+    const otherForecasts = Object.fromEntries(
+      Object.entries(forecasts).filter(([key]) => key !== NEXT_GENERATION_B_MODEL_VERSION),
+    );
+    return {
+      logged_hour: row.logged_hour,
+      b_forecast: bForecast,
+      other_forecasts: Object.keys(otherForecasts).length > 0 ? otherForecasts : null,
+    };
+  });
+
+  const options = {
+    asOf: new Date(Date.parse(NEXT_GENERATION_C_V2_FREEZE_AT) + 48 * 60 * 60 * 1000),
+    randomEvents: [
+      { id: "r1", resetAt: "2026-08-22T12:00:00.000Z" },
+      { id: "r2", resetAt: "2026-09-02T00:00:00.000Z" },
+    ],
+  };
+
+  const fullParsed = parseNextGenerationTrainingRows(fullRows, options);
+  const sidecarParsed = parseNextGenerationTrainingProjectionRows(sidecarRows, options);
+  assert.deepEqual(sidecarParsed, fullParsed);
+
+  const bOnlyParsed = parseNextGenerationTrainingProjectionRows(
+    sidecarRows.map(({ logged_hour, b_forecast }) => ({ logged_hour, b_forecast })),
+    options,
+  );
+  assert.deepEqual(bOnlyParsed.bRows, fullParsed.bRows);
+});
+
+test("sidecar training projection migration enforces RLS, grants, trigger, and forecast scope", () => {
+  const sql = readFileSync(
+    resolve("supabase/migrations/20261127180159_create_prediction_history_training_projections.sql"),
+    "utf8",
+  );
+
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.prediction_history_training_projections/i);
+  assert.match(sql, /ALTER TABLE public\.prediction_history_training_projections ENABLE ROW LEVEL SECURITY/i);
+  assert.match(sql, /REVOKE ALL PRIVILEGES ON TABLE public\.prediction_history_training_projections[\s\S]*FROM public,\s*anon,\s*authenticated/i);
+  assert.match(sql, /GRANT ALL PRIVILEGES ON TABLE public\.prediction_history_training_projections[\s\S]*TO service_role/i);
+  assert.match(sql, /SET search_path = pg_catalog, public/i);
+  assert.match(sql, /CREATE TRIGGER prediction_history_sync_training_projection_trigger/i);
+  assert.doesNotMatch(sql, /featureSnapshot|context_v3/);
+
+  for (const modelVersion of [
+    ...NEXT_GENERATION_A_COMPONENT_VERSIONS,
+    NEXT_GENERATION_C_MODEL_VERSION,
+    NEXT_GENERATION_C_V2_MODEL_VERSION,
+    CONTEXT_AWARE_CONTINUOUS_PROBABILITY_MODEL_VERSION,
+    RANDOM_BANDWIDTH_TRUNCATION_SHADOW_CHALLENGER_MODEL_VERSION,
+  ]) {
+    assert.match(sql, new RegExp(modelVersion));
+  }
 });
